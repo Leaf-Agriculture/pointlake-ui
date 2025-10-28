@@ -426,11 +426,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs text-zinc-400 bg-zinc-800 border border-zinc-700 rounded p-2">
-          <p>💡 Use drawing tools (top-right of map) to create zones</p>
-          <p>🎯 Zones auto-add spatial filters to SQL queries</p>
-        </div>
-
         {drawnZones.length > 0 ? (
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {drawnZones.map((zone, index) => (

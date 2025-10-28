@@ -478,6 +478,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
       <div className="space-y-2">
         <div className="text-xs text-zinc-400">
           <p>• Click "Start" to enable drawing tools on map</p>
+          <p>• Drawn zones auto-add spatial filter to SQL query</p>
           <p>• Export/Import: save/load zones as files</p>
           <p>• Save/Load: store zones in browser</p>
         </div>

@@ -32,6 +32,7 @@ function Dashboard() {
   const [drawnZones, setDrawnZones] = useState([])
   const mapRef = useRef(null)
   const [queryExecutionTime, setQueryExecutionTime] = useState(null)
+  const [hasSpatialFilter, setHasSpatialFilter] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -306,13 +307,86 @@ function Dashboard() {
     setError('')
   }
 
+  // Converter geometria Leaflet para WKT
+  const geometryToWKT = (zone) => {
+    if (!zone || !zone.layer) return null;
+    
+    const layer = zone.layer;
+    
+    if (zone.type === 'polygon' || zone.type === 'rectangle') {
+      const coords = layer.getLatLngs()[0];
+      const wktCoords = coords.map(c => `${c.lng} ${c.lat}`).join(', ');
+      return `POLYGON((${wktCoords}, ${coords[0].lng} ${coords[0].lat}))`;
+    } else if (zone.type === 'circle') {
+      const center = layer.getLatLng();
+      const radius = layer.getRadius();
+      // Para círculo, usar ST_Buffer em vez de WKT direto
+      return `POINT(${center.lng} ${center.lat})`;
+    }
+    
+    return null;
+  };
+
+  // Atualizar query SQL com filtro espacial
+  const updateQueryWithSpatialFilter = (zone) => {
+    const wkt = geometryToWKT(zone);
+    if (!wkt) return;
+    
+    // Pegar a query atual
+    let currentQuery = sqlQuery.trim();
+    
+    // Se a query está vazia ou é a query padrão, não fazer nada
+    if (!currentQuery || currentQuery === 'SELECT * FROM fields LIMIT 10') {
+      return;
+    }
+    
+    // Remover LIMIT se existir para adicionar depois
+    const limitMatch = currentQuery.match(/LIMIT\s+\d+/i);
+    const limitClause = limitMatch ? limitMatch[0] : '';
+    if (limitClause) {
+      currentQuery = currentQuery.replace(/LIMIT\s+\d+/i, '').trim();
+    }
+    
+    // Adicionar filtro espacial baseado no tipo de zona
+    let spatialFilter;
+    if (zone.type === 'circle') {
+      const center = zone.layer.getLatLng();
+      const radiusInMeters = zone.layer.getRadius();
+      spatialFilter = `ST_DWithin(ST_Point(longitude, latitude), ST_GeomFromText('POINT(${center.lng} ${center.lat})'), ${radiusInMeters})`;
+    } else {
+      spatialFilter = `ST_Intersects(ST_Point(longitude, latitude), ST_GeomFromText('${wkt}'))`;
+    }
+    
+    // Adicionar WHERE ou AND conforme necessário
+    let newQuery;
+    if (currentQuery.toUpperCase().includes('WHERE')) {
+      newQuery = `${currentQuery} AND ${spatialFilter}`;
+    } else {
+      newQuery = `${currentQuery} WHERE ${spatialFilter}`;
+    }
+    
+    // Adicionar LIMIT de volta
+    if (limitClause) {
+      newQuery = `${newQuery} ${limitClause}`;
+    }
+    
+    setSqlQuery(newQuery);
+    setHasSpatialFilter(true);
+    console.log('Query atualizada com filtro espacial:', newQuery);
+    
+    // Mostrar feedback visual
+    setError('');
+  };
+
   // Funções para gerenciar zonas desenhadas
   const handleZoneCreated = (zone) => {
     console.log('Zone created:', zone);
+    updateQueryWithSpatialFilter(zone);
   };
 
   const handleZoneDeleted = (zoneId) => {
     console.log('Zone deleted:', zoneId);
+    // Poderia remover o filtro espacial da query aqui
   };
 
   // Carregar batches e arquivos ao montar o componente
@@ -626,12 +700,27 @@ function Dashboard() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {/* Área de Input SQL */}
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
-                Enter your SQL query
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-zinc-300">
+                  Enter your SQL query
+                </label>
+                {hasSpatialFilter && (
+                  <span className="text-xs text-blue-400 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    Spatial Filter Active
+                  </span>
+                )}
+              </div>
               <textarea
                 value={sqlQuery}
-                onChange={(e) => setSqlQuery(e.target.value)}
+                onChange={(e) => {
+                  setSqlQuery(e.target.value);
+                  // Se o usuário editar manualmente, verificar se ainda tem filtro espacial
+                  const hasFilter = e.target.value.includes('ST_Intersects') || e.target.value.includes('ST_DWithin');
+                  setHasSpatialFilter(hasFilter);
+                }}
                 className="w-full h-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-sm text-zinc-200 placeholder-zinc-500"
                 placeholder='Ex: SELECT * FROM fields LIMIT 10'
               />

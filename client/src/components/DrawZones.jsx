@@ -200,21 +200,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
 
   };
 
-  const toggleDrawing = () => {
-    setIsDrawing(!isDrawing);
-    if (drawControlRef.current) {
-      if (isDrawing) {
-        drawControlRef.current.remove();
-      } else {
-        // Re-adicionar controle se necessário
-        const map = mapRef.current;
-        if (map) {
-          map.addControl(drawControlRef.current);
-        }
-      }
-    }
-  };
-
   const clearAllZones = () => {
     if (drawControlRef.current && mapRef.current) {
       const map = mapRef.current;
@@ -424,96 +409,55 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2 mb-2">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
           <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
-          Draw Zones
+          Drawn Zones ({drawnZones.length})
         </h3>
-        <div className="grid grid-cols-3 gap-1">
-          <button
-            onClick={toggleDrawing}
-            className={`px-2 py-1 rounded text-xs font-medium transition duration-150 ${
-              isDrawing 
-                ? 'bg-red-600 text-white hover:bg-red-700 border border-red-500' 
-                : 'bg-blue-600 text-white hover:bg-blue-700 border border-blue-500'
-            }`}
-          >
-            {isDrawing ? 'Stop' : 'Start'}
-          </button>
-          <button
-            onClick={clearAllZones}
-            className="px-2 py-1 bg-zinc-700 text-zinc-200 rounded text-xs font-medium hover:bg-zinc-600 transition duration-150 border border-zinc-600"
-          >
-            Clear
-          </button>
-          <button
-            onClick={exportZones}
-            className="px-2 py-1 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700 transition duration-150 border border-emerald-500"
-          >
-            Export
-          </button>
-          <button
-            onClick={importZones}
-            className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition duration-150 border border-blue-500"
-          >
-            Import
-          </button>
-          <button
-            onClick={saveZonesToLocalStorage}
-            className="px-2 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 transition duration-150 border border-purple-500"
-          >
-            Save
-          </button>
-          <button
-            onClick={loadZonesFromLocalStorage}
-            className="px-2 py-1 bg-orange-600 text-white rounded text-xs font-medium hover:bg-orange-700 transition duration-150 border border-orange-500"
-          >
-            Load
-          </button>
-        </div>
+        <button
+          onClick={clearAllZones}
+          className="px-2 py-1 bg-red-900 text-red-200 rounded text-xs font-medium hover:bg-red-800 transition duration-150 border border-red-700"
+          title="Clear all zones"
+        >
+          Clear All
+        </button>
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs text-zinc-400">
-          <p>• Click "Start" to enable drawing tools on map</p>
-          <p>• Drawn zones auto-add spatial filter to SQL query</p>
-          <p>• Export/Import: save/load zones as files</p>
-          <p>• Save/Load: store zones in browser</p>
+        <div className="text-xs text-zinc-400 bg-zinc-800 border border-zinc-700 rounded p-2">
+          <p>💡 Use drawing tools (top-right of map) to create zones</p>
+          <p>🎯 Zones auto-add spatial filters to SQL queries</p>
         </div>
 
-        {drawnZones.length > 0 && (
-          <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3">
-            <h4 className="text-sm font-semibold text-zinc-200 mb-2">
-              Drawn Zones ({drawnZones.length})
-            </h4>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {drawnZones.map((zone, index) => (
-                <div key={zone.id} className="flex items-center justify-between bg-zinc-700 border border-zinc-600 rounded p-2">
-                  <div className="flex-1">
-                    <div className="text-xs font-medium text-zinc-200">{zone.name}</div>
+        {drawnZones.length > 0 ? (
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {drawnZones.map((zone, index) => (
+              <div key={zone.id} className="bg-zinc-800 border border-zinc-700 rounded p-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-zinc-200 truncate">{zone.name}</div>
                     <div className="text-xs text-zinc-400">
-                      {zone.type} • {zone.area.toFixed(2)} m²
+                      {zone.type} • {zone.area.toFixed(0)} m²
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => window.editZone(zone.id)}
-                      className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => window.deleteZone(zone.id)}
-                      className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => window.deleteZone(zone.id)}
+                    className="ml-2 text-xs bg-red-900 text-red-200 px-2 py-1 rounded hover:bg-red-800 transition duration-150 border border-red-800"
+                    title="Delete zone"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-zinc-500 text-center py-4 bg-zinc-800 border border-zinc-700 rounded">
+            No zones drawn yet
           </div>
         )}
       </div>

@@ -352,9 +352,11 @@ function Dashboard() {
     if (zone.type === 'circle') {
       const center = zone.layer.getLatLng();
       const radiusInMeters = zone.layer.getRadius();
-      spatialFilter = `ST_DWithin(ST_Point(longitude, latitude), ST_GeomFromText('POINT(${center.lng} ${center.lat})'), ${radiusInMeters})`;
+      // Para círculo, usar ST_Distance em vez de ST_DWithin
+      spatialFilter = `ST_Distance(ST_MakePoint(longitude, latitude), ST_MakePoint(${center.lng}, ${center.lat})) <= ${radiusInMeters}`;
     } else {
-      spatialFilter = `ST_Intersects(ST_Point(longitude, latitude), ST_GeomFromText('${wkt}'))`;
+      // Para polígonos e retângulos
+      spatialFilter = `ST_Intersects(ST_MakePoint(longitude, latitude), ST_GeomFromText('${wkt}'))`;
     }
     
     // Adicionar WHERE ou AND conforme necessário

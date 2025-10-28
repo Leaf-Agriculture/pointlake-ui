@@ -68,25 +68,32 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
           shapeOptions: {
             color: '#3b82f6',
             fillColor: '#3b82f6',
-            fillOpacity: 0.2,
-            weight: 2
-          }
+            fillOpacity: 0.3,
+            weight: 3
+          },
+          showLength: true,
+          metric: true,
+          feet: false
         },
         rectangle: {
           shapeOptions: {
             color: '#10b981',
             fillColor: '#10b981',
-            fillOpacity: 0.2,
-            weight: 2
-          }
+            fillOpacity: 0.3,
+            weight: 3
+          },
+          showArea: true,
+          metric: true
         },
         circle: {
           shapeOptions: {
             color: '#f59e0b',
             fillColor: '#f59e0b',
-            fillOpacity: 0.2,
-            weight: 2
-          }
+            fillOpacity: 0.3,
+            weight: 3
+          },
+          showRadius: true,
+          metric: true
         },
         marker: false,
         polyline: false,
@@ -219,9 +226,9 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     // Funções globais para popup
     window.editZone = (zoneId) => {
       const zone = drawnZones.find(z => z.id === zoneId);
-      if (zone && zone.layer) {
+      if (zone && zone.layer && drawnItemsRef.current) {
         const editControl = new L.EditToolbar.Edit(map, {
-          featureGroup: drawnItems
+          featureGroup: drawnItemsRef.current
         });
         editControl.enable();
         zone.layer.editing.enable();
@@ -229,11 +236,31 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     };
 
     window.deleteZone = (zoneId) => {
-      const zone = drawnZones.find(z => z.id === zoneId);
-      if (zone && zone.layer) {
-        drawnItems.removeLayer(zone.layer);
-        setDrawnZones(prev => prev.filter(z => z.id !== zoneId));
+      console.log('🗑️ Deletando zona:', zoneId);
+      if (!drawnItemsRef.current) {
+        console.error('drawnItemsRef não está definido');
+        return;
+      }
+      
+      // Encontrar e remover a camada do mapa
+      let layerToRemove = null;
+      drawnItemsRef.current.eachLayer((layer) => {
+        if (layer.zoneId === zoneId) {
+          layerToRemove = layer;
+        }
+      });
+      
+      if (layerToRemove) {
+        drawnItemsRef.current.removeLayer(layerToRemove);
+        setDrawnZones(prev => {
+          const newZones = prev.filter(z => z.id !== zoneId);
+          console.log('Zonas restantes:', newZones.length);
+          return newZones;
+        });
         onZoneDeleted && onZoneDeleted(zoneId);
+        console.log('✅ Zona deletada com sucesso');
+      } else {
+        console.error('Zona não encontrada:', zoneId);
       }
     };
 

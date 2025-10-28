@@ -79,11 +79,13 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
           shapeOptions: {
             color: '#10b981',
             fillColor: '#10b981',
-            fillOpacity: 0.3,
-            weight: 3
+            fillOpacity: 0.4,
+            weight: 4,
+            className: 'drawn-zone-rectangle'
           },
           showArea: true,
-          metric: true
+          metric: true,
+          repeatMode: false
         },
         circle: {
           shapeOptions: {
@@ -122,16 +124,30 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       layer.zoneId = zoneId;
       layer.zoneName = `Zone ${drawnZones.length + 1}`;
       
+      // Para retângulos, garantir visibilidade
+      if (layerType === 'rectangle') {
+        layer.setStyle({
+          color: '#10b981',
+          fillColor: '#10b981',
+          fillOpacity: 0.5,
+          weight: 5,
+          opacity: 1
+        });
+        console.log('🟩 Retângulo criado com estilo visível');
+      }
+      
       // Calcular área
       let area = 0;
       if (layerType === 'polygon' || layerType === 'rectangle') {
         // Usar método toGeoJSON e calcular área aproximada
         const latlngs = layer.getLatLngs()[0];
+        console.log('📐 Coordenadas:', latlngs.length, 'pontos');
         // Área aproximada em m² (simplificada)
         const bounds = layer.getBounds();
         const latDiff = bounds.getNorth() - bounds.getSouth();
         const lngDiff = bounds.getEast() - bounds.getWest();
         area = Math.abs(latDiff * lngDiff * 111000 * 111000); // Conversão aproximada para m²
+        console.log('📊 Área calculada:', area.toFixed(0), 'm²');
       } else if (layerType === 'circle') {
         const radius = layer.getRadius();
         area = Math.PI * radius * radius;
@@ -158,6 +174,13 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       
       // Adicionar à FeatureGroup
       drawnItems.addLayer(layer);
+      console.log('✅ Layer adicionada ao FeatureGroup');
+      
+      // Para retângulos, garantir que apareça no topo
+      if (layerType === 'rectangle') {
+        layer.bringToFront();
+        console.log('🟩 Retângulo trazido para frente');
+      }
       
       // Atualizar estado
       const newZone = {
@@ -169,9 +192,13 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         area: area
       };
       
-      setDrawnZones(prev => [...prev, newZone]);
+      setDrawnZones(prev => {
+        const updated = [...prev, newZone];
+        console.log('📋 Total de zonas:', updated.length);
+        return updated;
+      });
       onZoneCreated && onZoneCreated(newZone);
-      console.log('Zone created and added to list:', newZone);
+      console.log('✅ Zone created and added to list:', newZone);
     });
 
     // Event listener para edição

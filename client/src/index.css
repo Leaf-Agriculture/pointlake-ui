@@ -64,3 +64,16 @@ body {
   transition: transform 0.2s ease;
 }
 
+/* Zonas desenhadas devem ficar acima dos clusters */
+.drawn-zone-rectangle,
+.leaflet-interactive {
+  z-index: 600 !important;
+}
+
+/* Garantir que as zonas desenhadas sejam bem visíveis */
+svg.leaflet-zoom-animated path.drawn-zone-rectangle {
+  stroke-width: 4px !important;
+  stroke-opacity: 1 !important;
+  fill-opacity: 0.4 !important;
+}
+

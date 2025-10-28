@@ -138,19 +138,42 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       
       // Calcular área
       let area = 0;
+      console.log('🔍 Tipo de layer:', layerType);
+      console.log('🔍 Layer object:', layer);
+      console.log('🔍 getLatLngs exists?', typeof layer.getLatLngs);
+      console.log('🔍 getBounds exists?', typeof layer.getBounds);
+      
       if (layerType === 'polygon' || layerType === 'rectangle') {
-        // Usar método toGeoJSON e calcular área aproximada
-        const latlngs = layer.getLatLngs()[0];
-        console.log('📐 Coordenadas:', latlngs.length, 'pontos');
-        // Área aproximada em m² (simplificada)
-        const bounds = layer.getBounds();
-        const latDiff = bounds.getNorth() - bounds.getSouth();
-        const lngDiff = bounds.getEast() - bounds.getWest();
-        area = Math.abs(latDiff * lngDiff * 111000 * 111000); // Conversão aproximada para m²
-        console.log('📊 Área calculada:', area.toFixed(0), 'm²');
+        try {
+          const latlngs = layer.getLatLngs();
+          console.log('📐 getLatLngs() retornou:', latlngs);
+          
+          if (latlngs && latlngs[0]) {
+            console.log('📐 Coordenadas array:', latlngs[0].length, 'pontos');
+            
+            // Área aproximada em m² (simplificada)
+            const bounds = layer.getBounds();
+            console.log('📏 Bounds:', {
+              north: bounds.getNorth(),
+              south: bounds.getSouth(),
+              east: bounds.getEast(),
+              west: bounds.getWest()
+            });
+            
+            const latDiff = bounds.getNorth() - bounds.getSouth();
+            const lngDiff = bounds.getEast() - bounds.getWest();
+            console.log('📏 Diferenças:', { latDiff, lngDiff });
+            
+            area = Math.abs(latDiff * lngDiff * 111000 * 111000);
+            console.log('📊 Área calculada:', area.toFixed(0), 'm²');
+          }
+        } catch (e) {
+          console.error('❌ Erro ao calcular área:', e);
+        }
       } else if (layerType === 'circle') {
         const radius = layer.getRadius();
         area = Math.PI * radius * radius;
+        console.log('⭕ Círculo - raio:', radius, 'área:', area.toFixed(0), 'm²');
       }
 
       // Adicionar popup com informações da zona

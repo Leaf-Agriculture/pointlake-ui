@@ -212,10 +212,42 @@ function MapComponent({ data, mapRef: externalMapRef }) {
             chunkedLoading: true,
             chunkInterval: 200,
             chunkDelay: 50,
-            maxClusterRadius: 50,
-            spiderfyOnMaxZoom: true,
+            maxClusterRadius: 150,  // Raio maior para interpolação suave
+            spiderfyOnMaxZoom: false,  // Não expandir no zoom máximo
             showCoverageOnHover: false,
-            zoomToBoundsOnClick: true
+            zoomToBoundsOnClick: true,
+            iconCreateFunction: function(cluster) {
+              const childCount = cluster.getChildCount();
+              // Criar clusters sem números, apenas cores baseadas na densidade
+              let size = 40;  // Tamanho base
+              let color = '#3b82f6';
+              let opacity = 0.6;
+              
+              // Tamanho e cor baseados na densidade
+              if (childCount > 1000) {
+                size = 70;
+                color = '#dc2626'; // Vermelho para alta densidade
+                opacity = 0.8;
+              } else if (childCount > 500) {
+                size = 60;
+                color = '#f97316'; // Laranja escuro
+                opacity = 0.75;
+              } else if (childCount > 100) {
+                size = 50;
+                color = '#f59e0b'; // Laranja para média densidade
+                opacity = 0.7;
+              } else if (childCount > 50) {
+                size = 45;
+                color = '#3b82f6'; // Azul
+                opacity = 0.65;
+              }
+              
+              return L.divIcon({
+                html: `<div style="background-color: ${color}; width: 100%; height: 100%; border-radius: 50%; opacity: ${opacity}; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+                className: 'marker-cluster',
+                iconSize: L.point(size, size)
+              });
+            }
           });
           
           data.forEach((item, index) => {

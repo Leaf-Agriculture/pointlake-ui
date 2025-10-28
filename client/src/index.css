@@ -37,3 +37,30 @@ body {
   animation: shimmer 1.5s infinite;
 }
 
+/* Clusters personalizados sem números - interpolação de densidade */
+.marker-cluster {
+  background-clip: padding-box;
+  border-radius: 50%;
+  border: none !important;
+}
+
+.marker-cluster div {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  text-align: center;
+  font-size: 0 !important; /* Esconde números */
+  border: none !important;
+  line-height: 0 !important;
+}
+
+.marker-cluster span {
+  display: none !important; /* Esconde contadores */
+}
+
+/* Efeito de interpolação suave */
+.marker-cluster:hover {
+  transform: scale(1.1);
+  transition: transform 0.2s ease;
+}
+

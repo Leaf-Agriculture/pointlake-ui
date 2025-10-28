@@ -381,12 +381,16 @@ function Dashboard() {
   // Funções para gerenciar zonas desenhadas
   const handleZoneCreated = (zone) => {
     console.log('Zone created:', zone);
-    updateQueryWithSpatialFilter(zone);
+    // Não atualizar automaticamente - usuário decide quando usar
   };
 
   const handleZoneDeleted = (zoneId) => {
     console.log('Zone deleted:', zoneId);
-    // Poderia remover o filtro espacial da query aqui
+  };
+
+  const handleQueryByZone = (zone) => {
+    console.log('Query by zone:', zone);
+    updateQueryWithSpatialFilter(zone);
   };
 
   // Carregar batches e arquivos ao montar o componente
@@ -554,6 +558,7 @@ function Dashboard() {
               <DrawZones 
                 onZoneCreated={handleZoneCreated}
                 onZoneDeleted={handleZoneDeleted}
+                onQueryByZone={handleQueryByZone}
                 zones={drawnZones}
                 mapRef={mapRef}
               />

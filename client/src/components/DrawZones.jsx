@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet-draw';
 import 'leaflet-draw/dist/leaflet.draw.css';
 
-const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
+const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], mapRef }) => {
   const drawControlRef = useRef(null);
   const drawnItemsRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -463,7 +463,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {drawnZones.map((zone, index) => (
               <div key={zone.id} className="bg-zinc-800 border border-zinc-700 rounded p-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-1">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-zinc-200 truncate">{zone.name}</div>
                     <div className="text-xs text-zinc-400">
@@ -480,6 +480,16 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
                     </svg>
                   </button>
                 </div>
+                <button
+                  onClick={() => onQueryByZone && onQueryByZone(zone)}
+                  className="w-full text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded hover:bg-blue-800 transition duration-150 border border-blue-800 flex items-center justify-center gap-1"
+                  title="Add spatial filter to SQL query"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Query by Zone
+                </button>
               </div>
             ))}
           </div>

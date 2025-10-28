@@ -2,58 +2,69 @@
 
 ## 📍 Funções Espaciais Implementadas
 
-### 1. **ST_MakePoint** (Criar Ponto)
-Cria um ponto a partir de coordenadas longitude e latitude.
+### 1. **ST_GeomFromWKB** (Converter WKB para Geometria)
+A coluna `geometry` está em formato binário (WKB - Well-Known Binary). Precisa ser convertida antes de usar em funções espaciais.
 
 **Sintaxe:**
 ```sql
-ST_MakePoint(longitude, latitude)
+ST_GeomFromWKB(geometry)
 ```
 
-**Exemplo:**
-```sql
-ST_MakePoint(-97.51397788524629, 37.98618947016771)
-```
-
-### 2. **ST_Distance** (Distância)
-Calcula a distância entre dois pontos em graus (não metros).
+### 2. **ST_SetSRID** (Definir Sistema de Referência)
+Define o SRID (Spatial Reference System ID) da geometria. 4326 = WGS84 (GPS).
 
 **Sintaxe:**
 ```sql
-ST_Distance(point1, point2)
+ST_SetSRID(geometry, 4326)
 ```
 
-**Exemplo - Círculo (Raio 100m):**
+### 3. **ST_DWithin** (Distância Dentro de Raio)
+Verifica se uma geometria está dentro de uma distância específica de outra.
+
+**Sintaxe:**
+```sql
+ST_DWithin(geometry1, geometry2, distance, useSpheroid)
+```
+
+**Parâmetros:**
+- `geometry1`: Geometria do ponto (convertida de WKB)
+- `geometry2`: Ponto central (ST_Point)
+- `distance`: Distância em **metros**
+- `useSpheroid`: `true` para usar cálculo geodésico (Terra esférica)
+
+**Exemplo - Círculo (Raio 80m):**
 ```sql
 SELECT * FROM pointlake_file_77eabe37-833a-4083-a88d-7017b72c8688 
-WHERE ST_Distance(
-  ST_MakePoint(longitude, latitude), 
-  ST_MakePoint(-97.514, 37.986)
-) <= 100 
-LIMIT 5
+WHERE ST_DWithin(
+  ST_SetSRID(ST_GeomFromWKB(geometry), 4326),
+  ST_Point(-97.51735210418703, 37.98648965862172),
+  80,
+  true
+) 
+LIMIT 10
 ```
 
-**⚠️ IMPORTANTE**: `ST_Distance` retorna distância em **graus**, não metros!
+**✅ IMPORTANTE**: Com `useSpheroid = true`, a distância é em **metros**!
 
-### 3. **ST_Intersects** (Interseção)
-Verifica se um ponto está dentro de uma geometria (polígono/retângulo).
+### 4. **ST_Intersects** (Interseção)
+Verifica se uma geometria está dentro de outra geometria (polígono/retângulo).
 
 **Sintaxe:**
 ```sql
-ST_Intersects(point, geometry)
+ST_Intersects(geometry1, geometry2)
 ```
 
 **Exemplo - Polígono:**
 ```sql
 SELECT * FROM pointlake_file_77eabe37-833a-4083-a88d-7017b72c8688 
 WHERE ST_Intersects(
-  ST_MakePoint(longitude, latitude), 
+  ST_SetSRID(ST_GeomFromWKB(geometry), 4326),
   ST_GeomFromText('POLYGON((-97.5 37.9, -97.4 37.9, -97.4 38.0, -97.5 38.0, -97.5 37.9))')
 ) 
 LIMIT 10
 ```
 
-### 4. **ST_GeomFromText** (WKT para Geometria)
+### 5. **ST_GeomFromText** (WKT para Geometria)
 Converte Well-Known Text para geometria.
 
 **Sintaxe:**

@@ -1,5 +1,7 @@
 @import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
 @import url('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css');
+@import url('https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css');
+@import url('https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css');
 
 @tailwind base;
 @tailwind components;

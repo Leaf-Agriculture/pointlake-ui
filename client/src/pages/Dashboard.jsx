@@ -351,14 +351,13 @@ function Dashboard() {
     let spatialFilter;
     if (zone.type === 'circle') {
       const center = zone.layer.getLatLng();
-      const radiusInMeters = zone.layer.getRadius();
-      // Converter raio de metros para graus (aproximação: 1 grau ≈ 111km)
-      const radiusInDegrees = radiusInMeters / 111000;
-      // Para círculo, usar ST_Distance (retorna distância em graus)
-      spatialFilter = `ST_Distance(ST_MakePoint(longitude, latitude), ST_MakePoint(${center.lng}, ${center.lat})) <= ${radiusInDegrees}`;
+      const radiusInMeters = Math.round(zone.layer.getRadius());
+      // Para círculo, usar ST_DWithin com geometria WKB e raio em metros
+      // Último parâmetro true = usar esferóide (cálculo geodésico em metros)
+      spatialFilter = `ST_DWithin(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_Point(${center.lng}, ${center.lat}), ${radiusInMeters}, true)`;
     } else {
-      // Para polígonos e retângulos
-      spatialFilter = `ST_Intersects(ST_MakePoint(longitude, latitude), ST_GeomFromText('${wkt}'))`;
+      // Para polígonos e retângulos, usar ST_Intersects com geometria WKB
+      spatialFilter = `ST_Intersects(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_GeomFromText('${wkt}'))`;
     }
     
     // Adicionar WHERE ou AND conforme necessário

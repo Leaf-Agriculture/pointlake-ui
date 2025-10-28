@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
+import 'leaflet.markercluster'
 
 // Configuração dos ícones do Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -201,42 +202,158 @@ function MapComponent({ data, mapRef: externalMapRef }) {
           mapInstance.current.fitBounds(polygon.getBounds().pad(0.1))
         }
       } else if (Array.isArray(data)) {
-        // Lógica para arrays de dados (incluindo resultados de queries)
-        data.forEach((item, index) => {
-          let coords = null
+        // Otimização para grandes datasets
+        const pointCount = data.length;
+        console.log(`Renderizando ${pointCount} pontos no mapa`);
+        
+        if (pointCount > 5000) {
+          // Para mais de 5000 pontos, usar MarkerCluster
+          const markers = L.markerClusterGroup({
+            chunkedLoading: true,
+            chunkInterval: 200,
+            chunkDelay: 50,
+            maxClusterRadius: 50,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true
+          });
           
-          // Verificar se tem geometria binária
-          if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
-            coords = decodeBinaryGeometry(item.geometry)
-          }
-          // Verificar coordenadas tradicionais
-          else if (item.latitude && item.longitude) {
-            coords = [item.latitude, item.longitude]
-          } else if (item.lat && item.lng) {
-            coords = [item.lat, item.lng]
-          }
-          
-          if (coords) {
-            const marker = L.marker(coords)
-              .addTo(mapInstance.current)
-              .bindPopup(`
-                <div style="font-family: Arial, sans-serif; min-width: 200px;">
-                  <h4 style="margin: 0 0 8px 0; color: #333;">📊 Registro ${index + 1}</h4>
-                  <div style="font-size: 12px; line-height: 1.4;">
+          data.forEach((item, index) => {
+            let coords = null
+            
+            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+              coords = decodeBinaryGeometry(item.geometry)
+            } else if (item.latitude && item.longitude) {
+              coords = [item.latitude, item.longitude]
+            } else if (item.lat && item.lng) {
+              coords = [item.lat, item.lng]
+            }
+            
+            if (coords) {
+              const marker = L.circleMarker(coords, {
+                radius: 4,
+                fillColor: '#3b82f6',
+                color: '#1e40af',
+                weight: 1,
+                opacity: 0.8,
+                fillOpacity: 0.6
+              });
+              
+              marker.bindPopup(`
+                <div style="font-family: Arial, sans-serif; min-width: 150px;">
+                  <h4 style="margin: 0 0 8px 0; color: #333;">📊 Ponto ${index + 1}</h4>
+                  <div style="font-size: 11px; line-height: 1.4;">
                     <div><strong>Timestamp:</strong> ${item.timestamp || '-'}</div>
                     <div><strong>Operação:</strong> ${item.operationType || '-'}</div>
-                    <div><strong>Taxa Aplicada:</strong> ${item.appliedRate || '-'}</div>
-                    <div><strong>Área:</strong> ${item.area || '-'}</div>
-                    <div><strong>Largura:</strong> ${item.equipmentWidth || '-'}</div>
-                    <div><strong>Status:</strong> ${item.recordingStatus || '-'}</div>
-                    <div><strong>Tank Mix:</strong> ${item.tankMix ? 'Sim' : 'Não'}</div>
                   </div>
                 </div>
-              `)
-            
-            markersRef.current.push(marker)
+              `);
+              
+              markers.addLayer(marker);
+            }
+          });
+          
+          mapInstance.current.addLayer(markers);
+          markersRef.current.push(markers);
+          console.log(`✅ ${pointCount} pontos renderizados com MarkerCluster`);
+          
+          // Ajustar zoom
+          if (markers.getBounds && markers.getBounds().isValid()) {
+            mapInstance.current.fitBounds(markers.getBounds().pad(0.1));
           }
-        })
+          
+        } else if (pointCount > 1000) {
+          // Para mais de 1000 pontos, usar círculos pequenos ao invés de markers
+          const points = [];
+          
+          data.forEach((item, index) => {
+            let coords = null
+            
+            // Verificar se tem geometria binária
+            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+              coords = decodeBinaryGeometry(item.geometry)
+            }
+            // Verificar coordenadas tradicionais
+            else if (item.latitude && item.longitude) {
+              coords = [item.latitude, item.longitude]
+            } else if (item.lat && item.lng) {
+              coords = [item.lat, item.lng]
+            }
+            
+            if (coords) {
+              points.push(coords);
+            }
+          });
+          
+          // Usar CircleMarkers (muito mais leves que Markers)
+          points.forEach((coords, index) => {
+            const circle = L.circleMarker(coords, {
+              radius: 3,
+              fillColor: '#3b82f6',
+              color: '#1e40af',
+              weight: 1,
+              opacity: 0.8,
+              fillOpacity: 0.6
+            }).addTo(mapInstance.current);
+            
+            // Popup apenas on-demand (não pré-renderizar)
+            circle.on('click', () => {
+              const item = data[index];
+              circle.bindPopup(`
+                <div style="font-family: Arial, sans-serif; min-width: 150px;">
+                  <h4 style="margin: 0 0 8px 0; color: #333;">📊 Ponto ${index + 1}</h4>
+                  <div style="font-size: 11px; line-height: 1.4;">
+                    <div><strong>Timestamp:</strong> ${item.timestamp || '-'}</div>
+                    <div><strong>Operação:</strong> ${item.operationType || '-'}</div>
+                    <div><strong>Taxa:</strong> ${item.appliedRate || '-'}</div>
+                  </div>
+                </div>
+              `).openPopup();
+            });
+            
+            markersRef.current.push(circle);
+          });
+          
+          console.log(`✅ ${points.length} pontos renderizados como CircleMarkers (otimizado)`);
+          
+        } else {
+          // Para menos de 1000 pontos, usar markers tradicionais
+          data.forEach((item, index) => {
+            let coords = null
+            
+            // Verificar se tem geometria binária
+            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+              coords = decodeBinaryGeometry(item.geometry)
+            }
+            // Verificar coordenadas tradicionais
+            else if (item.latitude && item.longitude) {
+              coords = [item.latitude, item.longitude]
+            } else if (item.lat && item.lng) {
+              coords = [item.lat, item.lng]
+            }
+            
+            if (coords) {
+              const marker = L.marker(coords)
+                .addTo(mapInstance.current)
+                .bindPopup(`
+                  <div style="font-family: Arial, sans-serif; min-width: 200px;">
+                    <h4 style="margin: 0 0 8px 0; color: #333;">📊 Registro ${index + 1}</h4>
+                    <div style="font-size: 12px; line-height: 1.4;">
+                      <div><strong>Timestamp:</strong> ${item.timestamp || '-'}</div>
+                      <div><strong>Operação:</strong> ${item.operationType || '-'}</div>
+                      <div><strong>Taxa Aplicada:</strong> ${item.appliedRate || '-'}</div>
+                      <div><strong>Área:</strong> ${item.area || '-'}</div>
+                      <div><strong>Largura:</strong> ${item.equipmentWidth || '-'}</div>
+                      <div><strong>Status:</strong> ${item.recordingStatus || '-'}</div>
+                      <div><strong>Tank Mix:</strong> ${item.tankMix ? 'Sim' : 'Não'}</div>
+                    </div>
+                  </div>
+                `)
+              
+              markersRef.current.push(marker)
+            }
+          });
+        }
 
         // Ajustar o zoom para mostrar todos os marcadores
         if (markersRef.current.length > 0) {

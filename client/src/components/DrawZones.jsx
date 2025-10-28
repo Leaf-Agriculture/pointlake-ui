@@ -109,6 +109,8 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       const { layerType, layer } = event;
       const zoneId = `zone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
+      console.log('🎨 Zona criada:', { layerType, zoneId });
+      
       // Adicionar ID único à camada
       layer.zoneId = zoneId;
       layer.zoneName = `Zone ${drawnZones.length + 1}`;

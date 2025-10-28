@@ -219,40 +219,40 @@ function MapComponent({ data, mapRef: externalMapRef }) {
             disableClusteringAtZoom: 18,  // Desagrupar em zoom alto
             iconCreateFunction: function(cluster) {
               const childCount = cluster.getChildCount();
-              // Criar clusters sem números, apenas cores baseadas na densidade
-              let size = 25;  // Tamanho base menor para mais densidade visual
+              // Criar clusters grandes sem números para preencher espaço
+              let size = 80;  // Tamanho base grande
               let color = '#3b82f6';
-              let opacity = 0.7;
+              let opacity = 0.5;
               
               // Tamanho e cor baseados na densidade
               if (childCount > 1000) {
-                size = 45;
+                size = 120;
                 color = '#dc2626'; // Vermelho para alta densidade
-                opacity = 0.85;
-              } else if (childCount > 500) {
-                size = 40;
-                color = '#f97316'; // Laranja escuro
-                opacity = 0.8;
-              } else if (childCount > 100) {
-                size = 35;
-                color = '#f59e0b'; // Laranja para média densidade
-                opacity = 0.75;
-              } else if (childCount > 50) {
-                size = 30;
-                color = '#60a5fa'; // Azul médio
                 opacity = 0.7;
-              } else if (childCount > 10) {
-                size = 25;
-                color = '#3b82f6'; // Azul
+              } else if (childCount > 500) {
+                size = 110;
+                color = '#f97316'; // Laranja escuro
                 opacity = 0.65;
-              } else {
-                size = 20;
-                color = '#93c5fd'; // Azul claro
+              } else if (childCount > 100) {
+                size = 100;
+                color = '#f59e0b'; // Laranja para média densidade
                 opacity = 0.6;
+              } else if (childCount > 50) {
+                size = 90;
+                color = '#60a5fa'; // Azul médio
+                opacity = 0.55;
+              } else if (childCount > 10) {
+                size = 80;
+                color = '#3b82f6'; // Azul
+                opacity = 0.5;
+              } else {
+                size = 70;
+                color = '#93c5fd'; // Azul claro
+                opacity = 0.45;
               }
               
               return L.divIcon({
-                html: `<div style="background-color: ${color}; width: 100%; height: 100%; border-radius: 50%; opacity: ${opacity}; box-shadow: 0 0 8px rgba(0,0,0,0.2);"></div>`,
+                html: `<div style="background: radial-gradient(circle, ${color} 0%, ${color}88 60%, transparent 100%); width: 100%; height: 100%; border-radius: 50%;"></div>`,
                 className: 'marker-cluster',
                 iconSize: L.point(size, size)
               });

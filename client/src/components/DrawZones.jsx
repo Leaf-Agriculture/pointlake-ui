@@ -5,8 +5,10 @@ import 'leaflet-draw/dist/leaflet.draw.css';
 
 const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
   const drawControlRef = useRef(null);
+  const drawnItemsRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnZones, setDrawnZones] = useState(zones);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
     // Verificar se o mapa está pronto
@@ -26,6 +28,11 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
   }, [mapRef, mapRef?.current]);
 
   const initializeDrawControls = () => {
+    if (isInitialized.current) {
+      console.log('DrawZones already initialized');
+      return;
+    }
+
     if (!mapRef || !mapRef.current) {
       console.log('MapRef not ready yet');
       return;
@@ -44,6 +51,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
     // Criar FeatureGroup para gerenciar as zonas desenhadas PRIMEIRO
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
+    drawnItemsRef.current = drawnItems;
     console.log('FeatureGroup created and added to map');
     
     // Criar controle de desenho DEPOIS que o FeatureGroup existe
@@ -93,6 +101,8 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
     // Adicionar controle ao mapa
     map.addControl(drawControl);
     drawControlRef.current = drawControl;
+    isInitialized.current = true;
+    console.log('DrawZones initialized successfully');
 
     // Event listeners para desenho
     map.on(L.Draw.Event.CREATED, (event) => {
@@ -103,6 +113,21 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
       layer.zoneId = zoneId;
       layer.zoneName = `Zone ${drawnZones.length + 1}`;
       
+      // Calcular área
+      let area = 0;
+      if (layerType === 'polygon' || layerType === 'rectangle') {
+        // Usar método toGeoJSON e calcular área aproximada
+        const latlngs = layer.getLatLngs()[0];
+        // Área aproximada em m² (simplificada)
+        const bounds = layer.getBounds();
+        const latDiff = bounds.getNorth() - bounds.getSouth();
+        const lngDiff = bounds.getEast() - bounds.getWest();
+        area = Math.abs(latDiff * lngDiff * 111000 * 111000); // Conversão aproximada para m²
+      } else if (layerType === 'circle') {
+        const radius = layer.getRadius();
+        area = Math.PI * radius * radius;
+      }
+
       // Adicionar popup com informações da zona
       const popupContent = `
         <div class="p-2">
@@ -110,12 +135,9 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
           <div class="text-xs text-zinc-400 space-y-1">
             <div><strong>Type:</strong> ${layerType}</div>
             <div><strong>ID:</strong> ${zoneId}</div>
-            ${layer.getLatLngs ? `<div><strong>Area:</strong> ${L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]).toFixed(2)} m²</div>` : ''}
+            <div><strong>Area:</strong> ${area.toFixed(0)} m²</div>
           </div>
           <div class="mt-2 flex gap-1">
-            <button onclick="window.editZone('${zoneId}')" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">
-              Edit
-            </button>
             <button onclick="window.deleteZone('${zoneId}')" class="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
               Delete
             </button>
@@ -135,24 +157,39 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
         type: layerType,
         layer: layer,
         coordinates: layer.getLatLngs ? layer.getLatLngs()[0] : layer.getLatLng(),
-        area: layer.getLatLngs ? L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]) : 0
+        area: area
       };
       
       setDrawnZones(prev => [...prev, newZone]);
       onZoneCreated && onZoneCreated(newZone);
+      console.log('Zone created and added to list:', newZone);
     });
 
     // Event listener para edição
     map.on(L.Draw.Event.EDITED, (event) => {
       const layers = event.layers;
       layers.eachLayer((layer) => {
+        // Recalcular área
+        let area = 0;
+        const layerType = layer instanceof L.Polygon ? 'polygon' : layer instanceof L.Rectangle ? 'rectangle' : 'circle';
+        
+        if (layerType === 'polygon' || layerType === 'rectangle') {
+          const bounds = layer.getBounds();
+          const latDiff = bounds.getNorth() - bounds.getSouth();
+          const lngDiff = bounds.getEast() - bounds.getWest();
+          area = Math.abs(latDiff * lngDiff * 111000 * 111000);
+        } else if (layerType === 'circle') {
+          const radius = layer.getRadius();
+          area = Math.PI * radius * radius;
+        }
+
         const updatedZone = {
           id: layer.zoneId,
           name: layer.zoneName,
-          type: layer instanceof L.Polygon ? 'polygon' : layer instanceof L.Rectangle ? 'rectangle' : 'circle',
+          type: layerType,
           layer: layer,
           coordinates: layer.getLatLngs ? layer.getLatLngs()[0] : layer.getLatLng(),
-          area: layer.getLatLngs ? L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]) : 0
+          area: area
         };
         
         setDrawnZones(prev => prev.map(zone => 
@@ -201,14 +238,10 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, zones = [], mapRef }) => {
   };
 
   const clearAllZones = () => {
-    if (drawControlRef.current && mapRef.current) {
-      const map = mapRef.current;
-      map.eachLayer((layer) => {
-        if (layer instanceof L.FeatureGroup) {
-          layer.clearLayers();
-        }
-      });
+    if (drawnItemsRef.current) {
+      drawnItemsRef.current.clearLayers();
       setDrawnZones([]);
+      console.log('All zones cleared');
     }
   };
 

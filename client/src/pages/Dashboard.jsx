@@ -352,8 +352,10 @@ function Dashboard() {
     if (zone.type === 'circle') {
       const center = zone.layer.getLatLng();
       const radiusInMeters = zone.layer.getRadius();
-      // Para círculo, usar ST_Distance em vez de ST_DWithin
-      spatialFilter = `ST_Distance(ST_MakePoint(longitude, latitude), ST_MakePoint(${center.lng}, ${center.lat})) <= ${radiusInMeters}`;
+      // Converter raio de metros para graus (aproximação: 1 grau ≈ 111km)
+      const radiusInDegrees = radiusInMeters / 111000;
+      // Para círculo, usar ST_Distance (retorna distância em graus)
+      spatialFilter = `ST_Distance(ST_MakePoint(longitude, latitude), ST_MakePoint(${center.lng}, ${center.lat})) <= ${radiusInDegrees}`;
     } else {
       // Para polígonos e retângulos
       spatialFilter = `ST_Intersects(ST_MakePoint(longitude, latitude), ST_GeomFromText('${wkt}'))`;

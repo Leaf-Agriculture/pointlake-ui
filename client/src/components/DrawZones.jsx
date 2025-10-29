@@ -76,18 +76,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
           feet: false,
           minPoints: 3 // Mínimo de pontos, mas permitir quantos quiser acima disso
         },
-        rectangle: {
-          shapeOptions: {
-            color: '#10b981',
-            fillColor: '#10b981',
-            fillOpacity: 0.4,
-            weight: 4,
-            className: 'drawn-zone-rectangle'
-          },
-          showArea: true,
-          metric: true,
-          repeatMode: false
-        },
+        rectangle: false, // Desabilitar retângulo
         circle: {
           shapeOptions: {
             color: '#f59e0b',
@@ -123,25 +112,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       
       let layer = originalLayer;
       
-      // Para retângulos, recriar para garantir visibilidade
-      if (layerType === 'rectangle') {
-        const bounds = originalLayer.getBounds();
-        console.log('📏 Rectangle Bounds:', bounds);
-        
-        // Remover o layer original do mapa
-        map.removeLayer(originalLayer);
-        
-        // Criar novo retângulo com estilo garantido
-        layer = L.rectangle(bounds, {
-          color: '#10b981',
-          fillColor: '#10b981',
-          fillOpacity: 0.5,
-          weight: 5,
-          opacity: 1
-        });
-        
-        console.log('🟩 Retângulo recriado com estilo visível');
-      }
+      // Não precisamos mais tratar retângulos separadamente
       
       // Adicionar ID único à camada
       layer.zoneId = zoneId;
@@ -151,29 +122,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       let area = 0;
       let coordinates = null;
       
-      if (layerType === 'rectangle') {
-        const bounds = layer.getBounds();
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
-        const se = L.latLng(sw.lat, ne.lng);
-        const nw = L.latLng(ne.lat, sw.lng);
-        
-        // Calcular área usando fórmula de área de polígono esférico
-        const coords = [sw, se, ne, nw, sw]; // Fechar o polígono
-        area = 0;
-        for (let i = 0; i < coords.length - 1; i++) {
-          const p1 = coords[i];
-          const p2 = coords[i + 1];
-          area += (p2.lng * Math.PI / 180 - p1.lng * Math.PI / 180) * 
-                  (2 + Math.sin(p1.lat * Math.PI / 180) + Math.sin(p2.lat * Math.PI / 180));
-        }
-        area = Math.abs(area) * 6378137 * 6378137 / 2; // Raio da Terra em metros
-        console.log('📊 Área do retângulo calculada:', area.toFixed(0), 'm²');
-        
-        // Coordenadas dos 4 cantos do retângulo
-        coordinates = [sw, se, ne, nw];
-        
-      } else if (layerType === 'polygon') {
+      if (layerType === 'polygon') {
         const latlngs = layer.getLatLngs();
         console.log('📐 Polygon getLatLngs():', latlngs);
         
@@ -223,12 +172,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       drawnItems.addLayer(layer);
       console.log('✅ Layer adicionada ao FeatureGroup');
       
-      // Para retângulos, garantir que apareça no topo
-      if (layerType === 'rectangle') {
-        layer.bringToFront();
-        console.log('🟩 Retângulo trazido para frente');
-      }
-      
       // Atualizar estado
       const newZone = {
         id: zoneId,
@@ -256,13 +199,22 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       layers.eachLayer((layer) => {
         // Recalcular área
         let area = 0;
-        const layerType = layer instanceof L.Polygon ? 'polygon' : layer instanceof L.Rectangle ? 'rectangle' : 'circle';
+        const layerType = layer instanceof L.Polygon ? 'polygon' : 'circle';
         
-        if (layerType === 'polygon' || layerType === 'rectangle') {
-          const bounds = layer.getBounds();
-          const latDiff = bounds.getNorth() - bounds.getSouth();
-          const lngDiff = bounds.getEast() - bounds.getWest();
-          area = Math.abs(latDiff * lngDiff * 111000 * 111000);
+        if (layerType === 'polygon') {
+          const latlngs = layer.getLatLngs();
+          if (latlngs && latlngs[0] && Array.isArray(latlngs[0])) {
+            const coordinates = latlngs[0];
+            const coords = [...coordinates, coordinates[0]];
+            area = 0;
+            for (let i = 0; i < coords.length - 1; i++) {
+              const p1 = coords[i];
+              const p2 = coords[i + 1];
+              area += (p2.lng * Math.PI / 180 - p1.lng * Math.PI / 180) * 
+                      (2 + Math.sin(p1.lat * Math.PI / 180) + Math.sin(p2.lat * Math.PI / 180));
+            }
+            area = Math.abs(area) * 6378137 * 6378137 / 2;
+          }
         } else if (layerType === 'circle') {
           const radius = layer.getRadius();
           area = Math.PI * radius * radius;
@@ -393,13 +345,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
                   fillOpacity: 0.2,
                   weight: 2
                 });
-              } else if (zoneData.type === 'rectangle') {
-                layer = L.rectangle(zoneData.coordinates, {
-                  color: '#10b981',
-                  fillColor: '#10b981',
-                  fillOpacity: 0.2,
-                  weight: 2
-                });
               } else if (zoneData.type === 'circle') {
                 layer = L.circle(zoneData.coordinates[0], {
                   radius: zoneData.coordinates[1],
@@ -481,13 +426,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
             layer = L.polygon(zoneData.coordinates, {
               color: '#3b82f6',
               fillColor: '#3b82f6',
-              fillOpacity: 0.2,
-              weight: 2
-            });
-          } else if (zoneData.type === 'rectangle') {
-            layer = L.rectangle(zoneData.coordinates, {
-              color: '#10b981',
-              fillColor: '#10b981',
               fillOpacity: 0.2,
               weight: 2
             });

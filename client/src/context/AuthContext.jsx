@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
+import { leafApiUrl } from '../config/api'
 
 const AuthContext = createContext()
 
@@ -25,11 +26,11 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password, rememberMe = true, environment = 'prod') => {
     try {
-      const response = await axios.post('/api/authenticate', {
+      const apiUrl = leafApiUrl('/api/authenticate', environment)
+      const response = await axios.post(apiUrl, {
         username,
         password,
-        rememberMe: rememberMe ? 'true' : 'false',
-        environment
+        rememberMe: rememberMe ? 'true' : 'false'
       })
 
       const { id_token } = response.data

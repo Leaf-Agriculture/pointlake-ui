@@ -13,12 +13,6 @@ Dashboard com mapas para visualização de dados da API Leaf.
 
 ## Tecnologias
 
-### Backend
-- Node.js
-- Express
-- Axios
-- CORS
-
 ### Frontend
 - React
 - Vite
@@ -27,53 +21,30 @@ Dashboard com mapas para visualização de dados da API Leaf.
 - Tailwind CSS
 - Axios
 
+O frontend faz chamadas **diretas** à API Leaf, sem backend intermediário.
+
 ## Instalação
 
 1. Clone o repositório:
 ```bash
 git clone <url-do-repositorio>
-cd leaf-dashboard
+cd pointlake-ui
 ```
 
-2. Instale as dependências do projeto raiz:
-```bash
-npm install
-```
-
-3. Instale as dependências do backend:
-```bash
-cd server
-npm install
-cd ..
-```
-
-4. Instale as dependências do frontend:
+2. Instale as dependências do frontend:
 ```bash
 cd client
 npm install
-cd ..
 ```
 
 ## Executar o Projeto
 
-### Opção 1: Executar tudo junto
-```bash
-npm run dev
-```
-
-### Opção 2: Executar separadamente
-
-Terminal 1 (Backend):
-```bash
-cd server
-npm start
-```
-
-Terminal 2 (Frontend):
 ```bash
 cd client
 npm run dev
 ```
+
+O frontend estará disponível em `http://localhost:3000`
 
 ## Como Usar
 
@@ -83,18 +54,16 @@ npm run dev
    - Executar queries SQL ou fazer upload de arquivos ZIP (painel esquerdo com abas)
    - Visualizar resultados no mapa no painel direito
 
-## Endpoints da API
+## Endpoints da API Leaf
 
-### Backend (/api)
+O frontend faz chamadas diretas à API Leaf:
 
 - `POST /api/authenticate` - Autenticação com Leaf
 - `POST /api/v2/sql` - Execução de queries SQL
-- `POST /api/upload` - Upload de arquivos ZIP
-- `GET /api/health` - Health check
-
-## Configuração
-
-O arquivo `.env` do servidor está configurado para usar a porta 5000 por padrão.
+- `POST /services/operations/api/batch` - Upload de arquivos ZIP
+- `GET /services/operations/api/batch` - Listar batches
+- `GET /services/pointlake/api/v2/files` - Listar arquivos
+- `GET /services/pointlake/api/v2/query` - Executar queries SQL
 
 ## Autenticação
 
@@ -113,25 +82,23 @@ https://learn.withleaf.io/docs/authentication
 ## Estrutura do Projeto
 
 ```
-leaf-dashboard/
-├── server/                 # Backend Node.js
-│   ├── server.js          # Servidor Express
-│   └── package.json       # Dependências do backend
+pointlake-ui/
 ├── client/                # Frontend React
 │   ├── src/
 │   │   ├── components/    # Componentes React
 │   │   ├── pages/         # Páginas (Login, Dashboard)
 │   │   ├── context/       # Context API (Auth)
+│   │   ├── config/        # Configuração da API
 │   │   ├── App.jsx        # Componente principal
 │   │   └── main.jsx       # Entry point
 │   ├── public/            # Arquivos públicos
 │   └── package.json       # Dependências do frontend
-└── package.json           # Scripts principais
+└── .github/
+    └── workflows/         # GitHub Actions para deploy
 ```
 
 ## Desenvolvimento
 
-- Backend: http://localhost:5001
 - Frontend: http://localhost:3000
-- O CORS está configurado para permitir requisições do frontend para o backend
+- O frontend faz chamadas diretas à API Leaf (https://api.withleaf.io)
 

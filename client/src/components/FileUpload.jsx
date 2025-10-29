@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
+import { leafApiUrl } from '../config/api'
 
 function FileUpload() {
   const [file, setFile] = useState(null)
@@ -20,10 +21,13 @@ function FileUpload() {
     setLoadingBatches(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get('/api/batch', {
+      const apiUrl = leafApiUrl('/api/batch', env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
         }
       })
       
@@ -40,10 +44,15 @@ function FileUpload() {
     setLoadingFiles(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get('/api/v2/files?page=0&size=100', {
+      const apiUrl = leafApiUrl('/api/v2/files', env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307',
+          page: 0,
+          size: 100
         }
       })
       
@@ -102,11 +111,12 @@ function FileUpload() {
       formData.append('file', file)
 
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.post('/api/upload', formData, {
+      const baseUrl = leafApiUrl('/api/upload', env)
+      const apiUrl = `${baseUrl}?leafUserId=453b3bd5-85d6-46b0-b5b7-2d4698f48307&provider=Other`
+      const response = await axios.post(apiUrl, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-          'x-environment': env
+          'Content-Type': 'multipart/form-data'
         },
         onUploadProgress: (progressEvent) => {
           console.log('Progress:', progressEvent.loaded / progressEvent.total * 100)
@@ -167,10 +177,10 @@ function FileUpload() {
 
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get(`/api/batch/${conversionId}`, {
+      const apiUrl = leafApiUrl(`/api/batch/${conversionId}`, env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
         }
       })
 

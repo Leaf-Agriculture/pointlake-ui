@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 client/node_modules/
-server/node_modules/
 
 # Build outputs
 dist/
@@ -43,9 +42,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Uploads (server)
-server/uploads/
-server/server/uploads/
+# Uploads
+uploads/
 
 # Test results
 test-results/

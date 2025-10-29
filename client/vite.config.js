@@ -5,13 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: process.env.NODE_ENV === 'production' ? '/pointlake-ui/' : '/', // Base path apenas para produção
   server: {
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5001',
-        changeOrigin: true
-      }
-    }
+    port: 3000
   },
   build: {
     outDir: 'dist',

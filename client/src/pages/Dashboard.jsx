@@ -5,6 +5,7 @@ import MapComponent from '../components/MapComponent'
 import FileUpload from '../components/FileUpload'
 import DrawZones from '../components/DrawZones'
 import axios from 'axios'
+import { leafApiUrl, getPointlakeApiUrl } from '../config/api'
 
 function Dashboard() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
@@ -45,10 +46,13 @@ function Dashboard() {
     setLoadingBatches(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get('/api/batch', {
+      const apiUrl = leafApiUrl('/api/batch', env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
         }
       })
       
@@ -66,10 +70,15 @@ function Dashboard() {
     setLoadingFiles(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get('/api/v2/files?page=0&size=100', {
+      const apiUrl = leafApiUrl('/api/v2/files', env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307',
+          page: 0,
+          size: 100
         }
       })
       
@@ -88,10 +97,10 @@ function Dashboard() {
     
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get(`/api/batch/${batchId}`, {
+      const apiUrl = leafApiUrl(`/api/batch/${batchId}`, env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
         }
       })
       
@@ -121,10 +130,10 @@ function Dashboard() {
     setFileDetails(null)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get(`/api/v2/files/${fileId}`, {
+      const apiUrl = leafApiUrl(`/api/v2/files/${fileId}`, env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
         }
       })
       
@@ -143,10 +152,10 @@ function Dashboard() {
     setFileSummary(null)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get(`/api/v2/files/${fileId}/summary`, {
+      const apiUrl = leafApiUrl(`/api/v2/files/${fileId}/summary`, env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
         }
       })
       
@@ -177,12 +186,14 @@ function Dashboard() {
 
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const encodedSql = encodeURIComponent(fileQuery)
-      
-      const response = await axios.get(`/api/v2/query?sql=${encodedSql}&fileId=${selectedFileId}`, {
+      const apiUrl = leafApiUrl('/api/v2/query', env)
+      const response = await axios.get(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          sql: fileQuery,
+          fileId: selectedFileId
         },
         responseType: 'blob' // Para permitir download de arquivos grandes
       })
@@ -441,13 +452,13 @@ function Dashboard() {
       }
 
       const env = getEnvironment ? getEnvironment() : 'prod'
-      const response = await axios.get('/api/v2/query', {
+      const apiUrl = leafApiUrl('/api/v2/query', env)
+      const response = await axios.get(apiUrl, {
         params: {
           sql: sql
         },
         headers: {
-          'Authorization': token,
-          'x-environment': env
+          'Authorization': `Bearer ${token}`
         }
       })
 
@@ -619,14 +630,15 @@ function Dashboard() {
                                 setLoading(true);
                                 setError('');
                                 try {
-                                  const response = await axios.get('/api/v2/query', {
+                                  const env = getEnvironment()
+                                  const apiUrl = leafApiUrl('/api/v2/query', env)
+                                  const response = await axios.get(apiUrl, {
                                     params: {
                                       sql: query,
                                       fileId: fileId
                                     },
                                     headers: {
-                                      'Authorization': token,
-                                      'x-environment': getEnvironment()
+                                      'Authorization': `Bearer ${token}`
                                     }
                                   });
                                   setResults(response.data);

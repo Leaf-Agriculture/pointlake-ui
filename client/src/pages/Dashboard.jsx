@@ -480,7 +480,9 @@ function Dashboard() {
     console.log('Zone created:', zone);
     // Executar query automaticamente quando zona é criada
     setTimeout(() => {
-      const newQuery = generateUnionAllQuery()
+      // Usar a query atual do input como base
+      const currentQuery = sqlQuery || 'SELECT * FROM fields LIMIT 10'
+      const newQuery = generateUnionAllQuery(currentQuery)
       setSqlQuery(newQuery)
       if (selectedFiles.size > 0 || drawnZones.length > 0) {
         handleUnionAllQuery()
@@ -492,7 +494,9 @@ function Dashboard() {
     console.log('Zone deleted:', zoneId);
     // Executar query automaticamente quando zona é deletada
     setTimeout(() => {
-      const newQuery = generateUnionAllQuery()
+      // Usar a query atual do input como base
+      const currentQuery = sqlQuery || 'SELECT * FROM fields LIMIT 10'
+      const newQuery = generateUnionAllQuery(currentQuery)
       setSqlQuery(newQuery)
       if (selectedFiles.size > 0 || drawnZones.length > 0) {
         handleUnionAllQuery()
@@ -607,7 +611,8 @@ function Dashboard() {
       return
     }
 
-    const unionQuery = generateUnionAllQuery()
+    // SEMPRE usar a query atual do input como base
+    const unionQuery = generateUnionAllQuery(sqlQuery)
     
     setLoading(true)
     setError('')
@@ -644,7 +649,7 @@ function Dashboard() {
       setQueryExecutionTime(executionTime)
 
       setResults(response.data)
-      // Atualizar query no textarea
+      // Atualizar query no textarea apenas para mostrar o UNION ALL gerado
       setSqlQuery(unionQuery)
     } catch (err) {
       console.error('Erro na query UNION ALL:', err)
@@ -943,7 +948,9 @@ function Dashboard() {
                                 
                                 // Executar query automaticamente após mudança se houver seleções
                                 setTimeout(() => {
-                                  const newQuery = generateUnionAllQuery()
+                                  // Usar a query atual do input como base
+                                  const currentQuery = sqlQuery || 'SELECT * FROM fields LIMIT 10'
+                                  const newQuery = generateUnionAllQuery(currentQuery)
                                   setSqlQuery(newQuery)
                                   // Executar automaticamente se houver arquivos ou zonas selecionadas
                                   if (updated.size > 0 || drawnZones.length > 0) {
@@ -1270,7 +1277,8 @@ function Dashboard() {
             {/* Botão Executar */}
             <button
               onClick={() => {
-                // Se houver arquivos ou zonas selecionadas, usar UNION ALL, senão executar query normal
+                // SEMPRE executar a query que está no input
+                // Se houver arquivos ou zonas selecionadas, usar UNION ALL baseado na query do input
                 if (selectedFiles.size > 0 || drawnZones.length > 0) {
                   handleUnionAllQuery()
                 } else {

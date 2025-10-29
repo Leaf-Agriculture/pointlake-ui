@@ -69,7 +69,7 @@ function FileUpload() {
     }
   }
 
-  // Carregar batches e arquivos ao montar o componente e quando Leaf User mudar
+  // Carregar batches e arquivos ao montar o componente e quando Point Lake User mudar
   useEffect(() => {
     if (token && getEnvironment && selectedLeafUserId) {
       loadBatches()
@@ -121,7 +121,7 @@ function FileUpload() {
       }
 
       if (!selectedLeafUserId || !isValidUserId(selectedLeafUserId)) {
-        setError('Please select a valid Leaf User')
+        setError('Please select a valid Point Lake User')
         setUploading(false)
         return
       }

@@ -26,7 +26,7 @@ export const LeafUserProvider = ({ children }) => {
   const [leafUsers, setLeafUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
 
-  // Função para buscar lista de Leaf Users do endpoint correto
+  // Função para buscar lista de Point Lake Users do endpoint correto
   const fetchLeafUsers = async () => {
     if (!token) return
 
@@ -37,7 +37,7 @@ export const LeafUserProvider = ({ children }) => {
       // Usar o endpoint correto de User Management
       const usersApiUrl = `${getUserManagementApiUrl(env)}/users`
       
-      console.log('🔍 Buscando Leaf Users de:', usersApiUrl)
+      console.log('🔍 Searching for Point Lake Users from:', usersApiUrl)
       
       const response = await axios.get(usersApiUrl, {
         headers: {
@@ -56,7 +56,7 @@ export const LeafUserProvider = ({ children }) => {
           apiOwnerUsername: user.apiOwnerUsername || null
         }))
         
-        console.log('✅ Leaf Users encontrados:', usersList.length, usersList)
+        console.log('✅ Point Lake Users found:', usersList.length, usersList)
         
         setLeafUsers(usersList)
         
@@ -73,7 +73,7 @@ export const LeafUserProvider = ({ children }) => {
         setLeafUsers([])
       }
     } catch (error) {
-      console.error('❌ Erro ao buscar Leaf Users:', error)
+      console.error('❌ Error fetching Point Lake Users:', error)
       console.error('  - URL:', error.config?.url)
       console.error('  - Status:', error.response?.status)
       console.error('  - Data:', error.response?.data)

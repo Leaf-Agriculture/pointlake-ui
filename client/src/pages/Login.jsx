@@ -46,9 +46,9 @@ function Login() {
             <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
               <span className="text-white text-lg font-bold">L</span>
             </div>
-            <h1 className="text-2xl font-semibold text-zinc-100">Leaf GIS Studio</h1>
+            <h1 className="text-2xl font-semibold text-zinc-100">Point Lake GIS Studio</h1>
           </div>
-          <p className="text-zinc-400">Autenticação com API Leaf</p>
+          <p className="text-zinc-400">Authentication with Point Lake API</p>
         </div>
 
         {/* Seletor de Ambiente */}
@@ -161,7 +161,7 @@ function Login() {
         </form>
 
         <div className="mt-6 text-center text-sm text-zinc-400">
-          <p>Faça login com suas credenciais Leaf</p>
+          <p>Login with your Point Lake credentials</p>
           <a 
             href="https://learn.withleaf.io/docs/authentication" 
             target="_blank" 

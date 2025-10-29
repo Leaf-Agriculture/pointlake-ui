@@ -1,8 +1,8 @@
-// Configuração das URLs da API Leaf
-// Faz chamadas diretas à API Leaf, sem backend intermediário
+// Configuração das URLs da API Point Lake
+// Faz chamadas diretas à API Point Lake, sem backend intermediário
 
 /**
- * Obtém a URL base da API Leaf baseado no ambiente
+ * Obtém a URL base da API Point Lake baseado no ambiente
  */
 export const getLeafApiBaseUrl = (environment) => {
   return environment === 'dev' 
@@ -35,7 +35,7 @@ export const getUserManagementApiUrl = (environment) => {
 }
 
 /**
- * Helper para construir URLs da API Leaf
+ * Helper para construir URLs da API Point Lake
  */
 export const leafApiUrl = (path, environment = 'prod') => {
   // Remover barra inicial se existir

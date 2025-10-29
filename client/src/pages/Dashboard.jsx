@@ -450,7 +450,7 @@ function Dashboard() {
     return () => clearInterval(interval)
   }, [isAuthenticated, selectedLeafUserId])
 
-  // Recarregar dados quando o Leaf User mudar
+  // Recarregar dados quando o Point Lake User mudar
   useEffect(() => {
     if (isAuthenticated && selectedLeafUserId) {
       loadBatches()
@@ -546,7 +546,7 @@ function Dashboard() {
                 <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
                   <span className="text-white text-xs font-bold">L</span>
                 </div>
-                Leaf GIS Studio
+                Point Lake GIS Studio
               </h1>
               {getEnvironment && (
                 <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -558,10 +558,10 @@ function Dashboard() {
                 </span>
               )}
               
-                  {/* Dropdown de Leaf Users */}
+                  {/* Dropdown de Point Lake Users */}
                   <div className="flex items-center gap-2">
                     <label htmlFor="leaf-user-select" className="text-sm text-zinc-400">
-                      Leaf User:
+                      Point Lake User:
                     </label>
                     <select
                       id="leaf-user-select"

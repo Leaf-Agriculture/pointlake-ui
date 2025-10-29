@@ -38,7 +38,6 @@ function Dashboard() {
   const [hasSpatialFilter, setHasSpatialFilter] = useState(false)
   const [filesToShow, setFilesToShow] = useState(20) // Começar com 20 arquivos visíveis
   const filesListRef = useRef(null)
-  const [selectedFiles, setSelectedFiles] = useState(new Set()) // IDs de arquivos selecionados para UNION ALL
   const [newFileIds, setNewFileIds] = useState(new Set()) // IDs de arquivos novos (não clicados ainda)
   const previousFilesRef = useRef([]) // Referência para lista anterior de arquivos
 
@@ -478,30 +477,12 @@ function Dashboard() {
   // Funções para gerenciar zonas desenhadas
   const handleZoneCreated = (zone) => {
     console.log('Zone created:', zone);
-    // Executar query automaticamente quando zona é criada
-    setTimeout(() => {
-      // Usar a query atual do input como base
-      const currentQuery = sqlQuery || 'SELECT * FROM fields LIMIT 10'
-      const newQuery = generateUnionAllQuery(currentQuery)
-      setSqlQuery(newQuery)
-      if (selectedFiles.size > 0 || drawnZones.length > 0) {
-        handleUnionAllQuery()
-      }
-    }, 100)
+    // Não executar automaticamente, apenas adicionar à lista
   };
 
   const handleZoneDeleted = (zoneId) => {
     console.log('Zone deleted:', zoneId);
-    // Executar query automaticamente quando zona é deletada
-    setTimeout(() => {
-      // Usar a query atual do input como base
-      const currentQuery = sqlQuery || 'SELECT * FROM fields LIMIT 10'
-      const newQuery = generateUnionAllQuery(currentQuery)
-      setSqlQuery(newQuery)
-      if (selectedFiles.size > 0 || drawnZones.length > 0) {
-        handleUnionAllQuery()
-      }
-    }, 100)
+    // Não executar automaticamente, apenas remover da lista
   };
 
   const handleQueryByZone = (zone) => {
@@ -509,15 +490,12 @@ function Dashboard() {
     updateQueryWithSpatialFilter(zone);
   };
 
-  // Função para gerar query UNION ALL com arquivos selecionados e zonas
+  // Função para gerar query UNION ALL com arquivos selecionados e zonas (mantida para compatibilidade com zonas)
   const generateUnionAllQuery = (baseQuery = '') => {
-    const selectedFileIds = Array.from(selectedFiles).filter(id => {
-      // Verificar se o arquivo existe e está processado
-      const file = files.find(f => (f.id || f.uuid) === id)
-      return file && file.status === 'PROCESSED'
-    })
-
-    if (selectedFileIds.length === 0 && drawnZones.length === 0) {
+    // Esta função não é mais usada diretamente, mas mantida para suporte a zonas
+    // A função addUnionAllToQuery é usada para adicionar UNION ALL à query do input
+    
+    if (drawnZones.length === 0) {
       return baseQuery || sqlQuery
     }
 
@@ -549,23 +527,15 @@ function Dashboard() {
       selectBase = 'SELECT *'
     }
 
-    // Gerar queries para cada arquivo
-    const fileQueries = selectedFileIds.map(fileId => {
-      let query = `${selectBase} FROM pointlake_file_${fileId}`
-      if (whereClause) {
-        query += ` WHERE ${whereClause}`
-      }
-      return query
-    })
-
     // Gerar queries para cada zona
     const zoneQueries = drawnZones.map((zone, idx) => {
       const wkt = geometryToWKT(zone)
       if (!wkt) return null
       
-      // Para zonas, precisamos de uma query base - usar o primeiro arquivo selecionado ou um padrão
-      let baseTable = selectedFileIds.length > 0 
-        ? `pointlake_file_${selectedFileIds[0]}`
+      // Para zonas, precisamos de uma query base - usar o primeiro arquivo processado ou um padrão
+      const processedFiles = files.filter(f => f.status === 'PROCESSED')
+      let baseTable = processedFiles.length > 0 
+        ? `pointlake_file_${processedFiles[0].id || processedFiles[0].uuid}`
         : 'fields' // fallback
       
       let spatialFilter
@@ -589,7 +559,7 @@ function Dashboard() {
     }).filter(Boolean)
 
     // Combinar todas as queries com UNION ALL
-    const allQueries = [...fileQueries, ...zoneQueries]
+    const allQueries = [...zoneQueries]
     
     if (allQueries.length === 0) {
       return baseQuery || sqlQuery
@@ -605,61 +575,68 @@ function Dashboard() {
     return unionQuery
   };
 
-  // Função para executar query UNION ALL
-  const handleUnionAllQuery = async () => {
-    if (selectedFiles.size === 0 && drawnZones.length === 0) {
-      setError('Please select at least one file or draw a zone')
+  // Função para adicionar UNION ALL à query atual do input
+  const addUnionAllToQuery = () => {
+    const currentQuery = sqlQuery.trim()
+    if (!currentQuery) {
+      setError('Please enter a SQL query first')
       return
     }
 
-    // SEMPRE usar a query atual do input como base
-    const unionQuery = generateUnionAllQuery(sqlQuery)
-    
-    setLoading(true)
-    setError('')
-    setResults(null)
-    setQueryExecutionTime(null)
-
-    const startTime = performance.now()
-
-    try {
-      const env = getEnvironment ? getEnvironment() : 'prod'
-      
-      // Se há apenas um arquivo selecionado, usar fileId
-      const selectedFileIds = Array.from(selectedFiles)
-      const fileId = selectedFileIds.length === 1 ? selectedFileIds[0] : undefined
-      
-      const apiUrl = leafApiUrl('/api/v2/query', env)
-      const params = {
-        sql: unionQuery
-      }
-      
-      if (fileId) {
-        params.fileId = fileId
-      }
-      
-      const response = await axios.get(apiUrl, {
-        params,
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      const endTime = performance.now()
-      const executionTime = ((endTime - startTime) / 1000).toFixed(3)
-      setQueryExecutionTime(executionTime)
-
-      setResults(response.data)
-      // Atualizar query no textarea apenas para mostrar o UNION ALL gerado
-      setSqlQuery(unionQuery)
-    } catch (err) {
-      console.error('Erro na query UNION ALL:', err)
-      setError(getErrorMessage(err, 'Error executing UNION ALL query'))
-      setQueryExecutionTime(null)
-    } finally {
-      setLoading(false)
+    // Obter arquivos processados disponíveis
+    const processedFiles = files.filter(f => f.status === 'PROCESSED')
+    if (processedFiles.length === 0) {
+      setError('No processed files available')
+      return
     }
-  };
+
+    // Extrair partes da query
+    let queryWithoutLimit = currentQuery
+    let limitClause = ''
+    let whereClause = ''
+    
+    // Extrair LIMIT
+    const limitMatch = queryWithoutLimit.match(/LIMIT\s+(\d+)/i)
+    if (limitMatch) {
+      limitClause = limitMatch[0]
+      queryWithoutLimit = queryWithoutLimit.replace(/LIMIT\s+\d+/i, '').trim()
+    }
+
+    // Extrair WHERE
+    const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
+    if (whereMatch) {
+      whereClause = whereMatch[1].trim()
+      queryWithoutLimit = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+    }
+
+    // Obter o SELECT base
+    let selectBase = 'SELECT *'
+    const fromMatch = queryWithoutLimit.match(/SELECT\s+(.+?)\s+FROM/i)
+    if (fromMatch) {
+      selectBase = `SELECT ${fromMatch[1]}`
+    }
+
+    // Gerar queries para cada arquivo processado
+    const fileQueries = processedFiles.map(file => {
+      const fileId = file.id || file.uuid
+      let query = `${selectBase} FROM pointlake_file_${fileId}`
+      if (whereClause) {
+        query += ` WHERE ${whereClause}`
+      }
+      return query
+    })
+
+    // Combinar com UNION ALL
+    let unionQuery = fileQueries.join(' UNION ALL ')
+    
+    // Adicionar LIMIT no final se existir
+    if (limitClause) {
+      unionQuery += ` ${limitClause}`
+    }
+
+    // Atualizar query no input
+    setSqlQuery(unionQuery)
+  }
 
   // Carregar batches e arquivos ao montar o componente
   useEffect(() => {
@@ -926,47 +903,10 @@ function Dashboard() {
                       isNew 
                         ? 'bg-blue-950/50 border-blue-600 hover:border-blue-500 ring-2 ring-blue-500/50' 
                         : 'bg-zinc-800 border-zinc-700 hover:border-zinc-600'
-                    } ${selectedFiles.has(fileId) ? 'ring-2 ring-yellow-500/50 border-yellow-600' : ''}`}
+                    }`}
                   >
                     <div className="p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        {/* Checkbox para seleção */}
-                        <div className="flex-shrink-0 pt-0.5">
-                          <input
-                            type="checkbox"
-                            checked={selectedFiles.has(fileId)}
-                            onChange={(e) => {
-                              const fileId = file.id || file.uuid
-                              if (!fileId) return
-                              
-                              setSelectedFiles(prev => {
-                                const updated = new Set(prev)
-                                if (e.target.checked && isProcessed) {
-                                  updated.add(fileId)
-                                } else {
-                                  updated.delete(fileId)
-                                }
-                                
-                                // Executar query automaticamente após mudança se houver seleções
-                                setTimeout(() => {
-                                  // Usar a query atual do input como base
-                                  const currentQuery = sqlQuery || 'SELECT * FROM fields LIMIT 10'
-                                  const newQuery = generateUnionAllQuery(currentQuery)
-                                  setSqlQuery(newQuery)
-                                  // Executar automaticamente se houver arquivos ou zonas selecionadas
-                                  if (updated.size > 0 || drawnZones.length > 0) {
-                                    handleUnionAllQuery()
-                                  }
-                                }, 100)
-                                
-                                return updated
-                              })
-                            }}
-                            disabled={!isProcessed}
-                            className="w-4 h-4 text-blue-600 bg-zinc-800 border-zinc-700 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={isProcessed ? "Select for UNION ALL" : "File must be PROCESSED to select"}
-                          />
-                        </div>
+                      <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-zinc-200 truncate">
                             {file.name || file.filename || file.fileName || file.id || `File ${idx + 1}`}
@@ -1277,15 +1217,7 @@ function Dashboard() {
 
             {/* Botão Executar */}
             <button
-              onClick={() => {
-                // SEMPRE executar a query que está no input
-                // Se houver arquivos ou zonas selecionadas, usar UNION ALL baseado na query do input
-                if (selectedFiles.size > 0 || drawnZones.length > 0) {
-                  handleUnionAllQuery()
-                } else {
-                  handleQuery()
-                }
-              }}
+              onClick={handleQuery}
               disabled={loading}
               className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500"
             >
@@ -1303,17 +1235,30 @@ function Dashboard() {
               </span>
             </button>
             
-            {/* Info sobre seleção */}
-            {(selectedFiles.size > 0 || drawnZones.length > 0) && (
+            {/* Botão Adicionar UNION ALL */}
+            <button
+              onClick={addUnionAllToQuery}
+              disabled={loading || files.filter(f => f.status === 'PROCESSED').length === 0}
+              className="w-full bg-yellow-600 text-white py-2 rounded-lg font-medium hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-yellow-500"
+              title="Add UNION ALL clause to combine all processed files"
+            >
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Add UNION ALL
+              </span>
+            </button>
+            
+            {/* Info sobre arquivos processados */}
+            {files.filter(f => f.status === 'PROCESSED').length > 0 && (
               <div className="bg-yellow-950/30 border border-yellow-800 rounded-lg p-2 text-xs text-yellow-300">
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>
-                    {selectedFiles.size > 0 && `${selectedFiles.size} file(s) selected`}
-                    {selectedFiles.size > 0 && drawnZones.length > 0 && ' + '}
-                    {drawnZones.length > 0 && `${drawnZones.length} zone(s)`}
+                    {files.filter(f => f.status === 'PROCESSED').length} processed file(s) available
                   </span>
                 </div>
               </div>

@@ -105,7 +105,19 @@ function Dashboard() {
         }
       })
       
-      setFiles(Array.isArray(response.data) ? response.data : (response.data?.content || []))
+          const filesData = Array.isArray(response.data) ? response.data : (response.data?.content || [])
+          
+          // Ordenar por data mais recente primeiro (createdTime, createdDate, createdAt, ou uploadDate)
+          const sortedFiles = filesData.sort((a, b) => {
+            const getDate = (file) => {
+              return file.createdTime || file.createdDate || file.createdAt || file.uploadDate || 0
+            }
+            const dateA = new Date(getDate(a)).getTime()
+            const dateB = new Date(getDate(b)).getTime()
+            return dateB - dateA // Ordenar descendente (mais recente primeiro)
+          })
+          
+          setFiles(sortedFiles)
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err)
       setFiles([])
@@ -674,8 +686,8 @@ function Dashboard() {
                             ID: {file.id || file.uuid || 'N/A'}
                           </div>
                           <div className="text-xs text-zinc-400">
-                            {file.createdDate || file.createdAt || file.uploadDate
-                              ? new Date(file.createdDate || file.createdAt || file.uploadDate).toLocaleDateString('en-US')
+                            {file.createdTime || file.createdDate || file.createdAt || file.uploadDate
+                              ? new Date(file.createdTime || file.createdDate || file.createdAt || file.uploadDate).toLocaleString('en-US')
                               : '-'}
                           </div>
                         </div>

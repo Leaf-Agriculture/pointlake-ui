@@ -50,7 +50,7 @@ export const LeafUserProvider = ({ children }) => {
         // A API já retorna um array de objetos com id, name, email, etc.
         const usersList = response.data.map(user => ({
           id: String(user.id || '').trim(),
-          name: user.name || user.apiOwnerUsername || user.email || 'Sem nome',
+          name: user.name || user.apiOwnerUsername || user.email || 'No name',
           displayName: user.name || user.apiOwnerUsername || user.email || `User ${String(user.id || '').substring(0, 8)}`,
           email: user.email || null,
           apiOwnerUsername: user.apiOwnerUsername || null

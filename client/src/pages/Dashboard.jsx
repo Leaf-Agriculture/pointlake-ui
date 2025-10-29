@@ -584,7 +584,7 @@ function Dashboard() {
                       tabIndex={0}
                     >
                   {loadingUsers ? (
-                    <option>Carregando usuários...</option>
+                    <option>Loading users...</option>
                   ) : leafUsers.length === 0 ? (
                     <option value={selectedLeafUserId}>{selectedLeafUserId ? String(selectedLeafUserId).substring(0, 20) + '...' : 'No user'}</option>
                   ) : (
@@ -777,10 +777,10 @@ function Dashboard() {
           
           {/* Painel de Summary na parte inferior */}
           {(fileSummary || loadingFileSummary) && (
-            <div className="bg-zinc-900 border-t border-zinc-800 flex-shrink-0" style={{ height: '50px', maxHeight: '50px' }}>
-              <div className="flex items-center justify-between px-3 py-1 border-b border-zinc-800 h-6" style={{ height: '20px', minHeight: '20px' }}>
-                <h3 className="text-xs font-semibold text-zinc-200 flex items-center gap-1">
-                  <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-zinc-900 border-t border-zinc-800 flex-shrink-0" style={{ height: '200px', maxHeight: '200px' }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
+                <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                   Summary
@@ -791,14 +791,14 @@ function Dashboard() {
                     setMenuType('sql')
                   }}
                   className="text-zinc-400 hover:text-zinc-200 transition-colors"
-                  title="Fechar Summary"
+                  title="Close Summary"
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <div className="overflow-x-auto overflow-y-auto" style={{ height: '30px', maxHeight: '30px' }}>
+              <div className="overflow-x-auto overflow-y-auto" style={{ height: '175px', maxHeight: '175px' }}>
                 {loadingFileSummary ? (
                   <div className="flex items-center justify-center py-2">
                     <svg className="w-4 h-4 animate-spin text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -838,7 +838,7 @@ function Dashboard() {
                               try {
                                 const date = new Date(value)
                                 if (!isNaN(date.getTime())) {
-                                  formattedValue = date.toLocaleString('pt-BR')
+                                  formattedValue = date.toLocaleString('en-US')
                                 }
                               } catch (e) {
                                 // Manter como está

@@ -426,8 +426,8 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
               }
             });
           } catch (error) {
-            console.error('Erro ao importar zonas:', error);
-            alert('Erro ao importar arquivo de zonas');
+            console.error('Error importing zones:', error);
+            alert('Error importing zone file');
           }
         };
         reader.readAsText(file);
@@ -518,11 +518,11 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         });
         alert('Zonas carregadas do navegador!');
       } catch (error) {
-        console.error('Erro ao carregar zonas:', error);
-        alert('Erro ao carregar zonas salvas');
+        console.error('Error loading zones:', error);
+        alert('Error loading saved zones');
       }
     } else {
-      alert('Nenhuma zona salva encontrada');
+      alert('No saved zones found');
     }
   };
 

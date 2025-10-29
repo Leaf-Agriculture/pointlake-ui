@@ -30,7 +30,7 @@ function FileUpload() {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: selectedLeafUserId
+          leafUserId: String(selectedLeafUserId).trim()
         }
       })
       
@@ -54,7 +54,7 @@ function FileUpload() {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: selectedLeafUserId,
+          leafUserId: String(selectedLeafUserId).trim(),
           page: 0,
           size: 100
         }
@@ -114,13 +114,13 @@ function FileUpload() {
       const formData = new FormData()
       formData.append('file', file)
 
-      // Função para validar UUID
-      const isValidUUID = (str) => {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-        return uuidRegex.test(String(str))
+      // Função para validar ID do usuário
+      const isValidUserId = (str) => {
+        if (!str || String(str).trim().length === 0) return false
+        return true // Aceitar qualquer ID que a API retornar
       }
 
-      if (!selectedLeafUserId || !isValidUUID(selectedLeafUserId)) {
+      if (!selectedLeafUserId || !isValidUserId(selectedLeafUserId)) {
         setError('Please select a valid Leaf User')
         setUploading(false)
         return

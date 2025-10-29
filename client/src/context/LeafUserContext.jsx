@@ -65,12 +65,16 @@ export const LeafUserProvider = ({ children }) => {
         
         // Extrair leafUserIds únicos dos batches
         batches.forEach(batch => {
-          if (batch.leafUserId) {
-            uniqueUserIds.add(String(batch.leafUserId))
+          if (batch.leafUserId !== null && batch.leafUserId !== undefined) {
+            const userId = String(batch.leafUserId).trim()
+            if (userId && userId.length > 0) {
+              console.log('📋 Batch leafUserId encontrado:', userId, 'tipo:', typeof batch.leafUserId)
+              uniqueUserIds.add(userId)
+            }
           }
         })
         
-        // Buscar também de arquivos
+        // Buscar também de arquivos (sem leafUserId para pegar todos)
         try {
           const filesUrl = leafApiUrl('/api/v2/files', env)
           const filesResponse = await axios.get(filesUrl, {
@@ -80,6 +84,7 @@ export const LeafUserProvider = ({ children }) => {
             params: {
               page: 0,
               size: 100
+              // Não passar leafUserId aqui para buscar de todos os usuários
             }
           })
           
@@ -88,8 +93,12 @@ export const LeafUserProvider = ({ children }) => {
             : (filesResponse.data?.content || [])
           
           files.forEach(file => {
-            if (file.leafUserId) {
-              uniqueUserIds.add(String(file.leafUserId))
+            if (file.leafUserId !== null && file.leafUserId !== undefined) {
+              const userId = String(file.leafUserId).trim()
+              if (userId && userId.length > 0) {
+                console.log('📁 File leafUserId encontrado:', userId, 'tipo:', typeof file.leafUserId)
+                uniqueUserIds.add(userId)
+              }
             }
           })
         } catch (err) {
@@ -102,15 +111,17 @@ export const LeafUserProvider = ({ children }) => {
           return uuidRegex.test(String(str))
         }
         
-        // Converter para array de objetos, filtrando apenas UUIDs válidos
+        // Converter para array de objetos
+        // Aceitar UUIDs e também IDs numéricos/outros formatos que venham da API
         const usersList = Array.from(uniqueUserIds)
-          .map(id => String(id))
-          .filter(id => isValidUUID(id)) // Filtrar apenas UUIDs válidos
-          .map(idStr => ({
-            id: idStr,
-            name: idStr.substring(0, 8) + '...', // Nome curto baseado no ID
-            displayName: `User ${idStr.substring(0, 8)}`
-          }))
+          .map(id => {
+            const idStr = String(id).trim()
+            return {
+              id: idStr,
+              name: isValidUUID(idStr) ? (idStr.substring(0, 8) + '...') : idStr,
+              displayName: isValidUUID(idStr) ? `User ${idStr.substring(0, 8)}` : `User ${idStr}`
+            }
+          })
         
         // Adicionar o usuário padrão se não estiver na lista
         const defaultUserId = '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
@@ -124,9 +135,26 @@ export const LeafUserProvider = ({ children }) => {
         
         setLeafUsers(usersList)
         
-        // Se o selectedLeafUserId atual não for um UUID válido, resetar para o padrão
-        if (!isValidUUID(selectedLeafUserId)) {
-          setSelectedLeafUserId(defaultUserId)
+        // Manter o selectedLeafUserId atual se estiver na lista de usuários encontrados
+        // ou se for o padrão
+        if (selectedLeafUserId && usersList.length > 0) {
+          const userExists = usersList.find(u => u.id === selectedLeafUserId)
+          if (!userExists && selectedLeafUserId !== defaultUserId) {
+            // Se o usuário selecionado não existir na lista, usar o primeiro da lista
+            // ou manter o padrão se a lista estiver vazia
+            if (usersList.length > 0) {
+              setSelectedLeafUserId(usersList[0].id)
+            } else {
+              setSelectedLeafUserId(defaultUserId)
+            }
+          }
+        } else if (!selectedLeafUserId || selectedLeafUserId.trim().length === 0) {
+          // Se não houver seleção, usar o primeiro da lista ou padrão
+          if (usersList.length > 0) {
+            setSelectedLeafUserId(usersList[0].id)
+          } else {
+            setSelectedLeafUserId(defaultUserId)
+          }
         }
       }
     } catch (error) {

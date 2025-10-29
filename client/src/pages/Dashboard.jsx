@@ -43,25 +43,33 @@ function Dashboard() {
     }
   }, [isAuthenticated, authLoading, navigate])
 
-  // Função para validar UUID
-  const isValidUUID = (str) => {
+  // Função para validar UUID ou ID válido
+  const isValidUserId = (str) => {
+    if (!str || String(str).trim().length === 0) return false
+    const strVal = String(str).trim()
+    // Aceitar UUIDs ou IDs numéricos/alfanuméricos
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    return uuidRegex.test(String(str))
+    return uuidRegex.test(strVal) || strVal.length > 0 // Aceitar qualquer ID válido da API
   }
 
   // Função para carregar batches
   const loadBatches = async () => {
-    if (!selectedLeafUserId || !isValidUUID(selectedLeafUserId)) return
+    if (!selectedLeafUserId || !isValidUserId(selectedLeafUserId)) return
     setLoadingBatches(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const apiUrl = leafApiUrl('/api/batch', env)
+      
+      // Garantir que o leafUserId seja uma string completa
+      const leafUserIdStr = String(selectedLeafUserId).trim()
+      console.log('🔍 Carregando batches com leafUserId:', leafUserIdStr)
+      
       const response = await axios.get(apiUrl, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: selectedLeafUserId
+          leafUserId: leafUserIdStr
         }
       })
       
@@ -76,17 +84,22 @@ function Dashboard() {
 
   // Função para carregar arquivos v2
   const loadFiles = async () => {
-    if (!selectedLeafUserId || !isValidUUID(selectedLeafUserId)) return
+    if (!selectedLeafUserId || !isValidUserId(selectedLeafUserId)) return
     setLoadingFiles(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const apiUrl = leafApiUrl('/api/v2/files', env)
+      
+      // Garantir que o leafUserId seja uma string completa
+      const leafUserIdStr = String(selectedLeafUserId).trim()
+      console.log('🔍 Carregando arquivos com leafUserId:', leafUserIdStr, 'tipo:', typeof selectedLeafUserId)
+      
       const response = await axios.get(apiUrl, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: selectedLeafUserId,
+          leafUserId: leafUserIdStr,
           page: 0,
           size: 100
         }

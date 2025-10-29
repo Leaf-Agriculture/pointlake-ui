@@ -107,6 +107,17 @@ function Dashboard() {
       
       const filesData = Array.isArray(response.data) ? response.data : (response.data?.content || [])
       
+      // Debug: log primeiro arquivo para ver estrutura
+      if (filesData.length > 0) {
+        console.log('📁 First file structure:', filesData[0])
+        console.log('📅 Date fields available:', {
+          createdTime: filesData[0].createdTime,
+          createdDate: filesData[0].createdDate,
+          createdAt: filesData[0].createdAt,
+          uploadDate: filesData[0].uploadDate
+        })
+      }
+      
       // Ordenar por data mais recente primeiro (createdTime, createdDate, createdAt, ou uploadDate)
       const sortedFiles = filesData.sort((a, b) => {
         const getDate = (file) => {
@@ -685,10 +696,30 @@ function Dashboard() {
                           <div className="text-xs text-zinc-400 font-mono mt-1">
                             ID: {file.id || file.uuid || 'N/A'}
                           </div>
-                          <div className="text-xs text-zinc-400">
-                            {file.createdTime || file.createdDate || file.createdAt || file.uploadDate
-                              ? new Date(file.createdTime || file.createdDate || file.createdAt || file.uploadDate).toLocaleString('en-US')
-                              : '-'}
+                          <div className="text-xs text-zinc-400 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {(() => {
+                              const dateValue = file.createdTime || file.createdDate || file.createdAt || file.uploadDate
+                              if (dateValue) {
+                                try {
+                                  const date = new Date(dateValue)
+                                  if (!isNaN(date.getTime())) {
+                                    return date.toLocaleString('en-US', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  }
+                                } catch (e) {
+                                  console.error('Error parsing date:', dateValue, e)
+                                }
+                              }
+                              return 'N/A'
+                            })()}
                           </div>
                         </div>
                         <div className="flex flex-col gap-1 ml-2">

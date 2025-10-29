@@ -566,7 +566,11 @@ function Dashboard() {
                 <select
                   id="leaf-user-select"
                   value={selectedLeafUserId || ''}
-                  onChange={(e) => setSelectedLeafUserId(e.target.value)}
+                  onChange={(e) => {
+                    const newValue = String(e.target.value).trim()
+                    console.log('🔄 Mudando leafUserId de', selectedLeafUserId, 'para', newValue)
+                    setSelectedLeafUserId(newValue)
+                  }}
                   disabled={loadingUsers}
                   className="px-3 py-1.5 text-sm bg-zinc-800 text-zinc-100 border border-zinc-700 rounded hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px]"
                 >

@@ -64,12 +64,19 @@ export const LeafUserProvider = ({ children }) => {
         const uniqueUserIds = new Set()
         
         // Extrair leafUserIds únicos dos batches
-        batches.forEach(batch => {
-          if (batch.leafUserId !== null && batch.leafUserId !== undefined) {
+        batches.forEach((batch, index) => {
+          // IMPORTANTE: Usar batch.leafUserId, NÃO o índice
+          if (batch && batch.leafUserId !== null && batch.leafUserId !== undefined && batch.leafUserId !== '') {
             const userId = String(batch.leafUserId).trim()
+            // Garantir que não é um número simples (pode ser UUID ou outro formato válido)
             if (userId && userId.length > 0) {
-              console.log('📋 Batch leafUserId encontrado:', userId, 'tipo:', typeof batch.leafUserId)
-              uniqueUserIds.add(userId)
+              console.log(`📋 Batch[${index}] leafUserId encontrado:`, userId, 'tipo original:', typeof batch.leafUserId, 'tipo após conversão:', typeof userId)
+              // Verificar que não estamos pegando o índice acidentalmente
+              if (String(index) !== userId) {
+                uniqueUserIds.add(userId)
+              } else {
+                console.warn(`⚠️ Ignorando índice ${index} que seria confundido com leafUserId`)
+              }
             }
           }
         })
@@ -92,12 +99,19 @@ export const LeafUserProvider = ({ children }) => {
             ? filesResponse.data 
             : (filesResponse.data?.content || [])
           
-          files.forEach(file => {
-            if (file.leafUserId !== null && file.leafUserId !== undefined) {
+          files.forEach((file, index) => {
+            // IMPORTANTE: Usar file.leafUserId, NÃO o índice
+            if (file && file.leafUserId !== null && file.leafUserId !== undefined && file.leafUserId !== '') {
               const userId = String(file.leafUserId).trim()
+              // Garantir que não é um número simples ou índice
               if (userId && userId.length > 0) {
-                console.log('📁 File leafUserId encontrado:', userId, 'tipo:', typeof file.leafUserId)
-                uniqueUserIds.add(userId)
+                console.log(`📁 File[${index}] leafUserId encontrado:`, userId, 'tipo original:', typeof file.leafUserId)
+                // Verificar que não estamos pegando o índice acidentalmente
+                if (String(index) !== userId) {
+                  uniqueUserIds.add(userId)
+                } else {
+                  console.warn(`⚠️ Ignorando índice ${index} que seria confundido com leafUserId`)
+                }
               }
             }
           })

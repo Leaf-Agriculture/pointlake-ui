@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useLeafUser } from '../context/LeafUserContext'
 import axios from 'axios'
 import { leafApiUrl } from '../config/api'
 
@@ -16,8 +17,10 @@ function FileUpload() {
   const [files, setFiles] = useState([])
   const [loadingFiles, setLoadingFiles] = useState(false)
   const { token, getEnvironment } = useAuth()
+  const { selectedLeafUserId } = useLeafUser()
 
   const loadBatches = async () => {
+    if (!selectedLeafUserId) return
     setLoadingBatches(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -27,7 +30,7 @@ function FileUpload() {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
+          leafUserId: selectedLeafUserId
         }
       })
       
@@ -41,6 +44,7 @@ function FileUpload() {
   }
 
   const loadFiles = async () => {
+    if (!selectedLeafUserId) return
     setLoadingFiles(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -50,7 +54,7 @@ function FileUpload() {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307',
+          leafUserId: selectedLeafUserId,
           page: 0,
           size: 100
         }
@@ -65,14 +69,14 @@ function FileUpload() {
     }
   }
 
-  // Carregar batches e arquivos ao montar o componente
+  // Carregar batches e arquivos ao montar o componente e quando Leaf User mudar
   useEffect(() => {
-    if (token && getEnvironment) {
+    if (token && getEnvironment && selectedLeafUserId) {
       loadBatches()
       loadFiles()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }, [token, selectedLeafUserId])
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0]
@@ -110,9 +114,21 @@ function FileUpload() {
       const formData = new FormData()
       formData.append('file', file)
 
+      // Função para validar UUID
+      const isValidUUID = (str) => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        return uuidRegex.test(String(str))
+      }
+
+      if (!selectedLeafUserId || !isValidUUID(selectedLeafUserId)) {
+        setError('Please select a valid Leaf User')
+        setUploading(false)
+        return
+      }
+
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = leafApiUrl('/api/upload', env)
-      const apiUrl = `${baseUrl}?leafUserId=453b3bd5-85d6-46b0-b5b7-2d4698f48307&provider=Other`
+      const apiUrl = `${baseUrl}?leafUserId=${encodeURIComponent(selectedLeafUserId)}&provider=Other`
       const response = await axios.post(apiUrl, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,

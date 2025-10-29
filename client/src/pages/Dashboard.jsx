@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useLeafUser } from '../context/LeafUserContext'
 import MapComponent from '../components/MapComponent'
 import FileUpload from '../components/FileUpload'
 import DrawZones from '../components/DrawZones'
@@ -9,6 +10,7 @@ import { leafApiUrl, getPointlakeApiUrl } from '../config/api'
 
 function Dashboard() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
+  const { selectedLeafUserId, setSelectedLeafUserId, leafUsers, loadingUsers } = useLeafUser()
   const navigate = useNavigate()
   const [sqlQuery, setSqlQuery] = useState('SELECT * FROM fields LIMIT 10')
   const [results, setResults] = useState(null)
@@ -41,8 +43,15 @@ function Dashboard() {
     }
   }, [isAuthenticated, authLoading, navigate])
 
+  // Função para validar UUID
+  const isValidUUID = (str) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return uuidRegex.test(String(str))
+  }
+
   // Função para carregar batches
   const loadBatches = async () => {
+    if (!selectedLeafUserId || !isValidUUID(selectedLeafUserId)) return
     setLoadingBatches(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -52,7 +61,7 @@ function Dashboard() {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
+          leafUserId: selectedLeafUserId
         }
       })
       
@@ -67,6 +76,7 @@ function Dashboard() {
 
   // Função para carregar arquivos v2
   const loadFiles = async () => {
+    if (!selectedLeafUserId || !isValidUUID(selectedLeafUserId)) return
     setLoadingFiles(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -76,7 +86,7 @@ function Dashboard() {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          leafUserId: '453b3bd5-85d6-46b0-b5b7-2d4698f48307',
+          leafUserId: selectedLeafUserId,
           page: 0,
           size: 100
         }
@@ -425,7 +435,15 @@ function Dashboard() {
     }, 30000) // 30 seconds
     
     return () => clearInterval(interval)
-  }, [isAuthenticated])
+  }, [isAuthenticated, selectedLeafUserId])
+
+  // Recarregar dados quando o Leaf User mudar
+  useEffect(() => {
+    if (isAuthenticated && selectedLeafUserId) {
+      loadBatches()
+      loadFiles()
+    }
+  }, [selectedLeafUserId])
 
   const handleQuery = async () => {
     if (!sqlQuery.trim()) {
@@ -526,6 +544,35 @@ function Dashboard() {
                   {getEnvironment().toUpperCase()}
                 </span>
               )}
+              
+              {/* Dropdown de Leaf Users */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="leaf-user-select" className="text-sm text-zinc-400">
+                  Leaf User:
+                </label>
+                <select
+                  id="leaf-user-select"
+                  value={selectedLeafUserId || ''}
+                  onChange={(e) => setSelectedLeafUserId(e.target.value)}
+                  disabled={loadingUsers}
+                  className="px-3 py-1.5 text-sm bg-zinc-800 text-zinc-100 border border-zinc-700 rounded hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px]"
+                >
+                  {loadingUsers ? (
+                    <option>Carregando usuários...</option>
+                  ) : leafUsers.length === 0 ? (
+                    <option value={selectedLeafUserId}>{selectedLeafUserId ? String(selectedLeafUserId).substring(0, 20) + '...' : 'No user'}</option>
+                  ) : (
+                    leafUsers.map((user) => {
+                      const userId = String(user.id || '')
+                      return (
+                        <option key={userId} value={userId}>
+                          {user.displayName || user.name || userId.substring(0, 20) + '...'}
+                        </option>
+                      )
+                    })
+                  )}
+                </select>
+              </div>
             </div>
             
             {/* Barra de Ferramentas */}

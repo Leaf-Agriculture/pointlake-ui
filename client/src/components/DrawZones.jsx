@@ -516,7 +516,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
             setDrawnZones(prev => [...prev, zoneData]);
           }
         });
-        alert('Zonas carregadas do navegador!');
+        alert('Zones loaded from browser!');
       } catch (error) {
         console.error('Error loading zones:', error);
         alert('Error loading saved zones');

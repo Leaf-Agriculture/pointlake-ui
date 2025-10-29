@@ -36,6 +36,8 @@ function Dashboard() {
   const mapRef = useRef(null)
   const [queryExecutionTime, setQueryExecutionTime] = useState(null)
   const [hasSpatialFilter, setHasSpatialFilter] = useState(false)
+  const [filesToShow, setFilesToShow] = useState(20) // Começar com 20 arquivos visíveis
+  const filesListRef = useRef(null)
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -129,6 +131,8 @@ function Dashboard() {
       })
       
       setFiles(sortedFiles)
+      // Reset filesToShow quando novos arquivos são carregados
+      setFilesToShow(20)
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err)
       setFiles([])
@@ -481,6 +485,27 @@ function Dashboard() {
     }
   }, [selectedLeafUserId])
 
+  // Infinite scroll - detectar quando o usuário está próximo do final da lista
+  useEffect(() => {
+    const filesListElement = filesListRef.current
+    if (!filesListElement || files.length === 0) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = filesListElement
+      // Quando estiver a 100px do final, carregar mais arquivos
+      if (scrollHeight - scrollTop - clientHeight < 100) {
+        if (filesToShow < files.length) {
+          setFilesToShow(prev => Math.min(prev + 20, files.length))
+        }
+      }
+    }
+
+    filesListElement.addEventListener('scroll', handleScroll)
+    return () => {
+      filesListElement.removeEventListener('scroll', handleScroll)
+    }
+  }, [files, filesToShow])
+
   const handleQuery = async () => {
     if (!sqlQuery.trim()) {
       setError('Please enter a SQL query')
@@ -657,7 +682,7 @@ function Dashboard() {
       <div className="flex-1 flex overflow-hidden">
         {/* Painel Lateral Esquerdo - Arquivos */}
         <div className="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4" ref={filesListRef}>
             {/* Draw Zones */}
             <div className="mb-4">
               <DrawZones 
@@ -685,7 +710,7 @@ function Dashboard() {
             {/* Lista de Arquivos */}
             {files && files.length > 0 ? (
               <div className="space-y-2">
-                {files.slice(0, 10).map((file, idx) => (
+                {files.slice(0, filesToShow).map((file, idx) => (
                   <div key={idx} className="bg-zinc-800 rounded border border-zinc-700 hover:border-zinc-600 transition duration-150">
                     <div className="p-3">
                       <div className="flex items-start justify-between">
@@ -794,9 +819,17 @@ function Dashboard() {
                     </div>
                   </div>
                 ))}
-                {files.length > 10 && (
+                {filesToShow < files.length && (
+                  <div className="text-xs text-zinc-400 text-center py-2 flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Loading more files... ({filesToShow} of {files.length})</span>
+                  </div>
+                )}
+                {filesToShow >= files.length && files.length > 20 && (
                   <div className="text-xs text-zinc-400 text-center py-2">
-                    Showing 10 of {files.length} files
+                    Showing all {files.length} files
                   </div>
                 )}
               </div>

@@ -593,34 +593,19 @@ function Dashboard() {
                   ) : (
                     leafUsers.map((user, idx) => {
                       // Garantir que pegamos o ID completo, nunca truncado
-                      const userId = String(user.id || user.leafUserId || '').trim()
-                      
-                      console.log(`📝 Renderizando option[${idx}]:`, {
-                        'user.id': user.id,
-                        'user.leafUserId': user.leafUserId,
-                        'userId final': userId,
-                        'userId length': userId.length,
-                        'userId type': typeof userId
-                      })
-                      
-                      // Garantir que não é o índice
-                      if (String(idx) === userId) {
-                        console.warn(`⚠️ Ignorando item ${idx} - ID coincide com índice`)
-                        return null
-                      }
+                      const userId = String(user.id || '').trim()
                       
                       if (!userId || userId.length === 0) {
                         console.warn(`⚠️ Ignorando item ${idx} - userId vazio`)
                         return null
                       }
                       
-                      // Display name pode ser truncado, mas o value sempre será o ID completo
-                      const displayText = user.displayName || user.name || userId
-                      const shortDisplay = userId.length > 20 ? userId.substring(0, 20) + '...' : userId
+                      // Usar o displayName ou name que vem da API (já formatado)
+                      const displayText = user.displayName || user.name || `User ${userId.substring(0, 8)}`
                       
                       return (
-                        <option key={`${userId}-${idx}`} value={userId} data-full-id={userId}>
-                          {displayText} ({shortDisplay})
+                        <option key={`${userId}-${idx}`} value={userId}>
+                          {displayText}
                         </option>
                       )
                     }).filter(Boolean)

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useAuth } from './AuthContext'
 import axios from 'axios'
-import { leafApiUrl, getLeafApiBaseUrl } from '../config/api'
+import { leafApiUrl, getUserManagementApiUrl } from '../config/api'
 
 const LeafUserContext = createContext()
 
@@ -26,183 +26,59 @@ export const LeafUserProvider = ({ children }) => {
   const [leafUsers, setLeafUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
 
-  // Função para buscar lista de Leaf Users
+  // Função para buscar lista de Leaf Users do endpoint correto
   const fetchLeafUsers = async () => {
     if (!token) return
 
     setLoadingUsers(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
-      // Tentar buscar usuários via endpoint /api/users ou /users
-      // Se não funcionar, podemos extrair dos batches existentes
-      const apiBase = getLeafApiBaseUrl(env)
       
-      try {
-        // Tentar endpoint de usuários se existir
-        const response = await axios.get(`${apiBase}/api/users`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        
-        if (response.data && Array.isArray(response.data)) {
-          setLeafUsers(response.data)
+      // Usar o endpoint correto de User Management
+      const usersApiUrl = `${getUserManagementApiUrl(env)}/users`
+      
+      console.log('🔍 Buscando Leaf Users de:', usersApiUrl)
+      
+      const response = await axios.get(usersApiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'accept': '*/*'
         }
-      } catch (error) {
-        // Se o endpoint não existir, buscar unique leafUserIds dos batches
-        console.log('Endpoint /api/users não disponível, buscando de batches...')
+      })
+      
+      if (response.data && Array.isArray(response.data)) {
+        // A API já retorna um array de objetos com id, name, email, etc.
+        const usersList = response.data.map(user => ({
+          id: String(user.id || '').trim(),
+          name: user.name || user.apiOwnerUsername || user.email || 'Sem nome',
+          displayName: user.name || user.apiOwnerUsername || user.email || `User ${String(user.id || '').substring(0, 8)}`,
+          email: user.email || null,
+          apiOwnerUsername: user.apiOwnerUsername || null
+        }))
         
-        // Buscar batches para extrair leafUserIds únicos
-        const batchUrl = leafApiUrl('/api/batch', env)
-        const batchResponse = await axios.get(batchUrl, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        
-        const batches = Array.isArray(batchResponse.data) ? batchResponse.data : []
-        const uniqueUserIds = new Set()
-        
-        // Extrair leafUserIds únicos dos batches
-        batches.forEach((batch, index) => {
-          // IMPORTANTE: Usar batch.leafUserId, NÃO o índice
-          if (batch && typeof batch === 'object') {
-            const rawUserId = batch.leafUserId
-            
-            // Só processar se leafUserId existir e não for o índice
-            if (rawUserId !== null && rawUserId !== undefined && rawUserId !== '' && rawUserId !== index) {
-              const userId = String(rawUserId).trim()
-              
-              // Ignorar números simples de 1-2 dígitos (provavelmente índices ou IDs inválidos)
-              // Aceitar apenas IDs com pelo menos 8 caracteres ou UUIDs completos
-              if (userId && userId.length > 0) {
-                const isSimpleNumber = /^\d{1,2}$/.test(userId) // Apenas 1-2 dígitos
-                
-                if (!isSimpleNumber) {
-                  console.log(`📋 Batch[${index}] leafUserId válido:`, userId, 'tipo original:', typeof rawUserId)
-                  uniqueUserIds.add(userId)
-                } else {
-                  console.warn(`⚠️ Ignorando leafUserId que parece ser índice/número simples: "${userId}" no batch[${index}]`)
-                }
-              }
-            } else if (rawUserId === index) {
-              console.warn(`⚠️ Ignorando batch[${index}] - leafUserId coincide com índice`)
-            }
-          }
-        })
-        
-        // Buscar também de arquivos (sem leafUserId para pegar todos)
-        try {
-          const filesUrl = leafApiUrl('/api/v2/files', env)
-          const filesResponse = await axios.get(filesUrl, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            params: {
-              page: 0,
-              size: 100
-              // Não passar leafUserId aqui para buscar de todos os usuários
-            }
-          })
-          
-          const files = Array.isArray(filesResponse.data) 
-            ? filesResponse.data 
-            : (filesResponse.data?.content || [])
-          
-          files.forEach((file, index) => {
-            // IMPORTANTE: Usar file.leafUserId, NÃO o índice
-            if (file && typeof file === 'object') {
-              const rawUserId = file.leafUserId
-              
-              // Só processar se leafUserId existir e não for o índice
-              if (rawUserId !== null && rawUserId !== undefined && rawUserId !== '' && rawUserId !== index) {
-                const userId = String(rawUserId).trim()
-                
-                // Ignorar números simples de 1-2 dígitos (provavelmente índices ou IDs inválidos)
-                // Aceitar apenas IDs com pelo menos 8 caracteres ou UUIDs completos
-                if (userId && userId.length > 0) {
-                  const isSimpleNumber = /^\d{1,2}$/.test(userId) // Apenas 1-2 dígitos
-                  
-                  if (!isSimpleNumber) {
-                    console.log(`📁 File[${index}] leafUserId válido:`, userId, 'tipo original:', typeof rawUserId)
-                    uniqueUserIds.add(userId)
-                  } else {
-                    console.warn(`⚠️ Ignorando leafUserId que parece ser índice/número simples: "${userId}" no file[${index}]`)
-                  }
-                }
-              } else if (rawUserId === index) {
-                console.warn(`⚠️ Ignorando file[${index}] - leafUserId coincide com índice`)
-              }
-            }
-          })
-        } catch (err) {
-          console.log('Erro ao buscar arquivos para extrair leafUserIds:', err)
-        }
-        
-        // Função para validar UUID
-        const isValidUUID = (str) => {
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-          return uuidRegex.test(String(str))
-        }
-        
-        // Converter para array de objetos
-        // Aceitar UUIDs e também IDs numéricos/outros formatos que venham da API
-        const usersList = Array.from(uniqueUserIds)
-          .map((id, idx) => {
-            const idStr = String(id).trim()
-            // Verificar novamente que não é o índice
-            if (String(idx) === idStr) {
-              console.warn(`⚠️ Ignorando ID que coincide com índice ${idx}`)
-              return null
-            }
-            
-            console.log(`✅ Adicionando leafUserId à lista:`, idStr, 'índice:', idx)
-            
-            return {
-              id: idStr, // SEMPRE preservar o ID completo aqui
-              name: isValidUUID(idStr) ? (idStr.substring(0, 8) + '...') : idStr,
-              displayName: isValidUUID(idStr) ? `User ${idStr.substring(0, 8)}` : `User ${idStr}`
-            }
-          })
-          .filter(Boolean) // Remover nulls
-        
-        // Adicionar o usuário padrão se não estiver na lista
-        const defaultUserId = '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
-        if (!usersList.find(u => u.id === defaultUserId)) {
-          usersList.unshift({
-            id: defaultUserId,
-            name: 'Default User',
-            displayName: 'Default User'
-          })
-        }
+        console.log('✅ Leaf Users encontrados:', usersList.length, usersList)
         
         setLeafUsers(usersList)
         
-        // Manter o selectedLeafUserId atual se estiver na lista de usuários encontrados
-        // ou se for o padrão
-        if (selectedLeafUserId && usersList.length > 0) {
-          const userExists = usersList.find(u => u.id === selectedLeafUserId)
-          if (!userExists && selectedLeafUserId !== defaultUserId) {
-            // Se o usuário selecionado não existir na lista, usar o primeiro da lista
-            // ou manter o padrão se a lista estiver vazia
-            if (usersList.length > 0) {
-              setSelectedLeafUserId(usersList[0].id)
-            } else {
-              setSelectedLeafUserId(defaultUserId)
-            }
-          }
-        } else if (!selectedLeafUserId || selectedLeafUserId.trim().length === 0) {
-          // Se não houver seleção, usar o primeiro da lista ou padrão
-          if (usersList.length > 0) {
+        // Se não houver usuário selecionado ou o selecionado não estiver na lista, usar o primeiro
+        if (usersList.length > 0) {
+          const currentExists = usersList.find(u => u.id === selectedLeafUserId)
+          if (!currentExists) {
+            // Usar o primeiro usuário da lista como padrão
             setSelectedLeafUserId(usersList[0].id)
-          } else {
-            setSelectedLeafUserId(defaultUserId)
           }
         }
+      } else {
+        console.warn('⚠️ Resposta da API não é um array:', response.data)
+        setLeafUsers([])
       }
     } catch (error) {
-      console.error('Erro ao buscar Leaf Users:', error)
-      // Fallback para usuário padrão
+      console.error('❌ Erro ao buscar Leaf Users:', error)
+      console.error('  - URL:', error.config?.url)
+      console.error('  - Status:', error.response?.status)
+      console.error('  - Data:', error.response?.data)
+      
+      // Fallback para usuário padrão em caso de erro
       setLeafUsers([{
         id: '453b3bd5-85d6-46b0-b5b7-2d4698f48307',
         name: 'Default User',

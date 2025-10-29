@@ -27,6 +27,14 @@ export const getPointlakeApiUrl = (environment) => {
 }
 
 /**
+ * Obtém a URL da API de User Management (users)
+ */
+export const getUserManagementApiUrl = (environment) => {
+  const base = getLeafApiBaseUrl(environment)
+  return `${base}/services/usermanagement/api`
+}
+
+/**
  * Helper para construir URLs da API Leaf
  */
 export const leafApiUrl = (path, environment = 'prod') => {
@@ -61,6 +69,10 @@ export const leafApiUrl = (path, environment = 'prod') => {
   if (path.startsWith('/api/v2/query')) {
     const queryPath = path.replace('/api/v2/query', '')
     return `${getPointlakeApiUrl(environment)}/v2/query${queryPath}`
+  }
+  
+  if (path.startsWith('/api/users') || path.startsWith('/users')) {
+    return `${getUserManagementApiUrl(environment)}/users`
   }
   
   // Fallback: assume que é um endpoint da API base

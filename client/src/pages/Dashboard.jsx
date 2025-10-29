@@ -1267,40 +1267,32 @@ function Dashboard() {
               />
             </div>
 
-            {/* Botões de Ação */}
-            <div className="flex gap-2">
-              <button
-                onClick={handleQuery}
-                disabled={loading}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  {loading ? (
-                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  )}
-                  {loading ? 'Executing...' : 'Execute Query'}
-                </span>
-              </button>
-              <button
-                onClick={handleUnionAllQuery}
-                disabled={loading || (selectedFiles.size === 0 && drawnZones.length === 0)}
-                className="flex-1 bg-yellow-600 text-white py-2 rounded-lg font-medium hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-yellow-500"
-                title={selectedFiles.size > 0 || drawnZones.length > 0 ? `Execute UNION ALL with ${selectedFiles.size} file(s) and ${drawnZones.length} zone(s)` : 'Select files or draw zones to use UNION ALL'}
-              >
-                <span className="flex items-center justify-center gap-1 text-xs">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            {/* Botão Executar */}
+            <button
+              onClick={() => {
+                // Se houver arquivos ou zonas selecionadas, usar UNION ALL, senão executar query normal
+                if (selectedFiles.size > 0 || drawnZones.length > 0) {
+                  handleUnionAllQuery()
+                } else {
+                  handleQuery()
+                }
+              }}
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500"
+            >
+              <span className="flex items-center justify-center gap-2">
+                {loading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  UNION ALL
-                </span>
-              </button>
-            </div>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+                {loading ? 'Executing...' : 'Execute Query'}
+              </span>
+            </button>
             
             {/* Info sobre seleção */}
             {(selectedFiles.size > 0 || drawnZones.length > 0) && (

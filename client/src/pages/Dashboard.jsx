@@ -543,9 +543,9 @@ function Dashboard() {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <h1 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
-                <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">PL</span>
-                </div>
+                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 002 2h2.945M15 16.5V18a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5M17 13h1a2 2 0 002-2V9a2 2 0 00-2-2h-1M17 9l-1-1M9 5l1 1m8-1V7a2 2 0 00-2 2H7a2 2 0 00-2-2V6m0 0L6 5m6 0l-1-1M17 16.5V18a2 2 0 002 2h1a2 2 0 002-2v-1.5m-5-3a2 2 0 00-2-2h-2m6 4l-2 2m2-2l-1-1" />
+                </svg>
                 Point Lake GIS Studio
               </h1>
               {getEnvironment && (

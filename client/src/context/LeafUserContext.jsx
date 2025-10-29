@@ -66,17 +66,27 @@ export const LeafUserProvider = ({ children }) => {
         // Extrair leafUserIds únicos dos batches
         batches.forEach((batch, index) => {
           // IMPORTANTE: Usar batch.leafUserId, NÃO o índice
-          if (batch && batch.leafUserId !== null && batch.leafUserId !== undefined && batch.leafUserId !== '') {
-            const userId = String(batch.leafUserId).trim()
-            // Garantir que não é um número simples (pode ser UUID ou outro formato válido)
-            if (userId && userId.length > 0) {
-              console.log(`📋 Batch[${index}] leafUserId encontrado:`, userId, 'tipo original:', typeof batch.leafUserId, 'tipo após conversão:', typeof userId)
-              // Verificar que não estamos pegando o índice acidentalmente
-              if (String(index) !== userId) {
-                uniqueUserIds.add(userId)
-              } else {
-                console.warn(`⚠️ Ignorando índice ${index} que seria confundido com leafUserId`)
+          if (batch && typeof batch === 'object') {
+            const rawUserId = batch.leafUserId
+            
+            // Só processar se leafUserId existir e não for o índice
+            if (rawUserId !== null && rawUserId !== undefined && rawUserId !== '' && rawUserId !== index) {
+              const userId = String(rawUserId).trim()
+              
+              // Ignorar números simples de 1-2 dígitos (provavelmente índices ou IDs inválidos)
+              // Aceitar apenas IDs com pelo menos 8 caracteres ou UUIDs completos
+              if (userId && userId.length > 0) {
+                const isSimpleNumber = /^\d{1,2}$/.test(userId) // Apenas 1-2 dígitos
+                
+                if (!isSimpleNumber) {
+                  console.log(`📋 Batch[${index}] leafUserId válido:`, userId, 'tipo original:', typeof rawUserId)
+                  uniqueUserIds.add(userId)
+                } else {
+                  console.warn(`⚠️ Ignorando leafUserId que parece ser índice/número simples: "${userId}" no batch[${index}]`)
+                }
               }
+            } else if (rawUserId === index) {
+              console.warn(`⚠️ Ignorando batch[${index}] - leafUserId coincide com índice`)
             }
           }
         })
@@ -101,17 +111,27 @@ export const LeafUserProvider = ({ children }) => {
           
           files.forEach((file, index) => {
             // IMPORTANTE: Usar file.leafUserId, NÃO o índice
-            if (file && file.leafUserId !== null && file.leafUserId !== undefined && file.leafUserId !== '') {
-              const userId = String(file.leafUserId).trim()
-              // Garantir que não é um número simples ou índice
-              if (userId && userId.length > 0) {
-                console.log(`📁 File[${index}] leafUserId encontrado:`, userId, 'tipo original:', typeof file.leafUserId)
-                // Verificar que não estamos pegando o índice acidentalmente
-                if (String(index) !== userId) {
-                  uniqueUserIds.add(userId)
-                } else {
-                  console.warn(`⚠️ Ignorando índice ${index} que seria confundido com leafUserId`)
+            if (file && typeof file === 'object') {
+              const rawUserId = file.leafUserId
+              
+              // Só processar se leafUserId existir e não for o índice
+              if (rawUserId !== null && rawUserId !== undefined && rawUserId !== '' && rawUserId !== index) {
+                const userId = String(rawUserId).trim()
+                
+                // Ignorar números simples de 1-2 dígitos (provavelmente índices ou IDs inválidos)
+                // Aceitar apenas IDs com pelo menos 8 caracteres ou UUIDs completos
+                if (userId && userId.length > 0) {
+                  const isSimpleNumber = /^\d{1,2}$/.test(userId) // Apenas 1-2 dígitos
+                  
+                  if (!isSimpleNumber) {
+                    console.log(`📁 File[${index}] leafUserId válido:`, userId, 'tipo original:', typeof rawUserId)
+                    uniqueUserIds.add(userId)
+                  } else {
+                    console.warn(`⚠️ Ignorando leafUserId que parece ser índice/número simples: "${userId}" no file[${index}]`)
+                  }
                 }
+              } else if (rawUserId === index) {
+                console.warn(`⚠️ Ignorando file[${index}] - leafUserId coincide com índice`)
               }
             }
           })

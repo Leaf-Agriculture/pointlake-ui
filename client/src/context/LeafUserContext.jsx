@@ -16,7 +16,12 @@ export const useLeafUser = () => {
 export const LeafUserProvider = ({ children }) => {
   const { token, getEnvironment } = useAuth()
   const [selectedLeafUserId, setSelectedLeafUserId] = useState(() => {
-    return localStorage.getItem('selected_leaf_user_id') || '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
+    try {
+      return localStorage.getItem('selected_leaf_user_id') || '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
+    } catch (e) {
+      console.warn('Erro ao acessar localStorage:', e)
+      return '453b3bd5-85d6-46b0-b5b7-2d4698f48307'
+    }
   })
   const [leafUsers, setLeafUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
@@ -148,7 +153,11 @@ export const LeafUserProvider = ({ children }) => {
   // Salvar seleção no localStorage
   useEffect(() => {
     if (selectedLeafUserId) {
-      localStorage.setItem('selected_leaf_user_id', selectedLeafUserId)
+      try {
+        localStorage.setItem('selected_leaf_user_id', selectedLeafUserId)
+      } catch (e) {
+        console.warn('Erro ao salvar no localStorage:', e)
+      }
     }
   }, [selectedLeafUserId])
 

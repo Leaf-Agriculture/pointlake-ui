@@ -478,15 +478,25 @@ function Dashboard() {
   // Funções para gerenciar zonas desenhadas
   const handleZoneCreated = (zone) => {
     console.log('Zone created:', zone);
-    // Não atualizar automaticamente - usuário decide quando usar
+    // Executar query automaticamente quando zona é criada
+    setTimeout(() => {
+      const newQuery = generateUnionAllQuery()
+      setSqlQuery(newQuery)
+      if (selectedFiles.size > 0 || drawnZones.length > 0) {
+        handleUnionAllQuery()
+      }
+    }, 100)
   };
 
   const handleZoneDeleted = (zoneId) => {
     console.log('Zone deleted:', zoneId);
-    // Atualizar query automaticamente quando zona é deletada
+    // Executar query automaticamente quando zona é deletada
     setTimeout(() => {
       const newQuery = generateUnionAllQuery()
       setSqlQuery(newQuery)
+      if (selectedFiles.size > 0 || drawnZones.length > 0) {
+        handleUnionAllQuery()
+      }
     }, 100)
   };
 
@@ -931,10 +941,14 @@ function Dashboard() {
                                   updated.delete(fileId)
                                 }
                                 
-                                // Atualizar query automaticamente após mudança
+                                // Executar query automaticamente após mudança se houver seleções
                                 setTimeout(() => {
                                   const newQuery = generateUnionAllQuery()
                                   setSqlQuery(newQuery)
+                                  // Executar automaticamente se houver arquivos ou zonas selecionadas
+                                  if (updated.size > 0 || drawnZones.length > 0) {
+                                    handleUnionAllQuery()
+                                  }
                                 }, 100)
                                 
                                 return updated

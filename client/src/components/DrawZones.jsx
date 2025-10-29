@@ -116,24 +116,23 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
 
     // Event listeners para desenho
     map.on(L.Draw.Event.CREATED, (event) => {
-      const { layerType, layer } = event;
+      const { layerType, layer: originalLayer } = event;
       const zoneId = `zone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       console.log('🎨 Zona criada:', { layerType, zoneId });
       
-      // Adicionar ID único à camada
-      layer.zoneId = zoneId;
-      layer.zoneName = `Zone ${drawnZones.length + 1}`;
+      let layer = originalLayer;
       
-      // Para retângulos, garantir visibilidade ANTES de adicionar ao mapa
+      // Para retângulos, recriar para garantir visibilidade
       if (layerType === 'rectangle') {
-        // Converter bounds para coordenadas de retângulo
-        const bounds = layer.getBounds();
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
+        const bounds = originalLayer.getBounds();
+        console.log('📏 Rectangle Bounds:', bounds);
+        
+        // Remover o layer original do mapa
+        map.removeLayer(originalLayer);
         
         // Criar novo retângulo com estilo garantido
-        const newRectangle = L.rectangle(bounds, {
+        layer = L.rectangle(bounds, {
           color: '#10b981',
           fillColor: '#10b981',
           fillOpacity: 0.5,
@@ -141,35 +140,25 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
           opacity: 1
         });
         
-        // Copiar propriedades do layer original
-        newRectangle.zoneId = zoneId;
-        newRectangle.zoneName = layer.zoneName;
-        
-        // Substituir layer pelo novo retângulo
-        layer = newRectangle;
         console.log('🟩 Retângulo recriado com estilo visível');
       }
+      
+      // Adicionar ID único à camada
+      layer.zoneId = zoneId;
+      layer.zoneName = `Zone ${drawnZones.length + 1}`;
       
       // Calcular área
       let area = 0;
       let coordinates = null;
       
       if (layerType === 'rectangle') {
-        // Para retângulos, usar bounds diretamente
         const bounds = layer.getBounds();
-        console.log('📏 Rectangle Bounds:', bounds);
-        
-        // Usar L.GeometryUtil ou calcular área usando fórmulas geodésicas
-        // Criar um polígono temporário para calcular área corretamente
         const sw = bounds.getSouthWest();
         const ne = bounds.getNorthEast();
         const se = L.latLng(sw.lat, ne.lng);
         const nw = L.latLng(ne.lat, sw.lng);
         
-        const tempPolygon = L.polygon([sw, se, ne, nw]);
-        
-        // Calcular área usando método mais preciso
-        // Usar fórmula de área de polígono esférico (aproximação de Haversine)
+        // Calcular área usando fórmula de área de polígono esférico
         const coords = [sw, se, ne, nw, sw]; // Fechar o polígono
         area = 0;
         for (let i = 0; i < coords.length - 1; i++) {
@@ -183,15 +172,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         
         // Coordenadas dos 4 cantos do retângulo
         coordinates = [sw, se, ne, nw];
-        
-        // Garantir que o retângulo está visível no mapa
-        layer.setStyle({
-          color: '#10b981',
-          fillColor: '#10b981',
-          fillOpacity: 0.5,
-          weight: 5,
-          opacity: 1
-        });
         
       } else if (layerType === 'polygon') {
         const latlngs = layer.getLatLngs();
@@ -237,18 +217,16 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         </div>
       `;
       
-      // Adicionar à FeatureGroup ANTES de calcular área
+      layer.bindPopup(popupContent);
+      
+      // Adicionar à FeatureGroup
       drawnItems.addLayer(layer);
       console.log('✅ Layer adicionada ao FeatureGroup');
       
-      // Para retângulos, garantir que apareça no topo e seja visível
+      // Para retângulos, garantir que apareça no topo
       if (layerType === 'rectangle') {
         layer.bringToFront();
-        // Forçar redesenho do mapa
-        if (map) {
-          map.invalidateSize();
-        }
-        console.log('🟩 Retângulo trazido para frente e mapa invalidado');
+        console.log('🟩 Retângulo trazido para frente');
       }
       
       // Atualizar estado

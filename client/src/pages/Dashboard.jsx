@@ -38,6 +38,7 @@ function Dashboard() {
   const [hasSpatialFilter, setHasSpatialFilter] = useState(false)
   const [filesToShow, setFilesToShow] = useState(20) // Começar com 20 arquivos visíveis
   const filesListRef = useRef(null)
+  const [selectedFiles, setSelectedFiles] = useState(new Set()) // IDs de arquivos selecionados para UNION ALL
   const [newFileIds, setNewFileIds] = useState(new Set()) // IDs de arquivos novos (não clicados ainda)
   const previousFilesRef = useRef([]) // Referência para lista anterior de arquivos
 
@@ -489,6 +490,156 @@ function Dashboard() {
     updateQueryWithSpatialFilter(zone);
   };
 
+  // Função para gerar query UNION ALL com arquivos selecionados e zonas
+  const generateUnionAllQuery = (baseQuery = '') => {
+    const selectedFileIds = Array.from(selectedFiles).filter(id => {
+      // Verificar se o arquivo existe e está processado
+      const file = files.find(f => (f.id || f.uuid) === id)
+      return file && file.status === 'PROCESSED'
+    })
+
+    if (selectedFileIds.length === 0 && drawnZones.length === 0) {
+      return baseQuery || sqlQuery
+    }
+
+    // Extrair LIMIT e WHERE da query base
+    let queryWithoutLimit = baseQuery || sqlQuery || ''
+    let limitClause = ''
+    let whereClause = ''
+    
+    // Extrair LIMIT
+    const limitMatch = queryWithoutLimit.match(/LIMIT\s+(\d+)/i)
+    if (limitMatch) {
+      limitClause = limitMatch[0]
+      queryWithoutLimit = queryWithoutLimit.replace(/LIMIT\s+\d+/i, '').trim()
+    }
+
+    // Extrair WHERE
+    const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
+    if (whereMatch) {
+      whereClause = whereMatch[1].trim()
+      queryWithoutLimit = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+    }
+
+    // Obter o SELECT base (remover FROM e tudo depois)
+    let selectBase = queryWithoutLimit
+    const fromMatch = queryWithoutLimit.match(/SELECT\s+(.+?)\s+FROM/i)
+    if (fromMatch) {
+      selectBase = `SELECT ${fromMatch[1]}`
+    } else if (!selectBase.toUpperCase().startsWith('SELECT')) {
+      selectBase = 'SELECT *'
+    }
+
+    // Gerar queries para cada arquivo
+    const fileQueries = selectedFileIds.map(fileId => {
+      let query = `${selectBase} FROM pointlake_file_${fileId}`
+      if (whereClause) {
+        query += ` WHERE ${whereClause}`
+      }
+      return query
+    })
+
+    // Gerar queries para cada zona
+    const zoneQueries = drawnZones.map((zone, idx) => {
+      const wkt = geometryToWKT(zone)
+      if (!wkt) return null
+      
+      // Para zonas, precisamos de uma query base - usar o primeiro arquivo selecionado ou um padrão
+      let baseTable = selectedFileIds.length > 0 
+        ? `pointlake_file_${selectedFileIds[0]}`
+        : 'fields' // fallback
+      
+      let spatialFilter
+      if (zone.type === 'circle') {
+        const center = zone.layer.getLatLng()
+        const radiusInMeters = Math.round(zone.layer.getRadius())
+        spatialFilter = `ST_DWithin(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_Point(${center.lng}, ${center.lat}), ${radiusInMeters}, true)`
+      } else {
+        spatialFilter = `ST_Intersects(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_GeomFromText('${wkt}'))`
+      }
+      
+      let query = `${selectBase} FROM ${baseTable}`
+      if (whereClause) {
+        query += ` WHERE ${whereClause} AND ${spatialFilter}`
+      } else {
+        query += ` WHERE ${spatialFilter}`
+      }
+      
+      return query
+    }).filter(Boolean)
+
+    // Combinar todas as queries com UNION ALL
+    const allQueries = [...fileQueries, ...zoneQueries]
+    
+    if (allQueries.length === 0) {
+      return baseQuery || sqlQuery
+    }
+
+    let unionQuery = allQueries.join(' UNION ALL ')
+    
+    // Adicionar LIMIT no final se existir
+    if (limitClause) {
+      unionQuery += ` ${limitClause}`
+    }
+
+    return unionQuery
+  };
+
+  // Função para executar query UNION ALL
+  const handleUnionAllQuery = async () => {
+    if (selectedFiles.size === 0 && drawnZones.length === 0) {
+      setError('Please select at least one file or draw a zone')
+      return
+    }
+
+    const unionQuery = generateUnionAllQuery()
+    
+    setLoading(true)
+    setError('')
+    setResults(null)
+    setQueryExecutionTime(null)
+
+    const startTime = performance.now()
+
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      
+      // Se há apenas um arquivo selecionado, usar fileId
+      const selectedFileIds = Array.from(selectedFiles)
+      const fileId = selectedFileIds.length === 1 ? selectedFileIds[0] : undefined
+      
+      const apiUrl = leafApiUrl('/api/v2/query', env)
+      const params = {
+        sql: unionQuery
+      }
+      
+      if (fileId) {
+        params.fileId = fileId
+      }
+      
+      const response = await axios.get(apiUrl, {
+        params,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const endTime = performance.now()
+      const executionTime = ((endTime - startTime) / 1000).toFixed(3)
+      setQueryExecutionTime(executionTime)
+
+      setResults(response.data)
+      // Atualizar query no textarea
+      setSqlQuery(unionQuery)
+    } catch (err) {
+      console.error('Erro na query UNION ALL:', err)
+      setError(getErrorMessage(err, 'Error executing UNION ALL query'))
+      setQueryExecutionTime(null)
+    } finally {
+      setLoading(false)
+    }
+  };
+
   // Carregar batches e arquivos ao montar o componente
   useEffect(() => {
     if (token && getEnvironment && isAuthenticated) {
@@ -754,10 +905,34 @@ function Dashboard() {
                       isNew 
                         ? 'bg-blue-950/50 border-blue-600 hover:border-blue-500 ring-2 ring-blue-500/50' 
                         : 'bg-zinc-800 border-zinc-700 hover:border-zinc-600'
-                    }`}
+                    } ${selectedFiles.has(fileId) ? 'ring-2 ring-yellow-500/50 border-yellow-600' : ''}`}
                   >
                     <div className="p-3">
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-2">
+                        {/* Checkbox para seleção */}
+                        <div className="flex-shrink-0 pt-0.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedFiles.has(fileId)}
+                            onChange={(e) => {
+                              const fileId = file.id || file.uuid
+                              if (!fileId) return
+                              
+                              setSelectedFiles(prev => {
+                                const updated = new Set(prev)
+                                if (e.target.checked && isProcessed) {
+                                  updated.add(fileId)
+                                } else {
+                                  updated.delete(fileId)
+                                }
+                                return updated
+                              })
+                            }}
+                            disabled={!isProcessed}
+                            className="w-4 h-4 text-blue-600 bg-zinc-800 border-zinc-700 rounded focus:ring-blue-500 focus:ring-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={isProcessed ? "Select for UNION ALL" : "File must be PROCESSED to select"}
+                          />
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-zinc-200 truncate">
                             {file.name || file.filename || file.fileName || file.id || `File ${idx + 1}`}
@@ -1066,25 +1241,56 @@ function Dashboard() {
               />
             </div>
 
-            {/* Botão Executar */}
-            <button
-              onClick={handleQuery}
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500"
-            >
-              <span className="flex items-center justify-center gap-2">
-                {loading ? (
-                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                ) : (
+            {/* Botões de Ação */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleQuery}
+                disabled={loading}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  {loading ? (
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  {loading ? 'Executing...' : 'Execute Query'}
+                </span>
+              </button>
+              <button
+                onClick={handleUnionAllQuery}
+                disabled={loading || (selectedFiles.size === 0 && drawnZones.length === 0)}
+                className="flex-1 bg-yellow-600 text-white py-2 rounded-lg font-medium hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-yellow-500"
+                title={selectedFiles.size > 0 || drawnZones.length > 0 ? `Execute UNION ALL with ${selectedFiles.size} file(s) and ${drawnZones.length} zone(s)` : 'Select files or draw zones to use UNION ALL'}
+              >
+                <span className="flex items-center justify-center gap-1 text-xs">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                   </svg>
-                )}
-                {loading ? 'Executing...' : 'Execute Query'}
-              </span>
-            </button>
+                  UNION ALL
+                </span>
+              </button>
+            </div>
+            
+            {/* Info sobre seleção */}
+            {(selectedFiles.size > 0 || drawnZones.length > 0) && (
+              <div className="bg-yellow-950/30 border border-yellow-800 rounded-lg p-2 text-xs text-yellow-300">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>
+                    {selectedFiles.size > 0 && `${selectedFiles.size} file(s) selected`}
+                    {selectedFiles.size > 0 && drawnZones.length > 0 && ' + '}
+                    {drawnZones.length > 0 && `${drawnZones.length} zone(s)`}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Tempo de Execução */}
             {queryExecutionTime && (

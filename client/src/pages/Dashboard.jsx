@@ -407,7 +407,7 @@ function Dashboard() {
     
     const layer = zone.layer;
     
-    if (zone.type === 'polygon' || zone.type === 'rectangle') {
+    if (zone.type === 'polygon') {
       const coords = layer.getLatLngs()[0];
       const wktCoords = coords.map(c => `${c.lng} ${c.lat}`).join(', ');
       return `POLYGON((${wktCoords}, ${coords[0].lng} ${coords[0].lat}))`;
@@ -450,7 +450,7 @@ function Dashboard() {
       // Último parâmetro true = usar esferóide (cálculo geodésico em metros)
       spatialFilter = `ST_DWithin(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_Point(${center.lng}, ${center.lat}), ${radiusInMeters}, true)`;
     } else {
-      // Para polígonos e retângulos, usar ST_Intersects com geometria WKB
+      // Para polígonos, usar ST_Intersects com geometria WKB
       spatialFilter = `ST_Intersects(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_GeomFromText('${wkt}'))`;
     }
     
@@ -574,6 +574,7 @@ function Dashboard() {
         const radiusInMeters = Math.round(zone.layer.getRadius())
         spatialFilter = `ST_DWithin(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_Point(${center.lng}, ${center.lat}), ${radiusInMeters}, true)`
       } else {
+        // Para polígonos
         spatialFilter = `ST_Intersects(ST_SetSRID(ST_GeomFromWKB(geometry), 4326), ST_GeomFromText('${wkt}'))`
       }
       

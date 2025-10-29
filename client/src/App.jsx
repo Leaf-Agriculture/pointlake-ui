@@ -6,11 +6,14 @@ import { AuthProvider } from './context/AuthContext'
 import { LeafUserProvider } from './context/LeafUserContext'
 
 function App() {
+  // Detectar base path para produção no GitHub Pages
+  const basename = import.meta.env.PROD ? '/pointlake-ui' : ''
+  
   return (
     <ErrorBoundary>
       <AuthProvider>
         <LeafUserProvider>
-          <Router>
+          <Router basename={basename}>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/dashboard" element={<Dashboard />} />

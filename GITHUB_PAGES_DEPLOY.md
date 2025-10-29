@@ -61,34 +61,76 @@ O workflow irá:
 2. Aguarde alguns minutos para o deploy completar
 3. Acesse `https://SEU-USUARIO.github.io/pointlake-ui/`
 
-## ⚠️ Importante: Configuração da API Backend
+## ⚠️ Importante: Hospedar o Backend Primeiro!
 
-O frontend precisa de um backend hospedado para funcionar. Você tem duas opções:
+Este projeto tem **dois componentes separados**:
 
-### Opção 1: Usar o Backend Existente (Recomendado)
+1. **Frontend** (pasta `client/`) → Vai para GitHub Pages (só arquivos estáticos)
+2. **Backend** (pasta `server/`) → Precisa ser hospedado separadamente (Railway, Render, etc.)
 
-Se você já tem um backend hospedado (Heroku, Railway, etc.):
+### Por que o backend precisa ser hospedado separadamente?
 
-1. Certifique-se de que o CORS está configurado para aceitar requisições do GitHub Pages:
-   ```javascript
-   // No server.js, adicione:
-   app.use(cors({
-     origin: ['https://SEU-USUARIO.github.io'],
-     credentials: true
-   }))
-   ```
+O GitHub Pages **só serve arquivos estáticos** (HTML, CSS, JS). O backend na pasta `server/` é uma aplicação Node.js/Express que precisa rodar em um servidor.
 
-2. Crie um arquivo `.env.production` ou configure variáveis de ambiente no GitHub Actions para definir `VITE_API_URL` com a URL do seu backend.
+### Passo 6: Hospedar o Backend (OBRIGATÓRIO)
 
-### Opção 2: Configurar Variável de Ambiente
+**⚠️ IMPORTANTE**: Você PRECISA hospedar o backend ANTES do frontend funcionar.
 
-Você pode configurar a URL da API através de variáveis de ambiente no GitHub:
+📖 **Veja o guia completo em**: `BACKEND_DEPLOY.md`
 
-1. Vá em **Settings** > **Secrets and variables** > **Actions**
+**Resumo rápido:**
+
+1. **Escolha uma plataforma** (recomendado: Railway ou Render)
+2. **Faça deploy do backend** (pasta `server/`)
+3. **Anote a URL** do backend (ex: `https://seu-backend.railway.app`)
+4. **Configure o CORS** no `server/server.js` para aceitar requisições do GitHub Pages
+
+### Passo 7: Configurar URL do Backend no Frontend
+
+Após hospedar o backend, configure a URL no frontend:
+
+1. No GitHub, vá em **Settings** > **Secrets and variables** > **Actions**
 2. Clique em **New repository secret**
 3. Nome: `VITE_API_URL`
-4. Valor: URL do seu backend (ex: `https://seu-backend.herokuapp.com`)
-5. Atualize o workflow para usar essa variável
+4. Valor: URL do seu backend (ex: `https://seu-backend.railway.app`)
+5. Clique em **Add secret**
+
+**O workflow já está configurado** para usar essa variável automaticamente!
+
+**OU** configure diretamente no código editando `client/src/config/api.js`:
+```javascript
+return import.meta.env.VITE_API_URL || 'https://seu-backend.railway.app'
+```
+
+### Configurar CORS no Backend
+
+No arquivo `server/server.js`, atualize o CORS (linha 41):
+
+```javascript
+// Substitua:
+app.use(cors());
+
+// Por:
+:
+const allowedOrigins = [
+  'https://SEU-USUARIO.github.io',
+  'https://SEU-USUARIO.github.io/pointlake-ui',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+```
+
+**⚠️ Substitua `SEU-USUARIO` pelo seu username do GitHub**
 
 ## 🔧 Configuração do Workflow (Opcional)
 

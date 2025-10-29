@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useAuth } from './AuthContext'
 import axios from 'axios'
-import { leafApiUrl, getUserManagementApiUrl } from '../config/api'
+import { getUserManagementApiUrl } from '../config/api'
 
 const LeafUserContext = createContext()
 

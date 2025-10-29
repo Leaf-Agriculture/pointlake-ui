@@ -483,6 +483,11 @@ function Dashboard() {
 
   const handleZoneDeleted = (zoneId) => {
     console.log('Zone deleted:', zoneId);
+    // Atualizar query automaticamente quando zona é deletada
+    setTimeout(() => {
+      const newQuery = generateUnionAllQuery()
+      setSqlQuery(newQuery)
+    }, 100)
   };
 
   const handleQueryByZone = (zone) => {
@@ -925,6 +930,13 @@ function Dashboard() {
                                 } else {
                                   updated.delete(fileId)
                                 }
+                                
+                                // Atualizar query automaticamente após mudança
+                                setTimeout(() => {
+                                  const newQuery = generateUnionAllQuery()
+                                  setSqlQuery(newQuery)
+                                }, 100)
+                                
                                 return updated
                               })
                             }}

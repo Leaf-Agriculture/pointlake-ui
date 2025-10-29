@@ -133,25 +133,30 @@ function Dashboard() {
       })
       
       // Detectar novos arquivos comparando com a lista anterior
-      const previousFileIds = new Set(previousFilesRef.current.map(f => f.id || f.uuid))
-      const currentFileIds = new Set(sortedFiles.map(f => f.id || f.uuid))
+      // Só marcar como novos se já tiver uma lista anterior (não é o primeiro carregamento)
+      const isFirstLoad = previousFilesRef.current.length === 0
       
-      // Arquivos novos são aqueles que estão na lista atual mas não estavam na anterior
-      const newlyAddedIds = sortedFiles
-        .filter(f => {
-          const fileId = f.id || f.uuid
-          return fileId && !previousFileIds.has(fileId)
-        })
-        .map(f => f.id || f.uuid)
-      
-      // Adicionar novos IDs ao conjunto de arquivos novos (mantendo os já existentes)
-      if (newlyAddedIds.length > 0) {
-        setNewFileIds(prev => {
-          const updated = new Set(prev)
-          newlyAddedIds.forEach(id => updated.add(id))
-          return updated
-        })
-        console.log('✨ New files detected:', newlyAddedIds)
+      if (!isFirstLoad) {
+        const previousFileIds = new Set(previousFilesRef.current.map(f => f.id || f.uuid))
+        const currentFileIds = new Set(sortedFiles.map(f => f.id || f.uuid))
+        
+        // Arquivos novos são aqueles que estão na lista atual mas não estavam na anterior
+        const newlyAddedIds = sortedFiles
+          .filter(f => {
+            const fileId = f.id || f.uuid
+            return fileId && !previousFileIds.has(fileId)
+          })
+          .map(f => f.id || f.uuid)
+        
+        // Adicionar novos IDs ao conjunto de arquivos novos (mantendo os já existentes)
+        if (newlyAddedIds.length > 0) {
+          setNewFileIds(prev => {
+            const updated = new Set(prev)
+            newlyAddedIds.forEach(id => updated.add(id))
+            return updated
+          })
+          console.log('✨ New files detected:', newlyAddedIds)
+        }
       }
       
       // Atualizar referência anterior

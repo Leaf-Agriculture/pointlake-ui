@@ -44,7 +44,7 @@ function Login() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
             <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
-              <span className="text-white text-lg font-bold">L</span>
+              <span className="text-white text-lg font-bold">PL</span>
             </div>
             <h1 className="text-2xl font-semibold text-zinc-100">Point Lake GIS Studio</h1>
           </div>

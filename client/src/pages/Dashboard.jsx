@@ -544,7 +544,7 @@ function Dashboard() {
             <div className="flex items-center gap-4">
               <h1 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
                 <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">L</span>
+                  <span className="text-white text-xs font-bold">PL</span>
                 </div>
                 Point Lake GIS Studio
               </h1>

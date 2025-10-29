@@ -41,7 +41,7 @@ export const leafApiUrl = (path, environment = 'prod') => {
   // Remover barra inicial se existir
   const cleanPath = path.startsWith('/') ? path.slice(1) : path
   
-  // Mapeamento de endpoints do backend antigo para endpoints Leaf reais
+  // Mapeamento de endpoints do backend antigo para endpoints Point Lake reais
   if (path.startsWith('/api/authenticate')) {
     return `${getLeafApiBaseUrl(environment)}/api/authenticate`
   }

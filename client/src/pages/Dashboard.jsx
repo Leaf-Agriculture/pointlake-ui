@@ -105,19 +105,19 @@ function Dashboard() {
         }
       })
       
-          const filesData = Array.isArray(response.data) ? response.data : (response.data?.content || [])
-          
-          // Ordenar por data mais recente primeiro (createdTime, createdDate, createdAt, ou uploadDate)
-          const sortedFiles = filesData.sort((a, b) => {
-            const getDate = (file) => {
-              return file.createdTime || file.createdDate || file.createdAt || file.uploadDate || 0
-            }
-            const dateA = new Date(getDate(a)).getTime()
-            const dateB = new Date(getDate(b)).getTime()
-            return dateB - dateA // Ordenar descendente (mais recente primeiro)
-          })
-          
-          setFiles(sortedFiles)
+      const filesData = Array.isArray(response.data) ? response.data : (response.data?.content || [])
+      
+      // Ordenar por data mais recente primeiro (createdTime, createdDate, createdAt, ou uploadDate)
+      const sortedFiles = filesData.sort((a, b) => {
+        const getDate = (file) => {
+          return file.createdTime || file.createdDate || file.createdAt || file.uploadDate || 0
+        }
+        const dateA = new Date(getDate(a)).getTime()
+        const dateB = new Date(getDate(b)).getTime()
+        return dateB - dateA // Ordenar descendente (mais recente primeiro)
+      })
+      
+      setFiles(sortedFiles)
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err)
       setFiles([])

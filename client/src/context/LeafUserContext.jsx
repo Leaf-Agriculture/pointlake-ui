@@ -128,14 +128,23 @@ export const LeafUserProvider = ({ children }) => {
         // Converter para array de objetos
         // Aceitar UUIDs e também IDs numéricos/outros formatos que venham da API
         const usersList = Array.from(uniqueUserIds)
-          .map(id => {
+          .map((id, idx) => {
             const idStr = String(id).trim()
+            // Verificar novamente que não é o índice
+            if (String(idx) === idStr) {
+              console.warn(`⚠️ Ignorando ID que coincide com índice ${idx}`)
+              return null
+            }
+            
+            console.log(`✅ Adicionando leafUserId à lista:`, idStr, 'índice:', idx)
+            
             return {
-              id: idStr,
+              id: idStr, // SEMPRE preservar o ID completo aqui
               name: isValidUUID(idStr) ? (idStr.substring(0, 8) + '...') : idStr,
               displayName: isValidUUID(idStr) ? `User ${idStr.substring(0, 8)}` : `User ${idStr}`
             }
           })
+          .filter(Boolean) // Remover nulls
         
         // Adicionar o usuário padrão se não estiver na lista
         const defaultUserId = '453b3bd5-85d6-46b0-b5b7-2d4698f48307'

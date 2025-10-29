@@ -568,8 +568,20 @@ function Dashboard() {
                   value={selectedLeafUserId || ''}
                   onChange={(e) => {
                     const newValue = String(e.target.value).trim()
-                    console.log('🔄 Mudando leafUserId de', selectedLeafUserId, 'para', newValue)
-                    setSelectedLeafUserId(newValue)
+                    console.log('🔄 onChange chamado!')
+                    console.log('  - e.target.value:', e.target.value)
+                    console.log('  - e.target.value type:', typeof e.target.value)
+                    console.log('  - e.target.value length:', e.target.value.length)
+                    console.log('  - Valor atual selectedLeafUserId:', selectedLeafUserId)
+                    console.log('  - Novo valor após trim:', newValue)
+                    console.log('  - Novo valor length:', newValue.length)
+                    
+                    // Garantir que não está vazio e preservar valor completo
+                    if (newValue && newValue.length > 0) {
+                      setSelectedLeafUserId(newValue)
+                    } else {
+                      console.error('❌ Valor vazio ou inválido!', newValue)
+                    }
                   }}
                   disabled={loadingUsers}
                   className="px-3 py-1.5 text-sm bg-zinc-800 text-zinc-100 border border-zinc-700 rounded hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px]"
@@ -579,14 +591,39 @@ function Dashboard() {
                   ) : leafUsers.length === 0 ? (
                     <option value={selectedLeafUserId}>{selectedLeafUserId ? String(selectedLeafUserId).substring(0, 20) + '...' : 'No user'}</option>
                   ) : (
-                    leafUsers.map((user) => {
-                      const userId = String(user.id || '')
+                    leafUsers.map((user, idx) => {
+                      // Garantir que pegamos o ID completo, nunca truncado
+                      const userId = String(user.id || user.leafUserId || '').trim()
+                      
+                      console.log(`📝 Renderizando option[${idx}]:`, {
+                        'user.id': user.id,
+                        'user.leafUserId': user.leafUserId,
+                        'userId final': userId,
+                        'userId length': userId.length,
+                        'userId type': typeof userId
+                      })
+                      
+                      // Garantir que não é o índice
+                      if (String(idx) === userId) {
+                        console.warn(`⚠️ Ignorando item ${idx} - ID coincide com índice`)
+                        return null
+                      }
+                      
+                      if (!userId || userId.length === 0) {
+                        console.warn(`⚠️ Ignorando item ${idx} - userId vazio`)
+                        return null
+                      }
+                      
+                      // Display name pode ser truncado, mas o value sempre será o ID completo
+                      const displayText = user.displayName || user.name || userId
+                      const shortDisplay = userId.length > 20 ? userId.substring(0, 20) + '...' : userId
+                      
                       return (
-                        <option key={userId} value={userId}>
-                          {user.displayName || user.name || userId.substring(0, 20) + '...'}
+                        <option key={`${userId}-${idx}`} value={userId} data-full-id={userId}>
+                          {displayText} ({shortDisplay})
                         </option>
                       )
-                    })
+                    }).filter(Boolean)
                   )}
                 </select>
               </div>

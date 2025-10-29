@@ -48,6 +48,16 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     
     console.log('Map is ready, initializing DrawZones');
     
+    // Remover controle existente se houver
+    if (drawControlRef.current) {
+      try {
+        map.removeControl(drawControlRef.current);
+        console.log('Removed existing draw control');
+      } catch (e) {
+        console.warn('Could not remove existing draw control:', e);
+      }
+    }
+    
     // Criar FeatureGroup para gerenciar as zonas desenhadas PRIMEIRO
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
@@ -55,6 +65,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     console.log('FeatureGroup created and added to map');
     
     // Criar controle de desenho DEPOIS que o FeatureGroup existe
+    // NÃO incluir rectangle na configuração - apenas polygon e circle
     const drawControl = new L.Control.Draw({
       position: 'topright',
       draw: {
@@ -76,7 +87,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
           feet: false,
           minPoints: 3 // Mínimo de pontos, mas permitir quantos quiser acima disso
         },
-        rectangle: false, // Desabilitar retângulo
         circle: {
           shapeOptions: {
             color: '#f59e0b',
@@ -90,6 +100,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         marker: false,
         polyline: false,
         circlemarker: false
+        // rectangle não está na lista - não será criado
       },
       edit: {
         featureGroup: drawnItems, // Usar o FeatureGroup criado
@@ -106,13 +117,19 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     // Event listeners para desenho
     map.on(L.Draw.Event.CREATED, (event) => {
       const { layerType, layer: originalLayer } = event;
+      
+      // Ignorar rectangles completamente - não devem ser criados
+      if (layerType === 'rectangle') {
+        console.warn('Rectangle creation blocked - rectangle drawing is disabled');
+        map.removeLayer(originalLayer);
+        return;
+      }
+      
       const zoneId = `zone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       console.log('🎨 Zona criada:', { layerType, zoneId });
       
       let layer = originalLayer;
-      
-      // Não precisamos mais tratar retângulos separadamente
       
       // Adicionar ID único à camada
       layer.zoneId = zoneId;

@@ -466,13 +466,13 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, isAuthenticated])
 
-  // Auto-refresh files every 30 seconds
+  // Auto-refresh files every 15 seconds
   useEffect(() => {
     if (!isAuthenticated) return
     
     const interval = setInterval(() => {
       loadFiles()
-    }, 30000) // 30 seconds
+    }, 15000) // 15 seconds
     
     return () => clearInterval(interval)
   }, [isAuthenticated, selectedLeafUserId])

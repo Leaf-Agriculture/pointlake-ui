@@ -740,6 +740,7 @@ function Dashboard() {
                 {files.slice(0, filesToShow).map((file, idx) => {
                   const fileId = file.id || file.uuid
                   const isNew = fileId && newFileIds.has(fileId)
+                  const isProcessed = file.status === 'PROCESSED'
                   
                   return (
                   <div 
@@ -800,9 +801,9 @@ function Dashboard() {
                                 openMenu('summary');
                               }
                             }}
-                            disabled={loadingFileSummary}
+                            disabled={loadingFileSummary || !isProcessed}
                             className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500"
-                            title="View Summary"
+                            title={isProcessed ? "View Summary" : "File must be PROCESSED to view summary"}
                           >
                             {loadingFileSummary ? (
                               <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -850,9 +851,9 @@ function Dashboard() {
                                 setLoading(false);
                               }
                             }}
-                            disabled={loadingQuery || loading}
+                            disabled={loadingQuery || loading || !isProcessed}
                             className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-emerald-500"
-                            title="Execute Query"
+                            title={isProcessed ? "Execute Query" : "File must be PROCESSED to execute query"}
                           >
                             {(loadingQuery || loading) ? (
                               <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -182,4 +182,44 @@ test.describe('DrawZones Feature', () => {
     await expect(page.locator('text=Save/Load: store zones in browser')).toBeVisible();
     console.log('✅ All instructions are visible');
   });
+
+  test('should NOT show rectangle drawing button', async ({ page }) => {
+    // Fazer login
+    await page.fill('input[type="text"]', 'test@example.com');
+    await page.fill('input[type="password"]', 'password123');
+    await page.click('button[type="submit"]');
+
+    // Aguardar dashboard carregar
+    await page.waitForTimeout(3000);
+
+    // Aguardar o mapa estar pronto
+    await page.waitForSelector('.leaflet-container', { timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    // Verificar se o controle de desenho está presente
+    const drawControls = page.locator('.leaflet-draw');
+    await expect(drawControls).toBeVisible({ timeout: 5000 });
+    console.log('✅ Leaflet draw controls are visible');
+
+    // Verificar se o botão de polígono está presente
+    const polygonButton = page.locator('.leaflet-draw-draw-polygon');
+    await expect(polygonButton).toBeVisible({ timeout: 5000 });
+    console.log('✅ Polygon button is visible');
+
+    // Verificar se o botão de círculo está presente
+    const circleButton = page.locator('.leaflet-draw-draw-circle');
+    await expect(circleButton).toBeVisible({ timeout: 5000 });
+    console.log('✅ Circle button is visible');
+
+    // Verificar se o botão de RETÂNGULO NÃO está presente
+    const rectangleButton = page.locator('.leaflet-draw-draw-rectangle');
+    await expect(rectangleButton).not.toBeVisible({ timeout: 2000 });
+    console.log('✅ Rectangle button is NOT visible');
+
+    // Verificar também usando o seletor de título do botão
+    const rectangleButtonByTitle = page.locator('a[title*="rectangle" i], a[title*="retângulo" i], a[title*="square" i]');
+    const count = await rectangleButtonByTitle.count();
+    expect(count).toBe(0);
+    console.log('✅ No rectangle/square buttons found by title');
+  });
 });

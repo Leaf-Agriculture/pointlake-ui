@@ -25,13 +25,41 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     // Mapa está pronto, inicializar controles
     console.log('Initializing draw controls');
     initializeDrawControls();
+
+    // Cleanup function para remover controles quando o componente desmontar
+    return () => {
+      if (drawControlRef.current && mapRef?.current) {
+        try {
+          mapRef.current.removeControl(drawControlRef.current);
+          console.log('Draw control removed on cleanup');
+        } catch (e) {
+          console.warn('Error removing draw control on cleanup:', e);
+        }
+      }
+      // Remover qualquer botão de rectangle que possa ter ficado
+      const rectangleButtons = document.querySelectorAll('.leaflet-draw-draw-rectangle');
+      rectangleButtons.forEach(btn => btn.remove());
+    };
   }, [mapRef, mapRef?.current]);
 
   const initializeDrawControls = () => {
-    if (isInitialized.current) {
-      console.log('DrawZones already initialized');
-      return;
+    // Sempre remover controle existente antes de criar um novo
+    if (drawControlRef.current && mapRef?.current) {
+      try {
+        mapRef.current.removeControl(drawControlRef.current);
+        console.log('Removed existing draw control');
+        isInitialized.current = false; // Reset flag para permitir reinicialização
+      } catch (e) {
+        console.warn('Could not remove existing draw control:', e);
+      }
     }
+
+    // Remover qualquer botão de rectangle que possa ter ficado do controle anterior
+    const rectangleButtons = document.querySelectorAll('.leaflet-draw-draw-rectangle');
+    rectangleButtons.forEach(btn => {
+      console.log('Removing leftover rectangle button');
+      btn.remove();
+    });
 
     if (!mapRef || !mapRef.current) {
       console.log('MapRef not ready yet');
@@ -47,16 +75,6 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     }
     
     console.log('Map is ready, initializing DrawZones');
-    
-    // Remover controle existente se houver
-    if (drawControlRef.current) {
-      try {
-        map.removeControl(drawControlRef.current);
-        console.log('Removed existing draw control');
-      } catch (e) {
-        console.warn('Could not remove existing draw control:', e);
-      }
-    }
     
     // Criar FeatureGroup para gerenciar as zonas desenhadas PRIMEIRO
     const drawnItems = new L.FeatureGroup();
@@ -113,6 +131,28 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
     drawControlRef.current = drawControl;
     isInitialized.current = true;
     console.log('DrawZones initialized successfully');
+
+    // Remover qualquer botão de rectangle que possa ter sido criado
+    setTimeout(() => {
+      const rectangleButtons = document.querySelectorAll('.leaflet-draw-draw-rectangle');
+      rectangleButtons.forEach(btn => {
+        console.log('Removing rectangle button:', btn);
+        btn.remove();
+      });
+      
+      // Também remover usando outros seletores possíveis
+      const allDrawButtons = document.querySelectorAll('.leaflet-draw-toolbar a');
+      allDrawButtons.forEach(btn => {
+        const title = btn.getAttribute('title') || '';
+        if (title.toLowerCase().includes('rectangle') || 
+            title.toLowerCase().includes('retângulo') ||
+            title.toLowerCase().includes('square') ||
+            title.toLowerCase().includes('quadrado')) {
+          console.log('Removing rectangle/square button by title:', title);
+          btn.remove();
+        }
+      });
+    }, 100);
 
     // Event listeners para desenho
     map.on(L.Draw.Event.CREATED, (event) => {

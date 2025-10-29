@@ -59,7 +59,7 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       position: 'topright',
       draw: {
         polygon: {
-          allowIntersection: false,
+          allowIntersection: true, // Permitir polígonos mais complexos
           showArea: true,
           drawError: {
             color: '#e1e100',
@@ -73,7 +73,8 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
           },
           showLength: true,
           metric: true,
-          feet: false
+          feet: false,
+          minPoints: 3 // Mínimo de pontos, mas permitir quantos quiser acima disso
         },
         rectangle: {
           shapeOptions: {
@@ -124,16 +125,29 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       layer.zoneId = zoneId;
       layer.zoneName = `Zone ${drawnZones.length + 1}`;
       
-      // Para retângulos, garantir visibilidade
+      // Para retângulos, garantir visibilidade ANTES de adicionar ao mapa
       if (layerType === 'rectangle') {
-        layer.setStyle({
+        // Converter bounds para coordenadas de retângulo
+        const bounds = layer.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        
+        // Criar novo retângulo com estilo garantido
+        const newRectangle = L.rectangle(bounds, {
           color: '#10b981',
           fillColor: '#10b981',
           fillOpacity: 0.5,
           weight: 5,
           opacity: 1
         });
-        console.log('🟩 Retângulo criado com estilo visível');
+        
+        // Copiar propriedades do layer original
+        newRectangle.zoneId = zoneId;
+        newRectangle.zoneName = layer.zoneName;
+        
+        // Substituir layer pelo novo retângulo
+        layer = newRectangle;
+        console.log('🟩 Retângulo recriado com estilo visível');
       }
       
       // Calcular área
@@ -145,33 +159,58 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         const bounds = layer.getBounds();
         console.log('📏 Rectangle Bounds:', bounds);
         
-        const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
-        const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
+        // Usar L.GeometryUtil ou calcular área usando fórmulas geodésicas
+        // Criar um polígono temporário para calcular área corretamente
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        const se = L.latLng(sw.lat, ne.lng);
+        const nw = L.latLng(ne.lat, sw.lng);
         
-        console.log('📏 Diferenças:', { latDiff, lngDiff });
+        const tempPolygon = L.polygon([sw, se, ne, nw]);
         
-        area = latDiff * lngDiff * 111000 * 111000;
-        console.log('📊 Área do retângulo:', area.toFixed(0), 'm²');
+        // Calcular área usando método mais preciso
+        // Usar fórmula de área de polígono esférico (aproximação de Haversine)
+        const coords = [sw, se, ne, nw, sw]; // Fechar o polígono
+        area = 0;
+        for (let i = 0; i < coords.length - 1; i++) {
+          const p1 = coords[i];
+          const p2 = coords[i + 1];
+          area += (p2.lng * Math.PI / 180 - p1.lng * Math.PI / 180) * 
+                  (2 + Math.sin(p1.lat * Math.PI / 180) + Math.sin(p2.lat * Math.PI / 180));
+        }
+        area = Math.abs(area) * 6378137 * 6378137 / 2; // Raio da Terra em metros
+        console.log('📊 Área do retângulo calculada:', area.toFixed(0), 'm²');
         
         // Coordenadas dos 4 cantos do retângulo
-        coordinates = [
-          L.latLng(bounds.getSouth(), bounds.getWest()),
-          L.latLng(bounds.getSouth(), bounds.getEast()),
-          L.latLng(bounds.getNorth(), bounds.getEast()),
-          L.latLng(bounds.getNorth(), bounds.getWest())
-        ];
+        coordinates = [sw, se, ne, nw];
+        
+        // Garantir que o retângulo está visível no mapa
+        layer.setStyle({
+          color: '#10b981',
+          fillColor: '#10b981',
+          fillOpacity: 0.5,
+          weight: 5,
+          opacity: 1
+        });
         
       } else if (layerType === 'polygon') {
         const latlngs = layer.getLatLngs();
         console.log('📐 Polygon getLatLngs():', latlngs);
         
-        if (latlngs && latlngs[0]) {
+        if (latlngs && latlngs[0] && Array.isArray(latlngs[0])) {
           coordinates = latlngs[0];
-          const bounds = layer.getBounds();
-          const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
-          const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
-          area = latDiff * lngDiff * 111000 * 111000;
-          console.log('📊 Área do polígono:', area.toFixed(0), 'm²');
+          
+          // Calcular área usando fórmula de área de polígono esférico
+          const coords = [...coordinates, coordinates[0]]; // Fechar o polígono
+          area = 0;
+          for (let i = 0; i < coords.length - 1; i++) {
+            const p1 = coords[i];
+            const p2 = coords[i + 1];
+            area += (p2.lng * Math.PI / 180 - p1.lng * Math.PI / 180) * 
+                    (2 + Math.sin(p1.lat * Math.PI / 180) + Math.sin(p2.lat * Math.PI / 180));
+          }
+          area = Math.abs(area) * 6378137 * 6378137 / 2; // Raio da Terra em metros
+          console.log('📊 Área do polígono calculada:', area.toFixed(0), 'm²');
         }
         
       } else if (layerType === 'circle') {
@@ -198,16 +237,18 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         </div>
       `;
       
-      layer.bindPopup(popupContent);
-      
-      // Adicionar à FeatureGroup
+      // Adicionar à FeatureGroup ANTES de calcular área
       drawnItems.addLayer(layer);
       console.log('✅ Layer adicionada ao FeatureGroup');
       
-      // Para retângulos, garantir que apareça no topo
+      // Para retângulos, garantir que apareça no topo e seja visível
       if (layerType === 'rectangle') {
         layer.bringToFront();
-        console.log('🟩 Retângulo trazido para frente');
+        // Forçar redesenho do mapa
+        if (map) {
+          map.invalidateSize();
+        }
+        console.log('🟩 Retângulo trazido para frente e mapa invalidado');
       }
       
       // Atualizar estado

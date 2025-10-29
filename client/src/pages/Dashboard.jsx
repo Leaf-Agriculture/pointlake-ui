@@ -38,6 +38,8 @@ function Dashboard() {
   const [hasSpatialFilter, setHasSpatialFilter] = useState(false)
   const [filesToShow, setFilesToShow] = useState(20) // Começar com 20 arquivos visíveis
   const filesListRef = useRef(null)
+  const [newFileIds, setNewFileIds] = useState(new Set()) // IDs de arquivos novos (não clicados ainda)
+  const previousFilesRef = useRef([]) // Referência para lista anterior de arquivos
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -129,6 +131,31 @@ function Dashboard() {
         const dateB = new Date(getDate(b)).getTime()
         return dateB - dateA // Ordenar descendente (mais recente primeiro)
       })
+      
+      // Detectar novos arquivos comparando com a lista anterior
+      const previousFileIds = new Set(previousFilesRef.current.map(f => f.id || f.uuid))
+      const currentFileIds = new Set(sortedFiles.map(f => f.id || f.uuid))
+      
+      // Arquivos novos são aqueles que estão na lista atual mas não estavam na anterior
+      const newlyAddedIds = sortedFiles
+        .filter(f => {
+          const fileId = f.id || f.uuid
+          return fileId && !previousFileIds.has(fileId)
+        })
+        .map(f => f.id || f.uuid)
+      
+      // Adicionar novos IDs ao conjunto de arquivos novos (mantendo os já existentes)
+      if (newlyAddedIds.length > 0) {
+        setNewFileIds(prev => {
+          const updated = new Set(prev)
+          newlyAddedIds.forEach(id => updated.add(id))
+          return updated
+        })
+        console.log('✨ New files detected:', newlyAddedIds)
+      }
+      
+      // Atualizar referência anterior
+      previousFilesRef.current = sortedFiles
       
       setFiles(sortedFiles)
       // Reset filesToShow quando novos arquivos são carregados
@@ -710,8 +737,19 @@ function Dashboard() {
             {/* Lista de Arquivos */}
             {files && files.length > 0 ? (
               <div className="space-y-2">
-                {files.slice(0, filesToShow).map((file, idx) => (
-                  <div key={idx} className="bg-zinc-800 rounded border border-zinc-700 hover:border-zinc-600 transition duration-150">
+                {files.slice(0, filesToShow).map((file, idx) => {
+                  const fileId = file.id || file.uuid
+                  const isNew = fileId && newFileIds.has(fileId)
+                  
+                  return (
+                  <div 
+                    key={idx} 
+                    className={`rounded border transition duration-150 ${
+                      isNew 
+                        ? 'bg-blue-950/50 border-blue-600 hover:border-blue-500 ring-2 ring-blue-500/50' 
+                        : 'bg-zinc-800 border-zinc-700 hover:border-zinc-600'
+                    }`}
+                  >
                     <div className="p-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
@@ -752,6 +790,12 @@ function Dashboard() {
                             onClick={() => {
                               const fileId = file.id || file.uuid;
                               if (fileId) {
+                                // Remover highlight quando clicado
+                                setNewFileIds(prev => {
+                                  const updated = new Set(prev)
+                                  updated.delete(fileId)
+                                  return updated
+                                })
                                 loadFileSummary(fileId);
                                 openMenu('summary');
                               }
@@ -774,6 +818,12 @@ function Dashboard() {
                             onClick={async () => {
                               const fileId = file.id || file.uuid;
                               if (fileId) {
+                                // Remover highlight quando clicado
+                                setNewFileIds(prev => {
+                                  const updated = new Set(prev)
+                                  updated.delete(fileId)
+                                  return updated
+                                })
                                 setSelectedFileId(fileId);
                                 const query = `SELECT * FROM pointlake_file_${fileId} LIMIT 10`;
                                 setSqlQuery(query);
@@ -818,7 +868,8 @@ function Dashboard() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
                 {filesToShow < files.length && (
                   <div className="text-xs text-zinc-400 text-center py-2 flex items-center justify-center gap-2">
                     <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">

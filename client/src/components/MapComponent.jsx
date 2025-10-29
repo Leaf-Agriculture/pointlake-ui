@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet.markercluster'
+import 'leaflet.heat'
 
 // Configuração dos ícones do Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -28,6 +29,80 @@ const parsePolygonWKT = (wktString) => {
     console.error('Erro ao fazer parse do POLYGON:', error)
     return null
   }
+}
+
+// Função para criar heatmap com interpolação avançada
+const createAdvancedHeatmap = (data, mapInstance) => {
+  if (!data || !Array.isArray(data) || data.length === 0) return null
+  
+  console.log(`Creating advanced heatmap with ${data.length} points`)
+  
+  // Preparar dados para o heatmap
+  const heatmapData = data.map((item, index) => {
+    let coords = null
+    
+    // Verificar se tem geometria binária
+    if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+      coords = decodeBinaryGeometry(item.geometry)
+    }
+    // Verificar coordenadas tradicionais
+    else if (item.latitude && item.longitude) {
+      coords = [item.latitude, item.longitude]
+    } else if (item.lat && item.lng) {
+      coords = [item.lat, item.lng]
+    }
+    
+    if (coords) {
+      // Calcular intensidade baseada em diferentes fatores
+      let intensity = 1.0
+      
+      // Fator baseado no tipo de operação
+      if (item.operationType === 'CropProtection') {
+        intensity = 1.2
+      } else if (item.operationType === 'Planting') {
+        intensity = 1.5
+      } else if (item.operationType === 'Harvesting') {
+        intensity = 1.8
+      }
+      
+      // Fator baseado na taxa aplicada
+      if (item.appliedRate && item.appliedRate > 0) {
+        intensity *= Math.min(1 + (item.appliedRate / 100), 2.0)
+      }
+      
+      // Fator baseado na área
+      if (item.area && item.area > 0) {
+        intensity *= Math.min(1 + (item.area * 100), 1.5)
+      }
+      
+      return [coords[0], coords[1], Math.min(intensity, 3.0)]
+    }
+    
+    return null
+  }).filter(Boolean)
+  
+  if (heatmapData.length === 0) return null
+  
+  console.log(`Heatmap data prepared: ${heatmapData.length} valid points`)
+  
+  // Configurações avançadas do heatmap - adaptativas para qualquer número de pontos
+  const heatmapOptions = {
+    radius: data.length > 10000 ? 15 : data.length > 5000 ? 20 : data.length > 1000 ? 25 : data.length > 100 ? 30 : 40,
+    blur: data.length > 10000 ? 10 : data.length > 5000 ? 15 : data.length > 1000 ? 20 : data.length > 100 ? 25 : 30,
+    maxZoom: 18,
+    max: 3.0,
+    minOpacity: data.length < 100 ? 0.3 : 0.1, // Maior opacidade para poucos pontos
+    gradient: {
+      0.0: '#0000ff',  // Azul para baixa intensidade
+      0.2: '#00ffff',  // Ciano
+      0.4: '#00ff00',  // Verde
+      0.6: '#ffff00',  // Amarelo
+      0.8: '#ff8000',  // Laranja
+      1.0: '#ff0000'   // Vermelho para alta intensidade
+    }
+  }
+  
+  return L.heatLayer(heatmapData, heatmapOptions)
 }
 
 // Função para decodificar geometria binária (base64)
@@ -199,13 +274,52 @@ function MapComponent({ data, mapRef: externalMapRef }) {
           markersRef.current.push(polygon)
           
           // Ajustar o zoom para mostrar o polígono
-          mapInstance.current.fitBounds(polygon.getBounds().pad(0.1))
+          mapInstance.current.fitBounds(polygon.getBounds().pad(0.05))
         }
       } else if (Array.isArray(data)) {
         // Otimização para grandes datasets
         const pointCount = data.length;
         console.log(`Renderizando ${pointCount} pontos no mapa`);
         
+        // Limpar marcadores anteriores
+        markersRef.current.forEach(marker => {
+          if (marker.remove) {
+            mapInstance.current.removeLayer(marker);
+          }
+        });
+        markersRef.current = [];
+        
+        // Sempre usar heatmap avançado para qualquer número de pontos
+        console.log('🔥 Usando heatmap avançado para visualização');
+        
+        const heatmapLayer = createAdvancedHeatmap(data, mapInstance.current);
+        if (heatmapLayer) {
+          mapInstance.current.addLayer(heatmapLayer);
+          markersRef.current.push(heatmapLayer);
+          console.log(`✅ Heatmap avançado criado com ${pointCount} pontos`);
+          
+          // Ajustar zoom para mostrar a área dos dados
+          const bounds = L.latLngBounds();
+          data.forEach(item => {
+            let coords = null;
+            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+              coords = decodeBinaryGeometry(item.geometry);
+            } else if (item.latitude && item.longitude) {
+              coords = [item.latitude, item.longitude];
+            } else if (item.lat && item.lng) {
+              coords = [item.lat, item.lng];
+            }
+            if (coords) {
+              bounds.extend(coords);
+            }
+          });
+          
+          if (!bounds.isEmpty()) {
+            mapInstance.current.fitBounds(bounds.pad(0.05)); // Reduzir padding para foco mais próximo
+          }
+        }
+        
+        // Manter clusters como fallback para datasets muito grandes
         if (pointCount > 5000) {
           // Para mais de 5000 pontos, usar MarkerCluster
           const markers = L.markerClusterGroup({
@@ -300,7 +414,7 @@ function MapComponent({ data, mapRef: externalMapRef }) {
           
           // Ajustar zoom
           if (markers.getBounds && markers.getBounds().isValid()) {
-            mapInstance.current.fitBounds(markers.getBounds().pad(0.1));
+            mapInstance.current.fitBounds(markers.getBounds().pad(0.05));
           }
           
         } else if (pointCount > 1000) {
@@ -399,7 +513,7 @@ function MapComponent({ data, mapRef: externalMapRef }) {
         // Ajustar o zoom para mostrar todos os marcadores
         if (markersRef.current.length > 0) {
           const group = L.featureGroup(markersRef.current)
-          mapInstance.current.fitBounds(group.getBounds().pad(0.1))
+          mapInstance.current.fitBounds(group.getBounds().pad(0.05))
         }
       } else if (data && typeof data === 'object') {
         // Se os dados não são um array, mostrar estrutura

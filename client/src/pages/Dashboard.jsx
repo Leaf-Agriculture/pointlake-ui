@@ -131,7 +131,7 @@ function Dashboard() {
       setFileDetails(response.data)
     } catch (err) {
       console.error('Erro ao carregar detalhes do arquivo:', err)
-      setError(getErrorMessage(err, 'Erro ao carregar detalhes do arquivo'))
+      setError(getErrorMessage(err, 'Error loading file details'))
     } finally {
       setLoadingFileDetails(false)
     }
@@ -158,7 +158,7 @@ function Dashboard() {
       })
     } catch (err) {
       console.error('Erro ao carregar summary do arquivo:', err)
-      setError(getErrorMessage(err, 'Erro ao carregar summary do arquivo'))
+      setError(getErrorMessage(err, 'Error loading file summary'))
     } finally {
       setLoadingFileSummary(false)
     }
@@ -167,7 +167,7 @@ function Dashboard() {
   // Função para executar query em arquivo específico
   const executeFileQuery = async () => {
     if (!fileQuery.trim() || !selectedFileId) {
-      setError('Por favor, selecione um arquivo e digite uma query SQL')
+      setError('Please select a file and enter a SQL query')
       return
     }
 
@@ -227,7 +227,7 @@ function Dashboard() {
       }
     } catch (err) {
       console.error('Erro na query do arquivo:', err)
-      setError(getErrorMessage(err, 'Erro ao executar query do arquivo'))
+      setError(getErrorMessage(err, 'Error executing file query'))
     } finally {
       setLoadingQuery(false)
     }
@@ -271,7 +271,7 @@ function Dashboard() {
   }
 
   // Função helper para extrair mensagem de erro
-  const getErrorMessage = (err, defaultMessage = 'Erro ao processar requisição') => {
+  const getErrorMessage = (err, defaultMessage = 'Error processing request') => {
     if (err.response?.data) {
       const data = err.response.data
       if (typeof data === 'string') {
@@ -405,9 +405,20 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, isAuthenticated])
 
+  // Auto-refresh files every 30 seconds
+  useEffect(() => {
+    if (!isAuthenticated) return
+    
+    const interval = setInterval(() => {
+      loadFiles()
+    }, 30000) // 30 seconds
+    
+    return () => clearInterval(interval)
+  }, [isAuthenticated])
+
   const handleQuery = async () => {
     if (!sqlQuery.trim()) {
-      setError('Por favor, digite uma query SQL')
+      setError('Please enter a SQL query')
       return
     }
 
@@ -447,7 +458,7 @@ function Dashboard() {
       setResults(response.data)
     } catch (err) {
       console.error('Erro na query:', err)
-      setError(getErrorMessage(err, 'Erro ao executar query SQL'))
+      setError(getErrorMessage(err, 'Error executing SQL query'))
       setQueryExecutionTime(null)
     } finally {
       setLoading(false)
@@ -463,8 +474,8 @@ function Dashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando...</p>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-zinc-400">Loading...</p>
         </div>
       </div>
     )
@@ -529,33 +540,7 @@ function Dashboard() {
       <div className="flex-1 flex overflow-hidden">
         {/* Painel Lateral Esquerdo - Arquivos */}
         <div className="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-          <div className="p-4 border-b border-zinc-800">
-            <h2 className="text-base font-semibold text-zinc-200 flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
-              </svg>
-              Processed Files
-            </h2>
-          </div>
-          
           <div className="flex-1 overflow-y-auto p-4">
-            {/* Botões de Ação */}
-            <div className="mb-4">
-              <button
-                onClick={async () => { await loadBatches(); await loadFiles(); }}
-                disabled={loadingBatches || loadingFiles}
-                className="w-full text-sm bg-zinc-800 text-zinc-200 px-3 py-2 rounded hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-zinc-700 hover:border-zinc-600"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  {(loadingBatches || loadingFiles) ? 'Loading...' : 'Refresh Files'}
-                </span>
-              </button>
-            </div>
-
             {/* Draw Zones */}
             <div className="mb-4">
               <DrawZones 
@@ -647,7 +632,7 @@ function Dashboard() {
                                   setResults(response.data);
                                 } catch (err) {
                                   console.error('Erro na query:', err);
-                                  setError(getErrorMessage(err, 'Erro ao executar query'));
+                                  setError(getErrorMessage(err, 'Error executing query'));
                                 }
                                 setLoading(false);
                               }

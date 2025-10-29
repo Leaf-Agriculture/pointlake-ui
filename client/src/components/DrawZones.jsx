@@ -138,41 +138,46 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
       
       // Calcular área
       let area = 0;
-      console.log('🔍 Tipo de layer:', layerType);
-      console.log('🔍 Layer object:', layer);
-      console.log('🔍 getLatLngs exists?', typeof layer.getLatLngs);
-      console.log('🔍 getBounds exists?', typeof layer.getBounds);
+      let coordinates = null;
       
-      if (layerType === 'polygon' || layerType === 'rectangle') {
-        try {
-          const latlngs = layer.getLatLngs();
-          console.log('📐 getLatLngs() retornou:', latlngs);
-          
-          if (latlngs && latlngs[0]) {
-            console.log('📐 Coordenadas array:', latlngs[0].length, 'pontos');
-            
-            // Área aproximada em m² (simplificada)
-            const bounds = layer.getBounds();
-            console.log('📏 Bounds:', {
-              north: bounds.getNorth(),
-              south: bounds.getSouth(),
-              east: bounds.getEast(),
-              west: bounds.getWest()
-            });
-            
-            const latDiff = bounds.getNorth() - bounds.getSouth();
-            const lngDiff = bounds.getEast() - bounds.getWest();
-            console.log('📏 Diferenças:', { latDiff, lngDiff });
-            
-            area = Math.abs(latDiff * lngDiff * 111000 * 111000);
-            console.log('📊 Área calculada:', area.toFixed(0), 'm²');
-          }
-        } catch (e) {
-          console.error('❌ Erro ao calcular área:', e);
+      if (layerType === 'rectangle') {
+        // Para retângulos, usar bounds diretamente
+        const bounds = layer.getBounds();
+        console.log('📏 Rectangle Bounds:', bounds);
+        
+        const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
+        const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
+        
+        console.log('📏 Diferenças:', { latDiff, lngDiff });
+        
+        area = latDiff * lngDiff * 111000 * 111000;
+        console.log('📊 Área do retângulo:', area.toFixed(0), 'm²');
+        
+        // Coordenadas dos 4 cantos do retângulo
+        coordinates = [
+          L.latLng(bounds.getSouth(), bounds.getWest()),
+          L.latLng(bounds.getSouth(), bounds.getEast()),
+          L.latLng(bounds.getNorth(), bounds.getEast()),
+          L.latLng(bounds.getNorth(), bounds.getWest())
+        ];
+        
+      } else if (layerType === 'polygon') {
+        const latlngs = layer.getLatLngs();
+        console.log('📐 Polygon getLatLngs():', latlngs);
+        
+        if (latlngs && latlngs[0]) {
+          coordinates = latlngs[0];
+          const bounds = layer.getBounds();
+          const latDiff = Math.abs(bounds.getNorth() - bounds.getSouth());
+          const lngDiff = Math.abs(bounds.getEast() - bounds.getWest());
+          area = latDiff * lngDiff * 111000 * 111000;
+          console.log('📊 Área do polígono:', area.toFixed(0), 'm²');
         }
+        
       } else if (layerType === 'circle') {
         const radius = layer.getRadius();
         area = Math.PI * radius * radius;
+        coordinates = layer.getLatLng();
         console.log('⭕ Círculo - raio:', radius, 'área:', area.toFixed(0), 'm²');
       }
 
@@ -211,9 +216,11 @@ const DrawZones = ({ onZoneCreated, onZoneDeleted, onQueryByZone, zones = [], ma
         name: layer.zoneName,
         type: layerType,
         layer: layer,
-        coordinates: layer.getLatLngs ? layer.getLatLngs()[0] : layer.getLatLng(),
+        coordinates: coordinates || (layer.getLatLngs ? layer.getLatLngs()[0] : layer.getLatLng()),
         area: area
       };
+      
+      console.log('📦 NewZone object:', newZone);
       
       setDrawnZones(prev => {
         const updated = [...prev, newZone];

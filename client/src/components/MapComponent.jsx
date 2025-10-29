@@ -102,6 +102,12 @@ const createAdvancedHeatmap = (data, mapInstance) => {
     }
   }
   
+  // Verificar se L.heatLayer está disponível
+  if (!L.heatLayer) {
+    console.error('leaflet.heat plugin não está carregado. L.heatLayer não está disponível.')
+    return null
+  }
+  
   return L.heatLayer(heatmapData, heatmapOptions)
 }
 

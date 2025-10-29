@@ -760,6 +760,21 @@ function Dashboard() {
                           <div className="text-xs text-zinc-400 font-mono mt-1">
                             ID: {file.id || file.uuid || 'N/A'}
                           </div>
+                          {file.status && (
+                            <div className="mt-1">
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                file.status === 'PROCESSED'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  : file.status === 'PROCESSING' || file.status === 'RECEIVED'
+                                  ? 'bg-orange-950 text-orange-300 border border-orange-800'
+                                  : file.status === 'FAILED'
+                                  ? 'bg-red-950 text-red-300 border border-red-800'
+                                  : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                              }`}>
+                                {file.status}
+                              </span>
+                            </div>
+                          )}
                           <div className="text-xs text-zinc-400 flex items-center gap-1">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

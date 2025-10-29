@@ -177,6 +177,8 @@ function MapComponent({ data, mapRef: externalMapRef }) {
   const mapRef = externalMapRef || internalMapRef
   const mapInstance = useRef(null)
   const markersRef = useRef([])
+  const baseLayersRef = useRef({})
+  const layersControlRef = useRef(null)
 
   // Expor a instância do mapa através da referência externa
   useEffect(() => {
@@ -211,16 +213,53 @@ function MapComponent({ data, mapRef: externalMapRef }) {
       preferCanvas: true
     }).setView([-23.5505, -46.6333], 3)
 
-    // Adiciona tiles do OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+    // Criar camada de mapa padrão (OpenStreetMap)
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    })
+
+    // Criar camada de satélite (Esri World Imagery)
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '© Esri',
+      maxZoom: 19
+    })
+
+    // Adicionar camada padrão ao mapa
+    osmLayer.addTo(mapInstance.current)
+
+    // Armazenar referências das camadas
+    baseLayersRef.current = {
+      'Mapa': osmLayer,
+      'Satélite': satelliteLayer
+    }
+
+    // Criar controle de camadas para alternar entre mapa e satélite
+    // Posicionado em 'topleft' para não conflitar com o controle de desenho em 'topright'
+    layersControlRef.current = L.control.layers(baseLayersRef.current, null, {
+      position: 'topleft',
+      collapsed: true
     }).addTo(mapInstance.current)
 
-    console.log('Leaflet map initialized successfully');
+    console.log('Leaflet map initialized successfully with satellite layer control');
 
     // Cleanup: remover mapa quando componente desmontar
     return () => {
       if (mapInstance.current) {
+        // Remover controle de camadas
+        if (layersControlRef.current) {
+          mapInstance.current.removeControl(layersControlRef.current)
+          layersControlRef.current = null
+        }
+
+        // Remover todas as camadas base
+        Object.values(baseLayersRef.current).forEach(layer => {
+          if (layer && mapInstance.current.hasLayer(layer)) {
+            mapInstance.current.removeLayer(layer)
+          }
+        })
+        baseLayersRef.current = {}
+
         // Remover todos os marcadores
         markersRef.current.forEach(marker => marker.remove())
         markersRef.current = []

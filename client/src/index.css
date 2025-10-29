@@ -2,8 +2,8 @@
 @import url('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css');
 @import url('https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css');
 @import url('https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css');
-/* Leaflet Heat CSS - usando CDN confiável */
-@import url('https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.css');
+
+/* Leaflet Heat - não precisa de CSS externo, funciona apenas com JS */
 
 @tailwind base;
 @tailwind components;

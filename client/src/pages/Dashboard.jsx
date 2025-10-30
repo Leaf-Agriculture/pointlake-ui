@@ -1100,6 +1100,13 @@ function Dashboard() {
                     summary.applied_rate !== undefined ||
                     (summary.properties && Array.isArray(summary.properties) && summary.properties.some(p => p === 'appliedRate' || p === 'applied_rate'))
                   )
+                  const hasWetMass = summary && (
+                    summary.wetMass !== undefined ||
+                    summary.wetmass !== undefined ||
+                    summary.wet_mass !== undefined ||
+                    (summary.properties && Array.isArray(summary.properties) && summary.properties.some(p => p === 'wetMass' || p === 'wetmass' || p === 'wet_mass'))
+                  )
+                  const operationType = hasWetMass ? 'harvest' : hasAppliedRate ? 'spray' : null
                   
                   return (
                   <div 
@@ -1158,13 +1165,30 @@ function Dashboard() {
                                   )}
                                 </div>
                               )}
-                              {/* Applied Rate Indicator */}
-                              {hasAppliedRate && (
-                                <div className="flex items-center gap-1.5 mt-2 px-2 py-1 bg-blue-950/30 border border-blue-800 rounded text-xs">
-                                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                  </svg>
-                                  <span className="text-blue-300 font-medium">Operation Type: Spray</span>
+                              {/* Operation Type Indicator */}
+                              {operationType && (
+                                <div className={`flex items-center gap-1.5 mt-2 px-2 py-1 rounded text-xs border ${
+                                  operationType === 'harvest'
+                                    ? 'bg-orange-950/30 border-orange-800'
+                                    : 'bg-blue-950/30 border-blue-800'
+                                }`}>
+                                  {operationType === 'harvest' ? (
+                                    <>
+                                      <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                      </svg>
+                                      <span className={`font-medium ${
+                                        operationType === 'harvest' ? 'text-orange-300' : 'text-blue-300'
+                                      }`}>Operation Type: Harvest</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                      </svg>
+                                      <span className="text-blue-300 font-medium">Operation Type: Spray</span>
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -663,6 +663,66 @@ function Dashboard() {
     setSqlQuery(unionQuery)
   }
 
+  // Função para adicionar UNION ALL de um arquivo específico à query atual
+  const addFileToUnionAll = (fileId) => {
+    const currentQuery = sqlQuery.trim()
+    
+    // Se não houver query, criar uma base
+    let queryWithoutLimit = currentQuery || 'SELECT * FROM fields'
+    let limitClause = ''
+    let whereClause = ''
+    
+    // Extrair LIMIT
+    const limitMatch = queryWithoutLimit.match(/LIMIT\s+(\d+)/i)
+    if (limitMatch) {
+      limitClause = limitMatch[0]
+      queryWithoutLimit = queryWithoutLimit.replace(/LIMIT\s+\d+/i, '').trim()
+    }
+
+    // Extrair WHERE
+    const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
+    if (whereMatch) {
+      whereClause = whereMatch[1].trim()
+      queryWithoutLimit = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+    }
+
+    // Obter o SELECT base
+    let selectBase = 'SELECT *'
+    const fromMatch = queryWithoutLimit.match(/SELECT\s+(.+?)\s+FROM/i)
+    if (fromMatch) {
+      selectBase = `SELECT ${fromMatch[1]}`
+    }
+
+    // Criar query para este arquivo específico
+    let fileQuery = `${selectBase} FROM pointlake_file_${fileId}`
+    if (whereClause) {
+      fileQuery += ` WHERE ${whereClause}`
+    }
+
+    // Verificar se já existe UNION ALL na query
+    if (currentQuery.toUpperCase().includes('UNION ALL')) {
+      // Adicionar à query existente
+      const unionQuery = `${currentQuery} UNION ALL ${fileQuery}`
+      setSqlQuery(unionQuery)
+    } else {
+      // Criar nova query UNION ALL com o arquivo atual e este novo
+      // Primeiro, verificar se há uma query base válida
+      let baseQuery = queryWithoutLimit
+      if (!baseQuery || baseQuery === 'SELECT * FROM fields') {
+        baseQuery = `${selectBase} FROM pointlake_file_${fileId}`
+      } else {
+        // Substituir FROM para usar o primeiro arquivo como base
+        const fromMatch2 = baseQuery.match(/FROM\s+(\S+)/i)
+        if (fromMatch2) {
+          baseQuery = baseQuery.replace(/FROM\s+\S+/i, `FROM ${fromMatch2[1]}`)
+        }
+      }
+      
+      const unionQuery = `${baseQuery} UNION ALL ${fileQuery}`
+      setSqlQuery(unionQuery)
+    }
+  }
+
   // Carregar batches e arquivos ao montar o componente
   useEffect(() => {
     if (token && getEnvironment && isAuthenticated) {
@@ -1102,6 +1162,27 @@ function Dashboard() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
                             )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const fileId = file.id || file.uuid;
+                              if (fileId) {
+                                // Remover highlight quando clicado
+                                setNewFileIds(prev => {
+                                  const updated = new Set(prev)
+                                  updated.delete(fileId)
+                                  return updated
+                                })
+                                addFileToUnionAll(fileId);
+                              }
+                            }}
+                            disabled={!isProcessed}
+                            className="text-xs bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-yellow-500"
+                            title={isProcessed ? "Add to UNION ALL" : "File must be PROCESSED to add to UNION ALL"}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
                           </button>
                         </div>
                       </div>

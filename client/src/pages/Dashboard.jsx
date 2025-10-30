@@ -1032,6 +1032,11 @@ function Dashboard() {
         sql = sqlQuery
       }
 
+      // Se há zonas desenhadas, aplicar filtro espacial após UNION ALL
+      if (drawnZones.length > 0) {
+        sql = applySpatialFilterToQuery(sql)
+      }
+
       const env = getEnvironment ? getEnvironment() : 'prod'
       const apiUrl = leafApiUrl('/api/v2/query', env)
       const response = await axios.get(apiUrl, {
@@ -1063,6 +1068,77 @@ function Dashboard() {
       setQueryExecutionTime(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Função para aplicar filtro espacial após UNION ALL (padrão correto)
+  const applySpatialFilterToQuery = (query) => {
+    if (drawnZones.length === 0) return query
+
+    // Usar apenas a primeira zona (se houver múltiplas, pode ser expandido depois)
+    const zone = drawnZones[0]
+    const wkt = geometryToWKT(zone)
+    if (!wkt) return query
+
+    // Extrair LIMIT da query original
+    let queryWithoutLimit = query.trim()
+    let limitClause = ''
+    const limitMatch = queryWithoutLimit.match(/LIMIT\s+(\d+)/i)
+    if (limitMatch) {
+      limitClause = limitMatch[0]
+      queryWithoutLimit = queryWithoutLimit.replace(/LIMIT\s+\d+/i, '').trim()
+    }
+
+    // Construir filtro espacial
+    let spatialFilter
+    if (zone.type === 'circle') {
+      const center = zone.layer.getLatLng()
+      const radiusInMeters = Math.round(zone.layer.getRadius())
+      spatialFilter = `ST_DWithin(ST_SetSRID(ST_GeomFromWKB(t.geometry), 4326), ST_Point(${center.lng}, ${center.lat}), ${radiusInMeters}, true)`
+    } else {
+      // Para polígonos, usar ST_Intersects com ST_SetSRID corretamente
+      spatialFilter = `ST_Intersects(ST_SetSRID(ST_GeomFromWKB(t.geometry), 4326), ST_SetSRID(ST_GeomFromText('${wkt}'), 4326))`
+    }
+
+    // Verificar se já tem UNION ALL na query
+    if (queryWithoutLimit.toUpperCase().includes('UNION ALL')) {
+      // Envolver a query UNION ALL em uma subquery e aplicar o filtro externamente
+      const finalQuery = `SELECT *\nFROM (\n  ${queryWithoutLimit}\n) t\nWHERE ${spatialFilter}${limitClause ? ` ${limitClause}` : ''}`
+      return finalQuery
+    } else {
+      // Se não tem UNION ALL, criar um com arquivos processados
+      const processedFiles = files.filter(f => f.status === 'PROCESSED')
+      if (processedFiles.length === 0) {
+        // Sem arquivos processados, aplicar filtro na query atual
+        const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
+        if (whereMatch) {
+          queryWithoutLimit = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+        }
+        const finalQuery = `${queryWithoutLimit} WHERE ${spatialFilter.replace('t.geometry', 'geometry')}${limitClause ? ` ${limitClause}` : ''}`
+        return finalQuery
+      }
+
+      // Extrair SELECT base
+      let selectBase = 'SELECT *'
+      const fromMatch = queryWithoutLimit.match(/SELECT\s+(.+?)\s+FROM/i)
+      if (fromMatch) {
+        selectBase = `SELECT ${fromMatch[1]}`
+      }
+
+      // Remover WHERE se existir (será aplicado no SELECT externo)
+      let baseQuery = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+
+      // Gerar queries para cada arquivo
+      const fileQueries = processedFiles.map(file => {
+        const fileId = file.id || file.uuid
+        return `${selectBase} FROM \`spark_catalog\`.\`default\`.\`pointlake_file_${fileId}\``
+      })
+
+      // Combinar com UNION ALL e envolver em subquery
+      const unionQuery = fileQueries.join('\n  UNION ALL\n  ')
+      const finalQuery = `SELECT *\nFROM (\n  ${unionQuery}\n) t\nWHERE ${spatialFilter}${limitClause ? ` ${limitClause}` : ''}`
+      
+      return finalQuery
     }
   }
 

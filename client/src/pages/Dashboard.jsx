@@ -42,6 +42,7 @@ function Dashboard() {
   const previousFilesRef = useRef([]) // Referência para lista anterior de arquivos
   const [queryHistory, setQueryHistory] = useState([]) // Histórico de queries
   const [showHistory, setShowHistory] = useState(false) // Mostrar/esconder histórico
+  const [fileSummaries, setFileSummaries] = useState({}) // Summaries de todos os arquivos { fileId: summary }
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -190,6 +191,40 @@ function Dashboard() {
       setFiles(sortedFiles)
       // Reset filesToShow quando novos arquivos são carregados
       setFilesToShow(20)
+
+      // Buscar summaries automaticamente para arquivos processados
+      const processedFiles = sortedFiles.filter(f => f.status === 'PROCESSED')
+      if (processedFiles.length > 0) {
+        // Buscar summaries em paralelo
+        const summaryPromises = processedFiles.map(async (file) => {
+          const fileId = file.id || file.uuid
+          if (!fileId) return null
+          
+          try {
+            const env = getEnvironment ? getEnvironment() : 'prod'
+            const apiUrl = leafApiUrl(`/api/v2/files/${fileId}/summary`, env)
+            const response = await axios.get(apiUrl, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            })
+            return { fileId, summary: response.data }
+          } catch (err) {
+            console.error(`Error loading summary for file ${fileId}:`, err)
+            return null
+          }
+        })
+
+        const summaryResults = await Promise.all(summaryPromises)
+        const summariesMap = {}
+        summaryResults.forEach(result => {
+          if (result && result.fileId) {
+            summariesMap[result.fileId] = result.summary
+          }
+        })
+        
+        setFileSummaries(prev => ({ ...prev, ...summariesMap }))
+      }
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err)
       setFiles([])
@@ -1055,6 +1090,16 @@ function Dashboard() {
                   const fileId = file.id || file.uuid
                   const isNew = fileId && newFileIds.has(fileId)
                   const isProcessed = file.status === 'PROCESSED'
+                  const summary = fileSummaries[fileId] || null
+                  
+                  // Extrair informações do summary
+                  const startDate = summary?.start || summary?.startDate || summary?.startTime || null
+                  const endDate = summary?.end || summary?.endDate || summary?.endTime || null
+                  const hasAppliedRate = summary && (
+                    summary.appliedRate !== undefined || 
+                    summary.applied_rate !== undefined ||
+                    (summary.properties && Array.isArray(summary.properties) && summary.properties.some(p => p === 'appliedRate' || p === 'applied_rate'))
+                  )
                   
                   return (
                   <div 
@@ -1089,7 +1134,42 @@ function Dashboard() {
                               </span>
                             </div>
                           )}
-                          <div className="text-xs text-zinc-400 flex items-center gap-1">
+                          {/* Informações do Summary */}
+                          {summary && (
+                            <div className="mt-2 space-y-1">
+                              {/* Start Date e End Date */}
+                              {(startDate || endDate) && (
+                                <div className="text-xs text-zinc-400 space-y-0.5">
+                                  {startDate && (
+                                    <div className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      <span>Start: {new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                    </div>
+                                  )}
+                                  {endDate && (
+                                    <div className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      <span>End: {new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {/* Applied Rate Indicator */}
+                              {hasAppliedRate && (
+                                <div className="flex items-center gap-1.5 mt-2 px-2 py-1 bg-blue-950/30 border border-blue-800 rounded text-xs">
+                                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                  </svg>
+                                  <span className="text-blue-300 font-medium">Operation Type: Spray</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div className="text-xs text-zinc-400 flex items-center gap-1 mt-1">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>

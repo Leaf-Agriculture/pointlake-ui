@@ -10,19 +10,11 @@ test.describe('Upload Status Feature', () => {
     
     // Aguardar dashboard
     await page.waitForURL('/dashboard', { timeout: 10000 });
+    await page.waitForTimeout(1000);
     
-    // Ir para aba Upload ZIP
-    await page.click('text=Upload ZIP');
-    await page.waitForTimeout(500);
-    
-    // Verificar elementos
-    await expect(page.locator('text=Upload de Arquivos ZIP')).toBeVisible();
+    // Verificar elementos de upload (que estão sempre visíveis no dashboard)
+    await expect(page.locator('text=Upload File')).toBeVisible();
     await expect(page.locator('input[type="file"]')).toBeVisible();
-    await expect(page.locator('text=Selecione um arquivo ZIP')).toBeVisible();
-    
-    // Verificar informações
-    await expect(page.locator('text=Apenas arquivos ZIP são aceitos')).toBeVisible();
-    await expect(page.locator('text=Tamanho máximo: 50MB')).toBeVisible();
     
     console.log('Interface de upload carregada!');
   });
@@ -36,10 +28,7 @@ test.describe('Upload Status Feature', () => {
     
     // Aguardar dashboard
     await page.waitForURL('/dashboard', { timeout: 10000 });
-    
-    // Ir para aba Upload ZIP
-    await page.click('text=Upload ZIP');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
     
     // Verificar que o input aceita apenas .zip
     const fileInput = page.locator('input[type="file"]');
@@ -49,7 +38,7 @@ test.describe('Upload Status Feature', () => {
     console.log('Validação de formato funcionando!');
   });
 
-  test('should have status check button after upload', async ({ page }) => {
+  test('should have upload button', async ({ page }) => {
     // Login
     await page.goto('/login');
     await page.fill('input[type="text"]', 'luiz@withleaf.io');
@@ -58,19 +47,16 @@ test.describe('Upload Status Feature', () => {
     
     // Aguardar dashboard
     await page.waitForURL('/dashboard', { timeout: 10000 });
+    await page.waitForTimeout(1000);
     
-    // Ir para aba Upload ZIP
-    await page.click('text=Upload ZIP');
-    await page.waitForTimeout(500);
+    // Verificar se o botão de upload existe
+    const uploadButton = page.locator('button:has-text("Upload File")');
+    await expect(uploadButton).toBeVisible();
     
-    // Verificar se o botão de status aparece quando há um conversionId
-    // Note: Este teste verifica se o botão aparece, não o upload real
-    const statusButton = page.locator('text=Verificar Status do Processamento');
-    
-    console.log('Interface de status presente!');
+    console.log('Botão de upload presente!');
   });
 
-  test('should display status information', async ({ page }) => {
+  test('should display file list', async ({ page }) => {
     // Login
     await page.goto('/login');
     await page.fill('input[type="text"]', 'luiz@withleaf.io');
@@ -79,16 +65,13 @@ test.describe('Upload Status Feature', () => {
     
     // Aguardar dashboard
     await page.waitForURL('/dashboard', { timeout: 10000 });
+    await page.waitForTimeout(2000);
     
-    // Ir para aba Upload ZIP
-    await page.click('text=Upload ZIP');
-    await page.waitForTimeout(500);
+    // Verificar se há área de lista de arquivos (pode estar vazia)
+    const filesList = page.locator('[class*="space-y-2"]').first();
+    await expect(filesList).toBeVisible();
     
-    // Verificar elementos informativos
-    await expect(page.locator('text=Informações sobre upload:')).toBeVisible();
-    await expect(page.locator('text=Formatos aceitos: arquivos de máquinas agrícolas')).toBeVisible();
-    
-    console.log('Informações exibidas corretamente!');
+    console.log('Lista de arquivos exibida!');
   });
 });
 

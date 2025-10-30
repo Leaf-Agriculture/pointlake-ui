@@ -6,7 +6,7 @@ test.describe('Login Flow', () => {
     await page.goto('/login');
     
     // Aguardar elementos da página de login
-    await expect(page.locator('h1')).toContainText('Leaf Dashboard');
+    await expect(page.locator('h1')).toContainText('Point Lake GIS Studio');
     
     // Preencher credenciais
     await page.fill('input[type="text"]', 'luiz@withleaf.io');
@@ -22,14 +22,13 @@ test.describe('Login Flow', () => {
     await page.waitForURL('/dashboard', { timeout: 10000 });
     
     // Verificar se está no dashboard
-    await expect(page.locator('text=Leaf Dashboard').first()).toBeVisible();
+    await expect(page.locator('text=Point Lake GIS Studio').first()).toBeVisible();
     
     // Verificar se há botão de logout
-    await expect(page.locator('text=Sair')).toBeVisible();
+    await expect(page.locator('text=Exit')).toBeVisible();
     
-    // Verificar se há abas
+    // Verificar se há SQL Query
     await expect(page.locator('text=SQL Query')).toBeVisible();
-    await expect(page.locator('text=Upload ZIP')).toBeVisible();
     
     // Tirar screenshot
     await page.screenshot({ path: 'test-results/login-success.png' });
@@ -61,7 +60,7 @@ test.describe('Login Flow', () => {
     console.log('Mapa carregado!');
   });
 
-  test('should access both tabs (SQL and Upload)', async ({ page }) => {
+  test('should access SQL query area', async ({ page }) => {
     // Login automático
     await page.goto('/login');
     await page.fill('input[type="text"]', 'luiz@withleaf.io');
@@ -72,26 +71,18 @@ test.describe('Login Flow', () => {
     await page.waitForURL('/dashboard', { timeout: 10000 });
     await page.waitForTimeout(1000);
     
-    // Verificar aba SQL Query
-    const sqlTab = page.locator('text=SQL Query');
-    await expect(sqlTab).toBeVisible();
+    // Verificar SQL Query
+    const sqlLabel = page.locator('text=SQL Query');
+    await expect(sqlLabel).toBeVisible();
     
     // Verificar se há textarea
     const textarea = page.locator('textarea');
     await expect(textarea).toBeVisible();
     
-    // Clicar na aba Upload ZIP
-    await page.click('text=Upload ZIP');
-    await page.waitForTimeout(500);
-    
-    // Verificar se apareceu o seletor de arquivo
-    const fileInput = page.locator('input[type="file"]');
-    await expect(fileInput).toBeVisible();
-    
     // Tirar screenshot
-    await page.screenshot({ path: 'test-results/tabs-working.png' });
+    await page.screenshot({ path: 'test-results/sql-panel.png' });
     
-    console.log('Abas funcionando corretamente!');
+    console.log('Painel SQL funcionando corretamente!');
   });
 
   test('should execute SQL query', async ({ page }) => {
@@ -106,7 +97,7 @@ test.describe('Login Flow', () => {
     await page.waitForTimeout(2000);
     
     // Executar query
-    const executeButton = page.locator('button:has-text("Executar Query")');
+    const executeButton = page.locator('button:has-text("Execute Query")');
     await executeButton.click();
     
     // Aguardar resposta (pode ser erro de autenticação, mas deve processar)

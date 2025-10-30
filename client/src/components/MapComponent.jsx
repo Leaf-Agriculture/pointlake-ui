@@ -225,8 +225,8 @@ function MapComponent({ data, mapRef: externalMapRef }) {
       maxZoom: 19
     })
 
-    // Adicionar camada padrão ao mapa
-    osmLayer.addTo(mapInstance.current)
+    // Adicionar camada de satélite como padrão ao mapa
+    satelliteLayer.addTo(mapInstance.current)
 
     // Armazenar referências das camadas
     baseLayersRef.current = {

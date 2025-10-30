@@ -1089,6 +1089,14 @@ function Dashboard() {
       queryWithoutLimit = queryWithoutLimit.replace(/LIMIT\s+\d+/i, '').trim()
     }
 
+    // Extrair WHERE original se existir (será aplicado externamente junto com filtro espacial)
+    let originalWhere = ''
+    const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
+    if (whereMatch) {
+      originalWhere = whereMatch[1].trim()
+      queryWithoutLimit = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+    }
+
     // Construir filtro espacial
     let spatialFilter
     if (zone.type === 'circle') {
@@ -1100,21 +1108,23 @@ function Dashboard() {
       spatialFilter = `ST_Intersects(ST_SetSRID(ST_GeomFromWKB(t.geometry), 4326), ST_SetSRID(ST_GeomFromText('${wkt}'), 4326))`
     }
 
+    // Combinar WHERE original com filtro espacial se ambos existirem
+    let finalWhere = spatialFilter
+    if (originalWhere) {
+      finalWhere = `${originalWhere} AND ${spatialFilter}`
+    }
+
     // Verificar se já tem UNION ALL na query
     if (queryWithoutLimit.toUpperCase().includes('UNION ALL')) {
       // Envolver a query UNION ALL em uma subquery e aplicar o filtro externamente
-      const finalQuery = `SELECT *\nFROM (\n  ${queryWithoutLimit}\n) t\nWHERE ${spatialFilter}${limitClause ? ` ${limitClause}` : ''}`
+      const finalQuery = `SELECT *\nFROM (\n  ${queryWithoutLimit}\n) t\nWHERE ${finalWhere}${limitClause ? ` ${limitClause}` : ''}`
       return finalQuery
     } else {
       // Se não tem UNION ALL, criar um com arquivos processados
       const processedFiles = files.filter(f => f.status === 'PROCESSED')
       if (processedFiles.length === 0) {
         // Sem arquivos processados, aplicar filtro na query atual
-        const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
-        if (whereMatch) {
-          queryWithoutLimit = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
-        }
-        const finalQuery = `${queryWithoutLimit} WHERE ${spatialFilter.replace('t.geometry', 'geometry')}${limitClause ? ` ${limitClause}` : ''}`
+        const finalQuery = `${queryWithoutLimit} WHERE ${finalWhere.replace('t.geometry', 'geometry')}${limitClause ? ` ${limitClause}` : ''}`
         return finalQuery
       }
 
@@ -1125,10 +1135,7 @@ function Dashboard() {
         selectBase = `SELECT ${fromMatch[1]}`
       }
 
-      // Remover WHERE se existir (será aplicado no SELECT externo)
-      let baseQuery = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
-
-      // Gerar queries para cada arquivo
+      // Gerar queries para cada arquivo usando formato spark_catalog
       const fileQueries = processedFiles.map(file => {
         const fileId = file.id || file.uuid
         return `${selectBase} FROM \`spark_catalog\`.\`default\`.\`pointlake_file_${fileId}\``
@@ -1136,7 +1143,7 @@ function Dashboard() {
 
       // Combinar com UNION ALL e envolver em subquery
       const unionQuery = fileQueries.join('\n  UNION ALL\n  ')
-      const finalQuery = `SELECT *\nFROM (\n  ${unionQuery}\n) t\nWHERE ${spatialFilter}${limitClause ? ` ${limitClause}` : ''}`
+      const finalQuery = `SELECT *\nFROM (\n  ${unionQuery}\n) t\nWHERE ${finalWhere}${limitClause ? ` ${limitClause}` : ''}`
       
       return finalQuery
     }

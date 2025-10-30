@@ -873,8 +873,8 @@ function Dashboard() {
       selectBase = `SELECT ${fromMatch[1]}`
     }
 
-    // Criar query para este arquivo específico
-    let fileQuery = `${selectBase} FROM pointlake_file_${fileId}`
+    // Criar query para este arquivo específico usando formato spark_catalog
+    let fileQuery = `${selectBase} FROM \`spark_catalog\`.\`default\`.\`pointlake_file_${fileId}\``
     if (whereClause) {
       fileQuery += ` WHERE ${whereClause}`
     }
@@ -884,23 +884,14 @@ function Dashboard() {
       // Dividir a query em partes do UNION ALL
       const parts = queryWithoutLimit.split(/\s+UNION\s+ALL\s+/i)
       
-      // Aplicar WHERE em todas as partes que não têm WHERE
+      // Manter as partes existentes (sem WHERE, será aplicado externamente se houver zona)
       const updatedParts = parts.map(part => {
         // Remover LIMIT se existir na parte individual
         let partWithoutLimit = part.replace(/LIMIT\s+\d+/i, '').trim()
         
-        // Se a parte não tem WHERE e temos um whereClause, adicionar
-        if (!partWithoutLimit.toUpperCase().includes('WHERE') && whereClause) {
-          return `${partWithoutLimit} WHERE ${whereClause}`
-        }
-        // Se já tem WHERE mas não tem o whereClause completo, adicionar com AND
-        else if (partWithoutLimit.toUpperCase().includes('WHERE') && whereClause) {
-          // Verificar se o WHERE já está presente (evitar duplicar)
-          const partWhereMatch = partWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
-          if (partWhereMatch && !partWhereMatch[1].includes(whereClause)) {
-            return `${partWithoutLimit} AND ${whereClause}`
-          }
-        }
+        // Remover WHERE também (será aplicado depois se houver zona)
+        partWithoutLimit = partWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+        
         return partWithoutLimit
       })
       
@@ -919,13 +910,22 @@ function Dashboard() {
     } else {
       // Criar nova query UNION ALL com o arquivo atual e este novo
       // Primeiro, verificar se há uma query base válida
-      let baseQuery = queryWithoutLimit
+      let baseQuery = queryWithoutLimit.replace(/WHERE\s+.+?(?=ORDER\s+BY|LIMIT|$)/i, '').trim()
+      
       if (!baseQuery || baseQuery === 'SELECT * FROM fields') {
-        baseQuery = `${selectBase} FROM pointlake_file_${fileId}`
+        baseQuery = `${selectBase} FROM \`spark_catalog\`.\`default\`.\`pointlake_file_${fileId}\``
       } else {
-        // Garantir que o WHERE seja aplicado na query base também
-        if (whereClause && !baseQuery.toUpperCase().includes('WHERE')) {
-          baseQuery = `${baseQuery} WHERE ${whereClause}`
+        // Converter para formato spark_catalog se necessário
+        const fromMatchBase = baseQuery.match(/FROM\s+(.+?)(?:\s+WHERE|\s+ORDER|\s+LIMIT|$)/i)
+        if (fromMatchBase) {
+          const tableName = fromMatchBase[1].trim()
+          // Se não está no formato spark_catalog, converter
+          if (!tableName.includes('spark_catalog')) {
+            const tableMatch = tableName.match(/pointlake_file_(.+)/)
+            if (tableMatch) {
+              baseQuery = baseQuery.replace(tableName, `\`spark_catalog\`.\`default\`.\`pointlake_file_${tableMatch[1]}\``)
+            }
+          }
         }
       }
       

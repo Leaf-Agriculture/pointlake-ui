@@ -43,6 +43,7 @@ function Dashboard() {
   const [queryHistory, setQueryHistory] = useState([]) // Histórico de queries
   const [showHistory, setShowHistory] = useState(false) // Mostrar/esconder histórico
   const [fileSummaries, setFileSummaries] = useState({}) // Summaries de todos os arquivos { fileId: summary }
+  const [fileCities, setFileCities] = useState({}) // Cidades dos arquivos { fileId: city }
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -224,6 +225,73 @@ function Dashboard() {
         })
         
         setFileSummaries(prev => ({ ...prev, ...summariesMap }))
+
+        // Buscar cidades para arquivos com polígonos
+        const cityPromises = Object.entries(summariesMap).map(async ([fileId, summary]) => {
+          if (!summary || !summary.geometry) return null
+          
+          try {
+            const geometry = summary.geometry
+            let centerLat = null
+            let centerLng = null
+            
+            // Se for WKT POLYGON, calcular centro
+            if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
+              const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
+              if (coordMatch) {
+                const coords = coordMatch[1].split(',').map(coord => {
+                  const [lng, lat] = coord.trim().split(' ').map(Number)
+                  return { lat, lng }
+                })
+                
+                if (coords.length > 0) {
+                  // Calcular centroide (média das coordenadas)
+                  const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
+                  const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
+                  centerLat = sumLat / coords.length
+                  centerLng = sumLng / coords.length
+                }
+              }
+            }
+            
+            if (centerLat && centerLng) {
+              // Usar Nominatim para geocoding reverso
+              const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+                params: {
+                  lat: centerLat,
+                  lon: centerLng,
+                  format: 'json',
+                  addressdetails: 1
+                },
+                headers: {
+                  'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
+                }
+              })
+              
+              const city = response.data?.address?.city || 
+                          response.data?.address?.town || 
+                          response.data?.address?.village ||
+                          response.data?.address?.municipality ||
+                          response.data?.address?.county ||
+                          null
+              
+              return { fileId, city }
+            }
+          } catch (err) {
+            console.error(`Error fetching city for file ${fileId}:`, err)
+          }
+          return null
+        })
+
+        const cityResults = await Promise.all(cityPromises)
+        const citiesMap = {}
+        cityResults.forEach(result => {
+          if (result && result.fileId && result.city) {
+            citiesMap[result.fileId] = result.city
+          }
+        })
+        
+        setFileCities(prev => ({ ...prev, ...citiesMap }))
       }
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err)
@@ -1091,6 +1159,7 @@ function Dashboard() {
                   const isNew = fileId && newFileIds.has(fileId)
                   const isProcessed = file.status === 'PROCESSED'
                   const summary = fileSummaries[fileId] || null
+                  const city = fileCities[fileId] || null
                   
                   // Extrair informações do summary
                   const startDate = summary?.start || summary?.startDate || summary?.startTime || null
@@ -1123,6 +1192,16 @@ function Dashboard() {
                           <div className="text-sm font-medium text-zinc-200 truncate">
                             {file.name || file.filename || file.fileName || file.id || `File ${idx + 1}`}
                           </div>
+                          {/* Cidade */}
+                          {city && (
+                            <div className="text-xs text-zinc-300 flex items-center gap-1 mt-0.5">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <span className="font-medium">{city}</span>
+                            </div>
+                          )}
                           <div className="text-xs text-zinc-400 font-mono mt-1">
                             ID: {file.id || file.uuid || 'N/A'}
                           </div>

@@ -46,6 +46,7 @@ function Dashboard() {
   const [fileCities, setFileCities] = useState({}) // Cidades dos arquivos { fileId: city }
   const [loadingSummaries, setLoadingSummaries] = useState(new Set()) // IDs de arquivos cujos summaries estão sendo carregados
   const [loadingCities, setLoadingCities] = useState(new Set()) // IDs de arquivos cujas cidades estão sendo carregadas
+  const loadingSummariesRef = useRef(new Set()) // Ref para evitar múltiplas chamadas simultâneas
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -198,123 +199,141 @@ function Dashboard() {
       // Buscar summaries automaticamente para arquivos processados
       const processedFiles = sortedFiles.filter(f => f.status === 'PROCESSED')
       if (processedFiles.length > 0) {
-        // Marcar como carregando
-        const fileIdsToLoad = processedFiles.map(f => f.id || f.uuid).filter(Boolean)
-        setLoadingSummaries(new Set(fileIdsToLoad))
-        
-        // Buscar summaries em paralelo
-        const summaryPromises = processedFiles.map(async (file) => {
+        // Filtrar apenas arquivos que ainda não têm summary e não estão sendo carregados
+        const filesToLoadSummaries = processedFiles.filter(file => {
           const fileId = file.id || file.uuid
-          if (!fileId) return null
-          
-          try {
-            const env = getEnvironment ? getEnvironment() : 'prod'
-            const apiUrl = leafApiUrl(`/api/v2/files/${fileId}/summary`, env)
-            const response = await axios.get(apiUrl, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            })
-            return { fileId, summary: response.data }
-          } catch (err) {
-            console.error(`Error loading summary for file ${fileId}:`, err)
-            return null
-          }
-        })
-
-        const summaryResults = await Promise.all(summaryPromises)
-        const summariesMap = {}
-        summaryResults.forEach(result => {
-          if (result && result.fileId) {
-            summariesMap[result.fileId] = result.summary
-            // Debug: log estrutura do summary
-            console.log(`📊 Summary for file ${result.fileId}:`, JSON.stringify(result.summary, null, 2))
-          }
+          if (!fileId) return false
+          // Não carregar se já temos o summary ou se já está sendo carregado
+          return !fileSummaries[fileId] && !loadingSummariesRef.current.has(fileId)
         })
         
-        setFileSummaries(prev => ({ ...prev, ...summariesMap }))
-        // Remover do loading após carregar
-        setLoadingSummaries(prev => {
-          const updated = new Set(prev)
-          fileIdsToLoad.forEach(id => updated.delete(id))
-          return updated
-        })
-
-        // Buscar cidades para arquivos com polígonos
-        const filesWithGeometry = Object.entries(summariesMap).filter(([_, summary]) => summary && summary.geometry)
-        if (filesWithGeometry.length > 0) {
-          const cityFileIds = filesWithGeometry.map(([fileId]) => fileId)
-          setLoadingCities(new Set(cityFileIds))
+        if (filesToLoadSummaries.length > 0) {
+          // Marcar como carregando
+          const fileIdsToLoad = filesToLoadSummaries.map(f => f.id || f.uuid).filter(Boolean)
+          fileIdsToLoad.forEach(id => loadingSummariesRef.current.add(id))
+          setLoadingSummaries(new Set(fileIdsToLoad))
           
-          const cityPromises = filesWithGeometry.map(async ([fileId, summary]) => {
+          // Buscar summaries em paralelo
+          const summaryPromises = filesToLoadSummaries.map(async (file) => {
+            const fileId = file.id || file.uuid
+            if (!fileId) return null
+            
             try {
-              const geometry = summary.geometry
-              let centerLat = null
-              let centerLng = null
-              
-              // Se for WKT POLYGON, calcular centro
-              if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
-                const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
-                if (coordMatch) {
-                  const coords = coordMatch[1].split(',').map(coord => {
-                    const [lng, lat] = coord.trim().split(' ').map(Number)
-                    return { lat, lng }
-                  })
-                  
-                  if (coords.length > 0) {
-                    // Calcular centroide (média das coordenadas)
-                    const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
-                    const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
-                    centerLat = sumLat / coords.length
-                    centerLng = sumLng / coords.length
-                  }
+              const env = getEnvironment ? getEnvironment() : 'prod'
+              const apiUrl = leafApiUrl(`/api/v2/files/${fileId}/summary`, env)
+              const response = await axios.get(apiUrl, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
                 }
-              }
-              
-              if (centerLat && centerLng) {
-                // Usar Nominatim para geocoding reverso
-                const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
-                  params: {
-                    lat: centerLat,
-                    lon: centerLng,
-                    format: 'json',
-                    addressdetails: 1
-                  },
-                  headers: {
-                    'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
-                  }
-                })
-                
-                const city = response.data?.address?.city || 
-                            response.data?.address?.town || 
-                            response.data?.address?.village ||
-                            response.data?.address?.municipality ||
-                            response.data?.address?.county ||
-                            null
-                
-                return { fileId, city }
-              }
+              })
+              return { fileId, summary: response.data }
             } catch (err) {
-              console.error(`Error fetching city for file ${fileId}:`, err)
+              console.error(`Error loading summary for file ${fileId}:`, err)
+              return null
+            } finally {
+              // Remover do ref após carregar (sucesso ou erro)
+              loadingSummariesRef.current.delete(fileId)
             }
-            return null
           })
 
-          const cityResults = await Promise.all(cityPromises)
-          const citiesMap = {}
-          cityResults.forEach(result => {
-            if (result && result.fileId && result.city) {
-              citiesMap[result.fileId] = result.city
+          const summaryResults = await Promise.all(summaryPromises)
+          const summariesMap = {}
+          summaryResults.forEach(result => {
+            if (result && result.fileId) {
+              summariesMap[result.fileId] = result.summary
             }
           })
           
-          setFileCities(prev => ({ ...prev, ...citiesMap }))
+          setFileSummaries(prev => ({ ...prev, ...summariesMap }))
           // Remover do loading após carregar
-          setLoadingCities(prev => {
+          setLoadingSummaries(prev => {
             const updated = new Set(prev)
-            cityFileIds.forEach(id => updated.delete(id))
+            fileIdsToLoad.forEach(id => updated.delete(id))
             return updated
           })
+
+          // Buscar cidades para arquivos com polígonos (apenas os novos summaries carregados)
+          const filesWithGeometry = Object.entries(summariesMap)
+            .filter(([fileId, summary]) => {
+              const hasGeometry = summary && summary.geometry
+              const cityNotLoaded = !fileCities[fileId]
+              return hasGeometry && cityNotLoaded
+            })
+          
+          if (filesWithGeometry.length > 0) {
+            const cityFileIds = filesWithGeometry.map(([fileId]) => fileId)
+            setLoadingCities(new Set(cityFileIds))
+            
+            const cityPromises = filesWithGeometry.map(async ([fileId, summary]) => {
+              try {
+                const geometry = summary.geometry
+                let centerLat = null
+                let centerLng = null
+                
+                // Se for WKT POLYGON, calcular centro
+                if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
+                  const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
+                  if (coordMatch) {
+                    const coords = coordMatch[1].split(',').map(coord => {
+                      const [lng, lat] = coord.trim().split(' ').map(Number)
+                      return { lat, lng }
+                    })
+                    
+                    if (coords.length > 0) {
+                      // Calcular centroide (média das coordenadas)
+                      const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
+                      const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
+                      centerLat = sumLat / coords.length
+                      centerLng = sumLng / coords.length
+                    }
+                  }
+                }
+                
+                if (centerLat && centerLng) {
+                  // Usar Nominatim para geocoding reverso
+                  const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+                    params: {
+                      lat: centerLat,
+                      lon: centerLng,
+                      format: 'json',
+                      addressdetails: 1
+                    },
+                    headers: {
+                      'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
+                    }
+                  })
+                  
+                  const city = response.data?.address?.city || 
+                              response.data?.address?.town || 
+                              response.data?.address?.village ||
+                              response.data?.address?.municipality ||
+                              response.data?.address?.county ||
+                              null
+                  
+                  return { fileId, city }
+                }
+              } catch (err) {
+                console.error(`Error fetching city for file ${fileId}:`, err)
+              }
+              return null
+            })
+
+            const cityResults = await Promise.all(cityPromises)
+            const citiesMap = {}
+            cityResults.forEach(result => {
+              if (result && result.fileId && result.city) {
+                citiesMap[result.fileId] = result.city
+              }
+            })
+            
+            setFileCities(prev => ({ ...prev, ...citiesMap }))
+            // Remover do loading após carregar
+            setLoadingCities(prev => {
+              const updated = new Set(prev)
+              cityFileIds.forEach(id => updated.delete(id))
+              return updated
+            })
+          }
         }
       }
     } catch (err) {
@@ -883,7 +902,7 @@ function Dashboard() {
 
   // Carregar batches e arquivos ao montar o componente
   useEffect(() => {
-    if (token && getEnvironment && isAuthenticated) {
+    if (token && getEnvironment && isAuthenticated && selectedLeafUserId) {
       loadBatches()
       loadFiles()
     }
@@ -892,7 +911,7 @@ function Dashboard() {
 
   // Auto-refresh files every 15 seconds
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || !selectedLeafUserId) return
     
     const interval = setInterval(() => {
       loadFiles()
@@ -904,9 +923,14 @@ function Dashboard() {
   // Recarregar dados quando o Point Lake User mudar
   useEffect(() => {
     if (isAuthenticated && selectedLeafUserId) {
+      // Limpar summaries e cidades quando mudar de usuário
+      setFileSummaries({})
+      setFileCities({})
+      loadingSummariesRef.current.clear()
       loadBatches()
       loadFiles()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeafUserId])
 
   // Infinite scroll - detectar quando o usuário está próximo do final da lista

@@ -40,12 +40,37 @@ function Dashboard() {
   const filesListRef = useRef(null)
   const [newFileIds, setNewFileIds] = useState(new Set()) // IDs de arquivos novos (não clicados ainda)
   const previousFilesRef = useRef([]) // Referência para lista anterior de arquivos
+  const [queryHistory, setQueryHistory] = useState([]) // Histórico de queries
+  const [showHistory, setShowHistory] = useState(false) // Mostrar/esconder histórico
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
       navigate('/login')
     }
   }, [isAuthenticated, authLoading, navigate])
+
+  // Carregar histórico de queries do localStorage ao montar
+  useEffect(() => {
+    try {
+      const savedHistory = localStorage.getItem('sql_query_history')
+      if (savedHistory) {
+        const parsed = JSON.parse(savedHistory)
+        setQueryHistory(Array.isArray(parsed) ? parsed : [])
+      }
+    } catch (e) {
+      console.error('Error loading query history:', e)
+      setQueryHistory([])
+    }
+  }, [])
+
+  // Salvar histórico no localStorage quando mudar
+  useEffect(() => {
+    try {
+      localStorage.setItem('sql_query_history', JSON.stringify(queryHistory))
+    } catch (e) {
+      console.error('Error saving query history:', e)
+    }
+  }, [queryHistory])
 
   // Função para validar UUID ou ID válido
   const isValidUserId = (str) => {
@@ -693,6 +718,23 @@ function Dashboard() {
       return
     }
 
+    // Salvar query no histórico antes de executar
+    const queryToSave = sqlQuery.trim()
+    setQueryHistory(prev => {
+      // Remover duplicatas (se a mesma query já existe)
+      const filtered = prev.filter(q => q.query !== queryToSave)
+      // Adicionar no início com timestamp
+      const newHistory = [
+        {
+          query: queryToSave,
+          timestamp: new Date().toISOString(),
+          executionTime: null // Será atualizado após execução
+        },
+        ...filtered
+      ].slice(0, 50) // Manter apenas últimas 50 queries
+      return newHistory
+    })
+
     setLoading(true)
     setError('')
     setResults(null)
@@ -726,6 +768,15 @@ function Dashboard() {
       const executionTime = ((endTime - startTime) / 1000).toFixed(3)
       setQueryExecutionTime(executionTime)
 
+      // Atualizar tempo de execução no histórico
+      setQueryHistory(prev => {
+        const updated = [...prev]
+        if (updated.length > 0 && updated[0].query === queryToSave) {
+          updated[0].executionTime = executionTime
+        }
+        return updated
+      })
+
       setResults(response.data)
     } catch (err) {
       console.error('Erro na query:', err)
@@ -733,6 +784,24 @@ function Dashboard() {
       setQueryExecutionTime(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Função para usar uma query do histórico
+  const useQueryFromHistory = (query) => {
+    setSqlQuery(query)
+    setShowHistory(false) // Fechar histórico após selecionar
+  }
+
+  // Função para remover uma query do histórico
+  const removeQueryFromHistory = (index) => {
+    setQueryHistory(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Função para limpar todo o histórico
+  const clearQueryHistory = () => {
+    if (window.confirm('Are you sure you want to clear all query history?')) {
+      setQueryHistory([])
     }
   }
 
@@ -1187,33 +1256,109 @@ function Dashboard() {
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Área de Input SQL */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-zinc-300">
-                  Enter your SQL query
-                </label>
-                {hasSpatialFilter && (
-                  <span className="text-xs text-blue-400 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                    </svg>
-                    Spatial Filter Active
-                  </span>
-                )}
-              </div>
-              <textarea
-                value={sqlQuery}
-                onChange={(e) => {
-                  setSqlQuery(e.target.value);
-                  // Se o usuário editar manualmente, verificar se ainda tem filtro espacial
-                  const hasFilter = e.target.value.includes('ST_Intersects') || e.target.value.includes('ST_DWithin');
-                  setHasSpatialFilter(hasFilter);
-                }}
-                className="w-full h-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-sm text-zinc-200 placeholder-zinc-500"
-                placeholder='Ex: SELECT * FROM fields LIMIT 10'
-              />
-            </div>
+                {/* Área de Input SQL */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-zinc-300">
+                      Enter your SQL query
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {hasSpatialFilter && (
+                        <span className="text-xs text-blue-400 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                          </svg>
+                          Spatial Filter Active
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
+                        title="Show query history"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        History ({queryHistory.length})
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={sqlQuery}
+                    onChange={(e) => {
+                      setSqlQuery(e.target.value);
+                      // Se o usuário editar manualmente, verificar se ainda tem filtro espacial
+                      const hasFilter = e.target.value.includes('ST_Intersects') || e.target.value.includes('ST_DWithin');
+                      setHasSpatialFilter(hasFilter);
+                    }}
+                    className="w-full h-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-sm text-zinc-200 placeholder-zinc-500"
+                    placeholder='Ex: SELECT * FROM fields LIMIT 10'
+                  />
+                  {/* Histórico de Queries */}
+                  {showHistory && queryHistory.length > 0 && (
+                    <div className="mt-2 bg-zinc-800 border border-zinc-700 rounded-lg max-h-64 overflow-y-auto">
+                      <div className="flex items-center justify-between p-2 border-b border-zinc-700">
+                        <h4 className="text-xs font-semibold text-zinc-300">Query History</h4>
+                        <button
+                          onClick={clearQueryHistory}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                          title="Clear all history"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="divide-y divide-zinc-700">
+                        {queryHistory.map((item, index) => (
+                          <div
+                            key={index}
+                            className="p-2 hover:bg-zinc-700 transition-colors group"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <button
+                                  onClick={() => useQueryFromHistory(item.query)}
+                                  className="text-xs text-zinc-300 hover:text-blue-400 transition-colors text-left w-full font-mono break-all"
+                                  title="Click to use this query"
+                                >
+                                  {item.query.length > 100 ? `${item.query.substring(0, 100)}...` : item.query}
+                                </button>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+                                  <span>
+                                    {new Date(item.timestamp).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                  {item.executionTime && (
+                                    <span className="text-green-400">
+                                      ⏱️ {item.executionTime}s
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeQueryFromHistory(index)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-300"
+                                title="Remove from history"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {showHistory && queryHistory.length === 0 && (
+                    <div className="mt-2 p-3 bg-zinc-800 border border-zinc-700 rounded-lg text-center text-xs text-zinc-500">
+                      No query history yet. Execute queries to save them here.
+                    </div>
+                  )}
+                </div>
 
             {/* Botão Executar */}
             <button

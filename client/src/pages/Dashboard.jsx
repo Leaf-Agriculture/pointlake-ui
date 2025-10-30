@@ -679,7 +679,7 @@ function Dashboard() {
       queryWithoutLimit = queryWithoutLimit.replace(/LIMIT\s+\d+/i, '').trim()
     }
 
-    // Extrair WHERE
+    // Extrair WHERE da query atual (se existir)
     const whereMatch = queryWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
     if (whereMatch) {
       whereClause = whereMatch[1].trim()
@@ -701,8 +701,40 @@ function Dashboard() {
 
     // Verificar se já existe UNION ALL na query
     if (currentQuery.toUpperCase().includes('UNION ALL')) {
-      // Adicionar à query existente
-      const unionQuery = `${currentQuery} UNION ALL ${fileQuery}`
+      // Dividir a query em partes do UNION ALL
+      const parts = queryWithoutLimit.split(/\s+UNION\s+ALL\s+/i)
+      
+      // Aplicar WHERE em todas as partes que não têm WHERE
+      const updatedParts = parts.map(part => {
+        // Remover LIMIT se existir na parte individual
+        let partWithoutLimit = part.replace(/LIMIT\s+\d+/i, '').trim()
+        
+        // Se a parte não tem WHERE e temos um whereClause, adicionar
+        if (!partWithoutLimit.toUpperCase().includes('WHERE') && whereClause) {
+          return `${partWithoutLimit} WHERE ${whereClause}`
+        }
+        // Se já tem WHERE mas não tem o whereClause completo, adicionar com AND
+        else if (partWithoutLimit.toUpperCase().includes('WHERE') && whereClause) {
+          // Verificar se o WHERE já está presente (evitar duplicar)
+          const partWhereMatch = partWithoutLimit.match(/WHERE\s+(.+?)(?:ORDER\s+BY|LIMIT|$)/i)
+          if (partWhereMatch && !partWhereMatch[1].includes(whereClause)) {
+            return `${partWithoutLimit} AND ${whereClause}`
+          }
+        }
+        return partWithoutLimit
+      })
+      
+      // Adicionar a nova parte
+      updatedParts.push(fileQuery)
+      
+      // Reconstruir a query com UNION ALL
+      let unionQuery = updatedParts.join(' UNION ALL ')
+      
+      // Adicionar LIMIT no final se existir
+      if (limitClause) {
+        unionQuery += ` ${limitClause}`
+      }
+      
       setSqlQuery(unionQuery)
     } else {
       // Criar nova query UNION ALL com o arquivo atual e este novo
@@ -711,14 +743,13 @@ function Dashboard() {
       if (!baseQuery || baseQuery === 'SELECT * FROM fields') {
         baseQuery = `${selectBase} FROM pointlake_file_${fileId}`
       } else {
-        // Substituir FROM para usar o primeiro arquivo como base
-        const fromMatch2 = baseQuery.match(/FROM\s+(\S+)/i)
-        if (fromMatch2) {
-          baseQuery = baseQuery.replace(/FROM\s+\S+/i, `FROM ${fromMatch2[1]}`)
+        // Garantir que o WHERE seja aplicado na query base também
+        if (whereClause && !baseQuery.toUpperCase().includes('WHERE')) {
+          baseQuery = `${baseQuery} WHERE ${whereClause}`
         }
       }
       
-      const unionQuery = `${baseQuery} UNION ALL ${fileQuery}`
+      const unionQuery = `${baseQuery} UNION ALL ${fileQuery}${limitClause ? ` ${limitClause}` : ''}`
       setSqlQuery(unionQuery)
     }
   }

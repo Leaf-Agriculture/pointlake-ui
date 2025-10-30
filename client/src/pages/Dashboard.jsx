@@ -1267,16 +1267,6 @@ function Dashboard() {
                   
                   const operationType = hasWetMass ? 'harvest' : hasAppliedRate ? 'spray' : null
                   
-                  // Debug log para verificar detecção
-                  if (summary && fileId) {
-                    console.log(`🔍 File ${fileId}:`, {
-                      hasAppliedRate,
-                      hasWetMass,
-                      operationType,
-                      summaryKeys: Object.keys(summary)
-                    })
-                  }
-                  
                   return (
                   <div 
                     key={idx} 
@@ -1552,8 +1542,8 @@ function Dashboard() {
 
         {/* Mapa Principal */}
         <div className="flex-1 relative flex flex-col">
-          <div className="flex-1 relative">
-            <MapComponent data={results} mapRef={mapRef} />
+        <div className="flex-1 relative">
+          <MapComponent data={results} mapRef={mapRef} />
           </div>
           
           {/* Painel de Summary na parte inferior */}
@@ -1671,21 +1661,21 @@ function Dashboard() {
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* Área de Input SQL */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-zinc-300">
-                      Enter your SQL query
-                    </label>
+            {/* Área de Input SQL */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-zinc-300">
+                  Enter your SQL query
+                </label>
                     <div className="flex items-center gap-2">
-                      {hasSpatialFilter && (
-                        <span className="text-xs text-blue-400 flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                          </svg>
-                          Spatial Filter Active
-                        </span>
-                      )}
+                {hasSpatialFilter && (
+                  <span className="text-xs text-blue-400 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    Spatial Filter Active
+                  </span>
+                )}
                       <button
                         onClick={() => setShowHistory(!showHistory)}
                         className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
@@ -1697,18 +1687,18 @@ function Dashboard() {
                         History ({queryHistory.length})
                       </button>
                     </div>
-                  </div>
-                  <textarea
-                    value={sqlQuery}
-                    onChange={(e) => {
-                      setSqlQuery(e.target.value);
-                      // Se o usuário editar manualmente, verificar se ainda tem filtro espacial
-                      const hasFilter = e.target.value.includes('ST_Intersects') || e.target.value.includes('ST_DWithin');
-                      setHasSpatialFilter(hasFilter);
-                    }}
-                    className="w-full h-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-sm text-zinc-200 placeholder-zinc-500"
-                    placeholder='Ex: SELECT * FROM fields LIMIT 10'
-                  />
+              </div>
+              <textarea
+                value={sqlQuery}
+                onChange={(e) => {
+                  setSqlQuery(e.target.value);
+                  // Se o usuário editar manualmente, verificar se ainda tem filtro espacial
+                  const hasFilter = e.target.value.includes('ST_Intersects') || e.target.value.includes('ST_DWithin');
+                  setHasSpatialFilter(hasFilter);
+                }}
+                className="w-full h-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-sm text-zinc-200 placeholder-zinc-500"
+                placeholder='Ex: SELECT * FROM fields LIMIT 10'
+              />
                   {/* Histórico de Queries */}
                   {showHistory && queryHistory.length > 0 && (
                     <div className="mt-2 bg-zinc-800 border border-zinc-700 rounded-lg max-h-64 overflow-y-auto">
@@ -1773,7 +1763,7 @@ function Dashboard() {
                       No query history yet. Execute queries to save them here.
                     </div>
                   )}
-                </div>
+            </div>
 
             {/* Botão Executar */}
             <button

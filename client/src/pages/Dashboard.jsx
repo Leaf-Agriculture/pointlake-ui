@@ -227,6 +227,8 @@ function Dashboard() {
         summaryResults.forEach(result => {
           if (result && result.fileId) {
             summariesMap[result.fileId] = result.summary
+            // Debug: log estrutura do summary
+            console.log(`📊 Summary for file ${result.fileId}:`, JSON.stringify(result.summary, null, 2))
           }
         })
         
@@ -1188,18 +1190,68 @@ function Dashboard() {
                   // Extrair informações do summary
                   const startDate = summary?.start || summary?.startDate || summary?.startTime || null
                   const endDate = summary?.end || summary?.endDate || summary?.endTime || null
+                  
+                  // Verificar se é spray (appliedRate)
                   const hasAppliedRate = summary && (
-                    summary.appliedRate !== undefined || 
-                    summary.applied_rate !== undefined ||
-                    (summary.properties && Array.isArray(summary.properties) && summary.properties.some(p => p === 'appliedRate' || p === 'applied_rate'))
+                    // Verificar propriedades diretas (case-insensitive)
+                    Object.keys(summary).some(key => {
+                      const lowerKey = key.toLowerCase()
+                      return (lowerKey.includes('appliedrate') || lowerKey.includes('applied_rate')) &&
+                             summary[key] !== undefined && summary[key] !== null
+                    }) ||
+                    // Verificar valores numéricos não-zero (appliedRate geralmente é > 0)
+                    (typeof summary.appliedRate === 'number' && summary.appliedRate > 0) ||
+                    (typeof summary.applied_rate === 'number' && summary.applied_rate > 0) ||
+                    // Verificar array de properties
+                    (summary.properties && Array.isArray(summary.properties) && 
+                     summary.properties.some(p => {
+                       const propStr = String(p).toLowerCase()
+                       return propStr.includes('appliedrate') || propStr.includes('applied_rate')
+                     })) ||
+                    // Verificar se tem estatísticas de appliedRate
+                    (summary.stats && (
+                      summary.stats.appliedRate !== undefined ||
+                      summary.stats.applied_rate !== undefined
+                    ))
                   )
+                  
+                  // Verificar se é harvest (wetMass)
                   const hasWetMass = summary && (
-                    summary.wetMass !== undefined ||
-                    summary.wetmass !== undefined ||
-                    summary.wet_mass !== undefined ||
-                    (summary.properties && Array.isArray(summary.properties) && summary.properties.some(p => p === 'wetMass' || p === 'wetmass' || p === 'wet_mass'))
+                    // Verificar propriedades diretas (case-insensitive)
+                    Object.keys(summary).some(key => {
+                      const lowerKey = key.toLowerCase()
+                      return (lowerKey.includes('wetmass') || lowerKey.includes('wet_mass') || lowerKey.includes('wetmass')) &&
+                             summary[key] !== undefined && summary[key] !== null
+                    }) ||
+                    // Verificar valores numéricos não-zero
+                    (typeof summary.wetMass === 'number' && summary.wetMass > 0) ||
+                    (typeof summary.wetmass === 'number' && summary.wetmass > 0) ||
+                    (typeof summary.wet_mass === 'number' && summary.wet_mass > 0) ||
+                    // Verificar array de properties
+                    (summary.properties && Array.isArray(summary.properties) && 
+                     summary.properties.some(p => {
+                       const propStr = String(p).toLowerCase()
+                       return propStr.includes('wetmass') || propStr.includes('wet_mass')
+                     })) ||
+                    // Verificar se tem estatísticas de wetMass
+                    (summary.stats && (
+                      summary.stats.wetMass !== undefined ||
+                      summary.stats.wetmass !== undefined ||
+                      summary.stats.wet_mass !== undefined
+                    ))
                   )
+                  
                   const operationType = hasWetMass ? 'harvest' : hasAppliedRate ? 'spray' : null
+                  
+                  // Debug log para verificar detecção
+                  if (summary && fileId) {
+                    console.log(`🔍 File ${fileId}:`, {
+                      hasAppliedRate,
+                      hasWetMass,
+                      operationType,
+                      summaryKeys: Object.keys(summary)
+                    })
+                  }
                   
                   return (
                   <div 
@@ -1284,7 +1336,7 @@ function Dashboard() {
                                   )}
                                 </div>
                               )}
-                              {/* Operation Type Indicator */}
+                              {/* Operation Type Indicator - Sempre mostrar se operationType for detectado */}
                               {operationType && (
                                 <div className={`flex items-center gap-1.5 mt-2 px-2 py-1 rounded text-xs border ${
                                   operationType === 'harvest'
@@ -1296,9 +1348,7 @@ function Dashboard() {
                                       <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                                       </svg>
-                                      <span className={`font-medium ${
-                                        operationType === 'harvest' ? 'text-orange-300' : 'text-blue-300'
-                                      }`}>Operation Type: Harvest</span>
+                                      <span className="text-orange-300 font-medium">Operation Type: Harvest</span>
                                     </>
                                   ) : (
                                     <>
@@ -1308,6 +1358,12 @@ function Dashboard() {
                                       <span className="text-blue-300 font-medium">Operation Type: Spray</span>
                                     </>
                                   )}
+                                </div>
+                              )}
+                              {/* Debug: mostrar se summary existe mas operationType não foi detectado */}
+                              {summary && !operationType && process.env.NODE_ENV === 'development' && (
+                                <div className="mt-1 text-xs text-zinc-500 italic">
+                                  Debug: Summary loaded but operation type not detected. Keys: {Object.keys(summary).join(', ')}
                                 </div>
                               )}
                             </div>

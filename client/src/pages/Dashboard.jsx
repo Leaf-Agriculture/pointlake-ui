@@ -44,6 +44,8 @@ function Dashboard() {
   const [showHistory, setShowHistory] = useState(false) // Mostrar/esconder histórico
   const [fileSummaries, setFileSummaries] = useState({}) // Summaries de todos os arquivos { fileId: summary }
   const [fileCities, setFileCities] = useState({}) // Cidades dos arquivos { fileId: city }
+  const [loadingSummaries, setLoadingSummaries] = useState(new Set()) // IDs de arquivos cujos summaries estão sendo carregados
+  const [loadingCities, setLoadingCities] = useState(new Set()) // IDs de arquivos cujas cidades estão sendo carregadas
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -196,6 +198,10 @@ function Dashboard() {
       // Buscar summaries automaticamente para arquivos processados
       const processedFiles = sortedFiles.filter(f => f.status === 'PROCESSED')
       if (processedFiles.length > 0) {
+        // Marcar como carregando
+        const fileIdsToLoad = processedFiles.map(f => f.id || f.uuid).filter(Boolean)
+        setLoadingSummaries(new Set(fileIdsToLoad))
+        
         // Buscar summaries em paralelo
         const summaryPromises = processedFiles.map(async (file) => {
           const fileId = file.id || file.uuid
@@ -225,73 +231,89 @@ function Dashboard() {
         })
         
         setFileSummaries(prev => ({ ...prev, ...summariesMap }))
+        // Remover do loading após carregar
+        setLoadingSummaries(prev => {
+          const updated = new Set(prev)
+          fileIdsToLoad.forEach(id => updated.delete(id))
+          return updated
+        })
 
         // Buscar cidades para arquivos com polígonos
-        const cityPromises = Object.entries(summariesMap).map(async ([fileId, summary]) => {
-          if (!summary || !summary.geometry) return null
+        const filesWithGeometry = Object.entries(summariesMap).filter(([_, summary]) => summary && summary.geometry)
+        if (filesWithGeometry.length > 0) {
+          const cityFileIds = filesWithGeometry.map(([fileId]) => fileId)
+          setLoadingCities(new Set(cityFileIds))
           
-          try {
-            const geometry = summary.geometry
-            let centerLat = null
-            let centerLng = null
-            
-            // Se for WKT POLYGON, calcular centro
-            if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
-              const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
-              if (coordMatch) {
-                const coords = coordMatch[1].split(',').map(coord => {
-                  const [lng, lat] = coord.trim().split(' ').map(Number)
-                  return { lat, lng }
-                })
-                
-                if (coords.length > 0) {
-                  // Calcular centroide (média das coordenadas)
-                  const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
-                  const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
-                  centerLat = sumLat / coords.length
-                  centerLng = sumLng / coords.length
+          const cityPromises = filesWithGeometry.map(async ([fileId, summary]) => {
+            try {
+              const geometry = summary.geometry
+              let centerLat = null
+              let centerLng = null
+              
+              // Se for WKT POLYGON, calcular centro
+              if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
+                const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
+                if (coordMatch) {
+                  const coords = coordMatch[1].split(',').map(coord => {
+                    const [lng, lat] = coord.trim().split(' ').map(Number)
+                    return { lat, lng }
+                  })
+                  
+                  if (coords.length > 0) {
+                    // Calcular centroide (média das coordenadas)
+                    const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
+                    const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
+                    centerLat = sumLat / coords.length
+                    centerLng = sumLng / coords.length
+                  }
                 }
               }
-            }
-            
-            if (centerLat && centerLng) {
-              // Usar Nominatim para geocoding reverso
-              const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
-                params: {
-                  lat: centerLat,
-                  lon: centerLng,
-                  format: 'json',
-                  addressdetails: 1
-                },
-                headers: {
-                  'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
-                }
-              })
               
-              const city = response.data?.address?.city || 
-                          response.data?.address?.town || 
-                          response.data?.address?.village ||
-                          response.data?.address?.municipality ||
-                          response.data?.address?.county ||
-                          null
-              
-              return { fileId, city }
+              if (centerLat && centerLng) {
+                // Usar Nominatim para geocoding reverso
+                const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+                  params: {
+                    lat: centerLat,
+                    lon: centerLng,
+                    format: 'json',
+                    addressdetails: 1
+                  },
+                  headers: {
+                    'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
+                  }
+                })
+                
+                const city = response.data?.address?.city || 
+                            response.data?.address?.town || 
+                            response.data?.address?.village ||
+                            response.data?.address?.municipality ||
+                            response.data?.address?.county ||
+                            null
+                
+                return { fileId, city }
+              }
+            } catch (err) {
+              console.error(`Error fetching city for file ${fileId}:`, err)
             }
-          } catch (err) {
-            console.error(`Error fetching city for file ${fileId}:`, err)
-          }
-          return null
-        })
+            return null
+          })
 
-        const cityResults = await Promise.all(cityPromises)
-        const citiesMap = {}
-        cityResults.forEach(result => {
-          if (result && result.fileId && result.city) {
-            citiesMap[result.fileId] = result.city
-          }
-        })
-        
-        setFileCities(prev => ({ ...prev, ...citiesMap }))
+          const cityResults = await Promise.all(cityPromises)
+          const citiesMap = {}
+          cityResults.forEach(result => {
+            if (result && result.fileId && result.city) {
+              citiesMap[result.fileId] = result.city
+            }
+          })
+          
+          setFileCities(prev => ({ ...prev, ...citiesMap }))
+          // Remover do loading após carregar
+          setLoadingCities(prev => {
+            const updated = new Set(prev)
+            cityFileIds.forEach(id => updated.delete(id))
+            return updated
+          })
+        }
       }
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err)
@@ -1160,6 +1182,8 @@ function Dashboard() {
                   const isProcessed = file.status === 'PROCESSED'
                   const summary = fileSummaries[fileId] || null
                   const city = fileCities[fileId] || null
+                  const isLoadingSummary = loadingSummaries.has(fileId)
+                  const isLoadingCity = loadingCities.has(fileId)
                   
                   // Extrair informações do summary
                   const startDate = summary?.start || summary?.startDate || summary?.startTime || null
@@ -1193,7 +1217,14 @@ function Dashboard() {
                             {file.name || file.filename || file.fileName || file.id || `File ${idx + 1}`}
                           </div>
                           {/* Cidade */}
-                          {city && (
+                          {isLoadingCity ? (
+                            <div className="text-xs text-zinc-400 flex items-center gap-1 mt-0.5">
+                              <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              <span className="text-zinc-500">Loading location...</span>
+                            </div>
+                          ) : city ? (
                             <div className="text-xs text-zinc-300 flex items-center gap-1 mt-0.5">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -1201,7 +1232,7 @@ function Dashboard() {
                               </svg>
                               <span className="font-medium">{city}</span>
                             </div>
-                          )}
+                          ) : null}
                           <div className="text-xs text-zinc-400 font-mono mt-1">
                             ID: {file.id || file.uuid || 'N/A'}
                           </div>
@@ -1221,7 +1252,16 @@ function Dashboard() {
                             </div>
                           )}
                           {/* Informações do Summary */}
-                          {summary && (
+                          {isLoadingSummary ? (
+                            <div className="mt-2 space-y-2">
+                              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Loading summary...</span>
+                              </div>
+                            </div>
+                          ) : summary ? (
                             <div className="mt-2 space-y-1">
                               {/* Start Date e End Date */}
                               {(startDate || endDate) && (
@@ -1271,7 +1311,7 @@ function Dashboard() {
                                 </div>
                               )}
                             </div>
-                          )}
+                          ) : null}
                           <div className="text-xs text-zinc-400 flex items-center gap-1 mt-1">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

@@ -80,6 +80,15 @@ function Dashboard() {
     }
   }, [queryHistory])
 
+  // Sincronizar refs com state para garantir consistência
+  useEffect(() => {
+    fileSummariesRef.current = fileSummaries
+  }, [fileSummaries])
+
+  useEffect(() => {
+    fileCitiesRef.current = fileCities
+  }, [fileCities])
+
   // Função para validar UUID ou ID válido
   const isValidUserId = (str) => {
     if (!str || String(str).trim().length === 0) return false

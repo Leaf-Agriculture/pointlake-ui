@@ -47,6 +47,9 @@ function Dashboard() {
   const [loadingSummaries, setLoadingSummaries] = useState(new Set()) // IDs de arquivos cujos summaries estão sendo carregados
   const [loadingCities, setLoadingCities] = useState(new Set()) // IDs de arquivos cujas cidades estão sendo carregadas
   const loadingSummariesRef = useRef(new Set()) // Ref para evitar múltiplas chamadas simultâneas
+  const fileSummariesRef = useRef({}) // Ref para acessar fileSummaries sem causar re-renders
+  const fileCitiesRef = useRef({}) // Ref para acessar fileCities sem causar re-renders
+  const isLoadingFilesRef = useRef(false) // Ref para evitar múltiplas chamadas simultâneas de loadFiles
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -119,6 +122,14 @@ function Dashboard() {
   // Função para carregar arquivos v2
   const loadFiles = async () => {
     if (!selectedLeafUserId || !isValidUserId(selectedLeafUserId)) return
+    
+    // Evitar múltiplas chamadas simultâneas
+    if (isLoadingFilesRef.current) {
+      console.log('⏸️ loadFiles já está em execução, ignorando chamada duplicada')
+      return
+    }
+    
+    isLoadingFilesRef.current = true
     setLoadingFiles(true)
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -199,12 +210,15 @@ function Dashboard() {
       // Buscar summaries automaticamente para arquivos processados
       const processedFiles = sortedFiles.filter(f => f.status === 'PROCESSED')
       if (processedFiles.length > 0) {
+        // Usar ref para verificar summaries já carregados (evita dependency issues)
+        const currentSummaries = fileSummariesRef.current
+        
         // Filtrar apenas arquivos que ainda não têm summary e não estão sendo carregados
         const filesToLoadSummaries = processedFiles.filter(file => {
           const fileId = file.id || file.uuid
           if (!fileId) return false
           // Não carregar se já temos o summary ou se já está sendo carregado
-          return !fileSummaries[fileId] && !loadingSummariesRef.current.has(fileId)
+          return !currentSummaries[fileId] && !loadingSummariesRef.current.has(fileId)
         })
         
         if (filesToLoadSummaries.length > 0) {
@@ -244,7 +258,12 @@ function Dashboard() {
             }
           })
           
-          setFileSummaries(prev => ({ ...prev, ...summariesMap }))
+          // Atualizar state e ref
+          setFileSummaries(prev => {
+            const updated = { ...prev, ...summariesMap }
+            fileSummariesRef.current = updated
+            return updated
+          })
           // Remover do loading após carregar
           setLoadingSummaries(prev => {
             const updated = new Set(prev)
@@ -253,10 +272,11 @@ function Dashboard() {
           })
 
           // Buscar cidades para arquivos com polígonos (apenas os novos summaries carregados)
+          const currentCities = fileCitiesRef.current
           const filesWithGeometry = Object.entries(summariesMap)
             .filter(([fileId, summary]) => {
               const hasGeometry = summary && summary.geometry
-              const cityNotLoaded = !fileCities[fileId]
+              const cityNotLoaded = !currentCities[fileId]
               return hasGeometry && cityNotLoaded
             })
           
@@ -326,7 +346,11 @@ function Dashboard() {
               }
             })
             
-            setFileCities(prev => ({ ...prev, ...citiesMap }))
+            setFileCities(prev => {
+              const updated = { ...prev, ...citiesMap }
+              fileCitiesRef.current = updated
+              return updated
+            })
             // Remover do loading após carregar
             setLoadingCities(prev => {
               const updated = new Set(prev)
@@ -341,6 +365,7 @@ function Dashboard() {
       setFiles([])
     } finally {
       setLoadingFiles(false)
+      isLoadingFilesRef.current = false
     }
   }
 
@@ -926,7 +951,10 @@ function Dashboard() {
       // Limpar summaries e cidades quando mudar de usuário
       setFileSummaries({})
       setFileCities({})
+      fileSummariesRef.current = {}
+      fileCitiesRef.current = {}
       loadingSummariesRef.current.clear()
+      isLoadingFilesRef.current = false
       loadBatches()
       loadFiles()
     }

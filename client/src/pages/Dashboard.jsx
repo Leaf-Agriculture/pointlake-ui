@@ -220,28 +220,31 @@ function Dashboard() {
       // Reset filesToShow quando novos arquivos são carregados
       setFilesToShow(20)
 
-      // Buscar summaries automaticamente para arquivos processados
+      // Buscar summaries automaticamente para arquivos processados (apenas primeiros visíveis para não bloquear)
       const processedFiles = sortedFiles.filter(f => f.status === 'PROCESSED')
       if (processedFiles.length > 0) {
+        // Limitar a apenas os primeiros 5 arquivos visíveis para não bloquear a UI
+        const filesToLoadSummaries = processedFiles.slice(0, 5)
+        
         // Usar ref para verificar summaries já carregados (evita dependency issues)
         const currentSummaries = fileSummariesRef.current
         
         // Filtrar apenas arquivos que ainda não têm summary e não estão sendo carregados
-        const filesToLoadSummaries = processedFiles.filter(file => {
+        const filesWithoutSummary = filesToLoadSummaries.filter(file => {
           const fileId = file.id || file.uuid
           if (!fileId) return false
           // Não carregar se já temos o summary ou se já está sendo carregado
           return !currentSummaries[fileId] && !loadingSummariesRef.current.has(fileId)
         })
         
-        if (filesToLoadSummaries.length > 0) {
+        if (filesWithoutSummary.length > 0) {
           // Marcar como carregando
-          const fileIdsToLoad = filesToLoadSummaries.map(f => f.id || f.uuid).filter(Boolean)
+          const fileIdsToLoad = filesWithoutSummary.map(f => f.id || f.uuid).filter(Boolean)
           fileIdsToLoad.forEach(id => loadingSummariesRef.current.add(id))
           setLoadingSummaries(new Set(fileIdsToLoad))
           
-          // Buscar summaries em paralelo
-          const summaryPromises = filesToLoadSummaries.map(async (file) => {
+          // Buscar summaries em paralelo (não bloquear - executar em background)
+          Promise.all(filesWithoutSummary.map(async (file) => {
             const fileId = file.id || file.uuid
             if (!fileId) return null
             
@@ -261,116 +264,123 @@ function Dashboard() {
               // Remover do ref após carregar (sucesso ou erro)
               loadingSummariesRef.current.delete(fileId)
             }
-          })
-
-          const summaryResults = await Promise.all(summaryPromises)
-          const summariesMap = {}
-          summaryResults.forEach(result => {
-            if (result && result.fileId) {
-              summariesMap[result.fileId] = result.summary
-            }
-          })
-          
-          // Atualizar state e ref
-          setFileSummaries(prev => {
-            const updated = { ...prev, ...summariesMap }
-            fileSummariesRef.current = updated
-            return updated
-          })
-          // Remover do loading após carregar
-          setLoadingSummaries(prev => {
-            const updated = new Set(prev)
-            fileIdsToLoad.forEach(id => updated.delete(id))
-            return updated
-          })
-
-          // Buscar cidades para arquivos com polígonos (apenas os novos summaries carregados)
-          const currentCities = fileCitiesRef.current
-          const filesWithGeometry = Object.entries(summariesMap)
-            .filter(([fileId, summary]) => {
-              const hasGeometry = summary && summary.geometry
-              const cityNotLoaded = !currentCities[fileId]
-              return hasGeometry && cityNotLoaded
-            })
-          
-          if (filesWithGeometry.length > 0) {
-            const cityFileIds = filesWithGeometry.map(([fileId]) => fileId)
-            setLoadingCities(new Set(cityFileIds))
-            
-            const cityPromises = filesWithGeometry.map(async ([fileId, summary]) => {
-              try {
-                const geometry = summary.geometry
-                let centerLat = null
-                let centerLng = null
-                
-                // Se for WKT POLYGON, calcular centro
-                if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
-                  const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
-                  if (coordMatch) {
-                    const coords = coordMatch[1].split(',').map(coord => {
-                      const [lng, lat] = coord.trim().split(' ').map(Number)
-                      return { lat, lng }
-                    })
-                    
-                    if (coords.length > 0) {
-                      // Calcular centroide (média das coordenadas)
-                      const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
-                      const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
-                      centerLat = sumLat / coords.length
-                      centerLng = sumLng / coords.length
-                    }
-                  }
-                }
-                
-                if (centerLat && centerLng) {
-                  // Usar Nominatim para geocoding reverso
-                  const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
-                    params: {
-                      lat: centerLat,
-                      lon: centerLng,
-                      format: 'json',
-                      addressdetails: 1
-                    },
-                    headers: {
-                      'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
-                    }
-                  })
-                  
-                  const city = response.data?.address?.city || 
-                              response.data?.address?.town || 
-                              response.data?.address?.village ||
-                              response.data?.address?.municipality ||
-                              response.data?.address?.county ||
-                              null
-                  
-                  return { fileId, city }
-                }
-              } catch (err) {
-                console.error(`Error fetching city for file ${fileId}:`, err)
-              }
-              return null
-            })
-
-            const cityResults = await Promise.all(cityPromises)
-            const citiesMap = {}
-            cityResults.forEach(result => {
-              if (result && result.fileId && result.city) {
-                citiesMap[result.fileId] = result.city
+          })).then(summaryResults => {
+            const summariesMap = {}
+            summaryResults.forEach(result => {
+              if (result && result.fileId) {
+                summariesMap[result.fileId] = result.summary
               }
             })
             
-            setFileCities(prev => {
-              const updated = { ...prev, ...citiesMap }
-              fileCitiesRef.current = updated
+            // Atualizar state e ref
+            setFileSummaries(prev => {
+              const updated = { ...prev, ...summariesMap }
+              fileSummariesRef.current = updated
               return updated
             })
             // Remover do loading após carregar
-            setLoadingCities(prev => {
+            setLoadingSummaries(prev => {
               const updated = new Set(prev)
-              cityFileIds.forEach(id => updated.delete(id))
+              fileIdsToLoad.forEach(id => updated.delete(id))
               return updated
             })
-          }
+
+            // Buscar cidades para arquivos com polígonos (apenas os novos summaries carregados)
+            const currentCities = fileCitiesRef.current
+            const filesWithGeometry = Object.entries(summariesMap)
+              .filter(([fileId, summary]) => {
+                const hasGeometry = summary && summary.geometry
+                const cityNotLoaded = !currentCities[fileId]
+                return hasGeometry && cityNotLoaded
+              })
+            
+            if (filesWithGeometry.length > 0) {
+              const cityFileIds = filesWithGeometry.map(([fileId]) => fileId)
+              setLoadingCities(new Set(cityFileIds))
+              
+              // Buscar cidades em background (não bloquear)
+              Promise.all(filesWithGeometry.map(async ([fileId, summary]) => {
+                try {
+                  const geometry = summary.geometry
+                  let centerLat = null
+                  let centerLng = null
+                  
+                  // Se for WKT POLYGON, calcular centro
+                  if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
+                    const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
+                    if (coordMatch) {
+                      const coords = coordMatch[1].split(',').map(coord => {
+                        const [lng, lat] = coord.trim().split(' ').map(Number)
+                        return { lat, lng }
+                      })
+                      
+                      if (coords.length > 0) {
+                        // Calcular centroide (média das coordenadas)
+                        const sumLat = coords.reduce((sum, c) => sum + c.lat, 0)
+                        const sumLng = coords.reduce((sum, c) => sum + c.lng, 0)
+                        centerLat = sumLat / coords.length
+                        centerLng = sumLng / coords.length
+                      }
+                    }
+                  }
+                  
+                  if (centerLat && centerLng) {
+                    // Usar Nominatim para geocoding reverso
+                    const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+                      params: {
+                        lat: centerLat,
+                        lon: centerLng,
+                        format: 'json',
+                        addressdetails: 1
+                      },
+                      headers: {
+                        'User-Agent': 'PointLakeGISStudio/1.0' // Nominatim requer User-Agent
+                      }
+                    })
+                    
+                    const city = response.data?.address?.city || 
+                                response.data?.address?.town || 
+                                response.data?.address?.village ||
+                                response.data?.address?.municipality ||
+                                response.data?.address?.county ||
+                                null
+                    
+                    return { fileId, city }
+                  }
+                } catch (err) {
+                  console.error(`Error fetching city for file ${fileId}:`, err)
+                }
+                return null
+              })).then(cityResults => {
+                const citiesMap = {}
+                cityResults.forEach(result => {
+                  if (result && result.fileId && result.city) {
+                    citiesMap[result.fileId] = result.city
+                  }
+                })
+                
+                setFileCities(prev => {
+                  const updated = { ...prev, ...citiesMap }
+                  fileCitiesRef.current = updated
+                  return updated
+                })
+                // Remover do loading após carregar
+                setLoadingCities(prev => {
+                  const updated = new Set(prev)
+                  cityFileIds.forEach(id => updated.delete(id))
+                  return updated
+                })
+              })
+            }
+          }).catch(err => {
+            console.error('Error loading summaries:', err)
+            // Remover do loading em caso de erro
+            setLoadingSummaries(prev => {
+              const updated = new Set(prev)
+              fileIdsToLoad.forEach(id => updated.delete(id))
+              return updated
+            })
+          })
         }
       }
     } catch (err) {
@@ -938,11 +948,15 @@ function Dashboard() {
     }
   }
 
-  // Carregar batches e arquivos ao montar o componente
+  // Carregar batches e arquivos ao montar o componente (apenas se não houver selectedLeafUserId ainda)
   useEffect(() => {
-    if (token && getEnvironment && isAuthenticated && selectedLeafUserId) {
-      loadBatches()
-      loadFiles()
+    if (token && getEnvironment && isAuthenticated && selectedLeafUserId && !changingUser) {
+      // Só carregar se não estiver mudando de usuário
+      const timer = setTimeout(() => {
+        loadBatches()
+        loadFiles()
+      }, 100)
+      return () => clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, isAuthenticated])
@@ -958,18 +972,45 @@ function Dashboard() {
     return () => clearInterval(interval)
   }, [isAuthenticated, selectedLeafUserId])
 
+  // Estado para indicar que está mudando de usuário (para feedback visual imediato)
+  const [changingUser, setChangingUser] = useState(false)
+
   // Recarregar dados quando o Point Lake User mudar
   useEffect(() => {
     if (isAuthenticated && selectedLeafUserId) {
-      // Limpar summaries e cidades quando mudar de usuário
+      // Limpar lista de arquivos IMEDIATAMENTE de forma síncrona
+      setFiles([])
+      setBatches([])
       setFileSummaries({})
       setFileCities({})
+      
+      // Cancelar qualquer loadFiles em execução
+      isLoadingFilesRef.current = false
+      
+      // Limpar refs imediatamente
       fileSummariesRef.current = {}
       fileCitiesRef.current = {}
       loadingSummariesRef.current.clear()
-      isLoadingFilesRef.current = false
-      loadBatches()
-      loadFiles()
+      
+      // Resetar contador de arquivos visíveis
+      setFilesToShow(20)
+      
+      // Mostrar estado de mudança
+      setChangingUser(true)
+      
+      // Usar requestAnimationFrame para garantir que a UI seja atualizada primeiro
+      requestAnimationFrame(() => {
+        // Carregar batches e arquivos em paralelo
+        Promise.all([
+          loadBatches(),
+          loadFiles()
+        ]).then(() => {
+          setChangingUser(false)
+        }).catch(err => {
+          console.error('Error loading data after user change:', err)
+          setChangingUser(false)
+        })
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLeafUserId])
@@ -1235,7 +1276,8 @@ function Dashboard() {
                         const newValue = String(e.target.value).trim()
                         
                         // Garantir que não está vazio e preservar valor completo
-                        if (newValue && newValue.length > 0) {
+                        if (newValue && newValue.length > 0 && newValue !== selectedLeafUserId) {
+                          // Atualizar imediatamente (sem await)
                           setSelectedLeafUserId(newValue)
                         }
                       }}
@@ -1243,8 +1285,10 @@ function Dashboard() {
                         // Manter o foco se necessário
                         e.preventDefault()
                       }}
-                      disabled={loadingUsers}
-                      className="px-3 py-1.5 text-sm bg-zinc-800 text-zinc-100 border border-zinc-700 rounded hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px]"
+                      disabled={loadingUsers || changingUser}
+                      className={`px-3 py-1.5 text-sm bg-zinc-800 text-zinc-100 border border-zinc-700 rounded hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px] transition-opacity duration-150 ${
+                        changingUser ? 'opacity-75' : ''
+                      }`}
                       autoFocus={false}
                       tabIndex={0}
                     >

@@ -1959,6 +1959,146 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Modal para criar novo Point Lake User */}
+      {showCreateUserModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUserModal(false)}>
+          <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                Create New Point Lake User
+              </h2>
+              <button
+                onClick={() => {
+                  setShowCreateUserModal(false)
+                  setNewUserName('')
+                  setNewUserEmail('')
+                  setError('')
+                }}
+                className="text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="new-user-name" className="block text-sm font-medium text-zinc-300 mb-1">
+                  Name (optional)
+                </label>
+                <input
+                  id="new-user-name"
+                  type="text"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter user name"
+                  disabled={creatingUser}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="new-user-email" className="block text-sm font-medium text-zinc-300 mb-1">
+                  Email (optional)
+                </label>
+                <input
+                  id="new-user-email"
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter user email"
+                  disabled={creatingUser}
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-950 border border-red-800 text-red-200 px-4 py-3 rounded-lg text-sm">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{error}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={async () => {
+                    if (!newUserName.trim() && !newUserEmail.trim()) {
+                      setError('Please provide at least a name or email')
+                      return
+                    }
+
+                    setCreatingUser(true)
+                    setError('')
+
+                    try {
+                      const result = await createLeafUser(newUserName.trim() || undefined, newUserEmail.trim() || undefined)
+                      
+                      if (result.success) {
+                        // Selecionar o novo usuário criado
+                        if (result.user && result.user.id) {
+                          setSelectedLeafUserId(result.user.id)
+                        }
+                        
+                        // Fechar modal e limpar campos
+                        setShowCreateUserModal(false)
+                        setNewUserName('')
+                        setNewUserEmail('')
+                        setError('')
+                      } else {
+                        setError(result.error || 'Failed to create user')
+                      }
+                    } catch (err) {
+                      console.error('Error creating user:', err)
+                      setError('An unexpected error occurred')
+                    } finally {
+                      setCreatingUser(false)
+                    }
+                  }}
+                  disabled={creatingUser || (!newUserName.trim() && !newUserEmail.trim())}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500 flex items-center justify-center gap-2"
+                >
+                  {creatingUser ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create User
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCreateUserModal(false)
+                    setNewUserName('')
+                    setNewUserEmail('')
+                    setError('')
+                  }}
+                  disabled={creatingUser}
+                  className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-lg font-medium hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-zinc-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

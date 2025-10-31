@@ -10,7 +10,7 @@ import { leafApiUrl, getPointlakeApiUrl } from '../config/api'
 
 function Dashboard() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
-  const { selectedLeafUserId, setSelectedLeafUserId, leafUsers, loadingUsers } = useLeafUser()
+  const { selectedLeafUserId, setSelectedLeafUserId, leafUsers, loadingUsers, refreshUsers, createLeafUser } = useLeafUser()
   const navigate = useNavigate()
   const [sqlQuery, setSqlQuery] = useState('SELECT * FROM fields LIMIT 10')
   const [results, setResults] = useState(null)
@@ -50,6 +50,10 @@ function Dashboard() {
   const fileSummariesRef = useRef({}) // Ref para acessar fileSummaries sem causar re-renders
   const fileCitiesRef = useRef({}) // Ref para acessar fileCities sem causar re-renders
   const isLoadingFilesRef = useRef(false) // Ref para evitar múltiplas chamadas simultâneas de loadFiles
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false) // Modal para criar usuário
+  const [creatingUser, setCreatingUser] = useState(false) // Loading ao criar usuário
+  const [newUserName, setNewUserName] = useState('') // Nome do novo usuário
+  const [newUserEmail, setNewUserEmail] = useState('') // Email do novo usuário
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -1244,32 +1248,43 @@ function Dashboard() {
                       autoFocus={false}
                       tabIndex={0}
                     >
-                  {loadingUsers ? (
-                    <option>Loading users...</option>
-                  ) : leafUsers.length === 0 ? (
-                    <option value={selectedLeafUserId}>{selectedLeafUserId ? String(selectedLeafUserId).substring(0, 20) + '...' : 'No user'}</option>
-                  ) : (
-                    leafUsers.map((user, idx) => {
-                      // Garantir que pegamos o ID completo, nunca truncado
-                      const userId = String(user.id || '').trim()
-                      
-                      if (!userId || userId.length === 0) {
-                        console.warn(`⚠️ Ignorando item ${idx} - userId vazio`)
-                        return null
-                      }
-                      
-                      // Usar o displayName ou name que vem da API (já formatado)
-                      const displayText = user.displayName || user.name || `User ${userId.substring(0, 8)}`
-                      
-                      return (
-                        <option key={`${userId}-${idx}`} value={userId}>
-                          {displayText}
-                        </option>
-                      )
-                    }).filter(Boolean)
-                  )}
-                </select>
-              </div>
+                      {loadingUsers ? (
+                        <option>Loading users...</option>
+                      ) : leafUsers.length === 0 ? (
+                        <option value={selectedLeafUserId}>{selectedLeafUserId ? String(selectedLeafUserId).substring(0, 20) + '...' : 'No user'}</option>
+                      ) : (
+                        leafUsers.map((user, idx) => {
+                          // Garantir que pegamos o ID completo, nunca truncado
+                          const userId = String(user.id || '').trim()
+                          
+                          if (!userId || userId.length === 0) {
+                            console.warn(`⚠️ Ignorando item ${idx} - userId vazio`)
+                            return null
+                          }
+                          
+                          // Usar o displayName ou name que vem da API (já formatado)
+                          const displayText = user.displayName || user.name || `User ${userId.substring(0, 8)}`
+                          
+                          return (
+                            <option key={`${userId}-${idx}`} value={userId}>
+                              {displayText}
+                            </option>
+                          )
+                        }).filter(Boolean)
+                      )}
+                    </select>
+                    <button
+                      onClick={() => setShowCreateUserModal(true)}
+                      disabled={loadingUsers}
+                      className="px-2 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-blue-500 flex items-center gap-1"
+                      title="Create new Point Lake User"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>Create</span>
+                    </button>
+                  </div>
             </div>
             
             {/* Barra de Ferramentas */}

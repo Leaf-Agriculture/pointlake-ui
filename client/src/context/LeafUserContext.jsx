@@ -26,6 +26,60 @@ export const LeafUserProvider = ({ children }) => {
   const [leafUsers, setLeafUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
 
+  // Função para criar um novo Point Lake User
+  const createLeafUser = async (name, email) => {
+    if (!token) return { success: false, error: 'No authentication token' }
+
+    setLoadingUsers(true)
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const usersApiUrl = `${getUserManagementApiUrl(env)}/users`
+      
+      console.log('➕ Creating new Point Lake User:', { name, email })
+      
+      const response = await axios.post(usersApiUrl, {
+        name: name || undefined,
+        email: email || undefined
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'accept': '*/*'
+        }
+      })
+      
+      console.log('✅ Point Lake User created:', response.data)
+      
+      // Recarregar lista de usuários
+      await fetchLeafUsers()
+      
+      return { success: true, user: response.data }
+    } catch (error) {
+      console.error('❌ Error creating Point Lake User:', error)
+      console.error('  - URL:', error.config?.url)
+      console.error('  - Status:', error.response?.status)
+      console.error('  - Data:', error.response?.data)
+      
+      let errorMessage = 'Error creating user'
+      if (error.response?.data) {
+        const data = error.response.data
+        if (typeof data === 'string') {
+          errorMessage = data
+        } else if (data.message) {
+          errorMessage = data.message
+        } else if (data.error) {
+          errorMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      return { success: false, error: errorMessage }
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
   // Função para buscar lista de Point Lake Users do endpoint correto
   const fetchLeafUsers = async () => {
     if (!token) return
@@ -108,13 +162,14 @@ export const LeafUserProvider = ({ children }) => {
     }
   }, [selectedLeafUserId])
 
-  const value = {
-    selectedLeafUserId,
-    setSelectedLeafUserId,
-    leafUsers,
-    loadingUsers,
-    refreshUsers: fetchLeafUsers
-  }
+      const value = {
+        selectedLeafUserId,
+        setSelectedLeafUserId,
+        leafUsers,
+        loadingUsers,
+        refreshUsers: fetchLeafUsers,
+        createLeafUser
+      }
 
   return <LeafUserContext.Provider value={value}>{children}</LeafUserContext.Provider>
 }

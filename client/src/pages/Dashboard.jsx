@@ -1688,6 +1688,31 @@ function Dashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
                           </button>
+                          <button
+                            onClick={() => {
+                              const fileId = file.id || file.uuid;
+                              if (fileId && isProcessed) {
+                                // Remover highlight quando clicado
+                                setNewFileIds(prev => {
+                                  const updated = new Set(prev)
+                                  updated.delete(fileId)
+                                  return updated
+                                })
+                                // Calcular URL base considerando basename para produção
+                                const basename = import.meta.env.PROD ? '/pointlake-ui' : ''
+                                const url = `${window.location.origin}${basename}/file/${fileId}`
+                                // Abrir em nova janela
+                                window.open(url, `file-query-${fileId}`, 'width=1400,height=900,resizable=yes,scrollbars=yes')
+                              }
+                            }}
+                            disabled={!isProcessed}
+                            className="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-purple-500"
+                            title={isProcessed ? "Abrir Query SQL em Nova Janela" : "Arquivo deve estar PROCESSED para abrir query"}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
                     </div>

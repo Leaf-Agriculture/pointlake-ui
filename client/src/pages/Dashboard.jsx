@@ -26,12 +26,14 @@ function Dashboard() {
   const [loadingFileDetails, setLoadingFileDetails] = useState(false)
   const [fileSummary, setFileSummary] = useState(null)
   const [loadingFileSummary, setLoadingFileSummary] = useState(false)
+  const [fileUnits, setFileUnits] = useState(null)
+  const [loadingFileUnits, setLoadingFileUnits] = useState(false)
   const [fileQuery, setFileQuery] = useState('')
   const [queryResults, setQueryResults] = useState(null)
   const [loadingQuery, setLoadingQuery] = useState(false)
   const [selectedFileId, setSelectedFileId] = useState(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [menuType, setMenuType] = useState('sql') // 'sql', 'upload', 'summary', 'query'
+  const [menuType, setMenuType] = useState('sql') // 'sql', 'upload', 'summary', 'query', 'units'
   const [drawnZones, setDrawnZones] = useState([])
   const mapRef = useRef(null)
   const [queryExecutionTime, setQueryExecutionTime] = useState(null)
@@ -474,6 +476,28 @@ function Dashboard() {
     }
   }
 
+  // Função para carregar units de um arquivo específico
+  const loadFileUnits = async (fileId) => {
+    setLoadingFileUnits(true)
+    setFileUnits(null)
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const apiUrl = leafApiUrl(`/api/v2/units/${fileId}`, env)
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      setFileUnits(response.data)
+    } catch (err) {
+      console.error('Erro ao carregar units do arquivo:', err)
+      setError(getErrorMessage(err, 'Error loading file units'))
+    } finally {
+      setLoadingFileUnits(false)
+    }
+  }
+
   // Função para executar query em arquivo específico
   const executeFileQuery = async () => {
     if (!fileQuery.trim() || !selectedFileId) {
@@ -613,6 +637,7 @@ function Dashboard() {
     setIsMenuOpen(false)
     // Limpar dados quando fechar
     setFileSummary(null)
+    setFileUnits(null)
     setQueryResults(null)
     setSelectedFileId(null)
     setFileQuery('')
@@ -1713,6 +1738,34 @@ function Dashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
                           </button>
+                          <button
+                            onClick={() => {
+                              const fileId = file.id || file.uuid;
+                              if (fileId) {
+                                // Remover highlight quando clicado
+                                setNewFileIds(prev => {
+                                  const updated = new Set(prev)
+                                  updated.delete(fileId)
+                                  return updated
+                                })
+                                loadFileUnits(fileId);
+                                openMenu('units');
+                              }
+                            }}
+                            disabled={loadingFileUnits || !isProcessed}
+                            className="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-orange-500"
+                            title={isProcessed ? "View Units" : "File must be PROCESSED to view units"}
+                          >
+                            {loadingFileUnits ? (
+                              <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                              </svg>
+                            )}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1845,6 +1898,64 @@ function Dashboard() {
                               </tr>
                             )
                           })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+          
+          {/* Painel de Units na parte inferior */}
+          {(fileUnits || loadingFileUnits) && (
+            <div className="bg-zinc-900 border-t border-zinc-800 flex-shrink-0" style={{ height: '200px', maxHeight: '200px' }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
+                <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                  </svg>
+                  Units
+                </h3>
+                <button
+                  onClick={() => {
+                    setFileUnits(null)
+                    setMenuType('sql')
+                  }}
+                  className="text-zinc-400 hover:text-zinc-200 transition-colors"
+                  title="Close Units"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="overflow-x-auto overflow-y-auto" style={{ height: '175px', maxHeight: '175px' }}>
+                {loadingFileUnits ? (
+                  <div className="flex items-center justify-center py-2">
+                    <svg className="w-4 h-4 animate-spin text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span className="ml-2 text-xs text-zinc-400">Loading...</span>
+                  </div>
+                ) : fileUnits ? (
+                  <div className="px-3 py-2">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-700">
+                          <th className="text-left py-1 px-2 text-zinc-300 font-semibold text-xs">Variable</th>
+                          <th className="text-left py-1 px-2 text-zinc-300 font-semibold text-xs">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(fileUnits).map(([key, value], idx) => (
+                          <tr 
+                            key={idx} 
+                            className={`border-b border-zinc-700 hover:bg-zinc-700 ${idx % 2 === 0 ? 'bg-zinc-800/50' : 'bg-zinc-700/30'}`}
+                          >
+                            <td className="py-1 px-2 text-zinc-300 font-mono text-xs whitespace-nowrap">{key}</td>
+                            <td className="py-1 px-2 text-zinc-200 text-xs font-medium">{String(value)}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>

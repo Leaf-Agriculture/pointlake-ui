@@ -882,7 +882,7 @@ function Dashboard() {
     setSqlQuery(unionQuery)
   }
 
-  // Função para gerar UNION ALL de todos os arquivos PROCESSED do leaf user com LIMIT 500
+  // Função para gerar UNION ALL de todos os arquivos PROCESSED do leaf user com TABLESAMPLE (500 ROWS)
   const generateUnionAllWithTableSample = () => {
     // Obter arquivos processados do leaf user atual
     const processedFiles = files.filter(f => f.status === 'PROCESSED')
@@ -897,14 +897,14 @@ function Dashboard() {
     const filesToUse = processedFiles.slice(0, MAX_FILES)
     const remainingFiles = processedFiles.length - MAX_FILES
     
-    // Gerar query para cada arquivo com LIMIT 500 usando subqueries
-    // Spark SQL não permite LIMIT direto em cada SELECT de UNION ALL, precisa usar subqueries
+    // Gerar query para cada arquivo com TABLESAMPLE (500 ROWS) usando subqueries
+    // Spark SQL precisa de subqueries para usar TABLESAMPLE em UNION ALL
     const fileQueries = filesToUse.map(file => {
       const fileId = file.id || file.uuid
       if (!fileId) return null
       
-      // Usar subquery para permitir LIMIT em cada parte do UNION ALL
-      return `(SELECT * FROM \`spark_catalog\`.\`default\`.\`pointlake_file_${fileId}\` LIMIT 500)`
+      // Usar subquery para permitir TABLESAMPLE (500 ROWS) em cada parte do UNION ALL
+      return `(SELECT * FROM \`spark_catalog\`.\`default\`.\`pointlake_file_${fileId}\` TABLESAMPLE (500 ROWS))`
     }).filter(Boolean)
     
     if (fileQueries.length === 0) {
@@ -925,7 +925,7 @@ function Dashboard() {
       setError('')
     }
     
-    console.log(`✅ Generated UNION ALL query with ${fileQueries.length} files using LIMIT 500${remainingFiles > 0 ? ` (${remainingFiles} files omitted)` : ''}`)
+    console.log(`✅ Generated UNION ALL query with ${fileQueries.length} files using TABLESAMPLE (500 ROWS)${remainingFiles > 0 ? ` (${remainingFiles} files omitted)` : ''}`)
   }
 
   // Função para adicionar UNION ALL de um arquivo específico à query atual
@@ -1403,7 +1403,7 @@ function Dashboard() {
                       onClick={generateUnionAllWithTableSample}
                       disabled={loadingUsers || files.filter(f => f.status === 'PROCESSED').length === 0}
                       className="px-2 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-emerald-500 flex items-center gap-1"
-                      title="Generate UNION ALL query with LIMIT 500 for all PROCESSED files"
+                      title="Generate UNION ALL query with TABLESAMPLE (500 ROWS) for all PROCESSED files"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />

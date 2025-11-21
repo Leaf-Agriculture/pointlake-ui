@@ -44,6 +44,11 @@ function Dashboard() {
   const previousFilesRef = useRef([]) // Referência para lista anterior de arquivos
   const [queryHistory, setQueryHistory] = useState([]) // Histórico de queries
   const [showHistory, setShowHistory] = useState(false) // Mostrar/esconder histórico
+  const [aiPrompt, setAiPrompt] = useState('') // Prompt para AI
+  const [aiPromptResponse, setAiPromptResponse] = useState(null) // Resposta do prompt AI
+  const [loadingAiPrompt, setLoadingAiPrompt] = useState(false) // Loading do prompt AI
+  const [selectedTableForPrompt, setSelectedTableForPrompt] = useState('') // Tabela selecionada para o prompt
+  const [sqlQueryMode, setSqlQueryMode] = useState('sql') // 'sql' ou 'ai' - modo de query
   const [fileSummaries, setFileSummaries] = useState({}) // Summaries de todos os arquivos { fileId: summary }
   const [fileCities, setFileCities] = useState({}) // Cidades dos arquivos { fileId: city }
   const [loadingSummaries, setLoadingSummaries] = useState(new Set()) // IDs de arquivos cujos summaries estão sendo carregados
@@ -1107,6 +1112,53 @@ function Dashboard() {
     }
   }, [files, filesToShow])
 
+  // Função para executar prompt AI
+  const handleAiPrompt = async () => {
+    if (!aiPrompt.trim()) {
+      setError('Please enter a prompt')
+      return
+    }
+
+    if (!selectedTableForPrompt.trim()) {
+      setError('Please select a table')
+      return
+    }
+
+    setLoadingAiPrompt(true)
+    setError('')
+    setAiPromptResponse(null)
+
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const apiUrl = leafApiUrl('/api/v2/prompt', env)
+      
+      const response = await axios.post(apiUrl, {
+        table: selectedTableForPrompt.trim(),
+        prompt: aiPrompt.trim()
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      setAiPromptResponse(response.data)
+      
+      // Se a resposta tem SQL gerado e não precisa de clarificação, executar automaticamente
+      if (response.data.sql && !response.data.needsClarification) {
+        // Copiar SQL gerado para o campo SQL query
+        setSqlQuery(response.data.sql)
+        // Opcionalmente executar automaticamente
+        // await handleQuery()
+      }
+    } catch (err) {
+      console.error('Erro no prompt AI:', err)
+      setError(getErrorMessage(err, 'Error executing AI prompt'))
+    } finally {
+      setLoadingAiPrompt(false)
+    }
+  }
+
   const handleQuery = async () => {
     if (!sqlQuery.trim()) {
       setError('Please enter a SQL query')
@@ -2025,15 +2077,45 @@ function Dashboard() {
         {/* Painel Lateral Direito - SQL */}
         <div className="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
           <div className="p-4 border-b border-zinc-800">
-            <h2 className="text-base font-semibold text-zinc-200 flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              SQL Query
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-zinc-200 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {sqlQueryMode === 'sql' ? 'SQL Query' : 'AI Prompt'}
+              </h2>
+              {/* Toggle entre SQL e AI */}
+              <div className="flex gap-1 bg-zinc-800 rounded-lg p-1 border border-zinc-700">
+                <button
+                  onClick={() => setSqlQueryMode('sql')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    sqlQueryMode === 'sql'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="SQL Query Mode"
+                >
+                  SQL
+                </button>
+                <button
+                  onClick={() => setSqlQueryMode('ai')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    sqlQueryMode === 'ai'
+                      ? 'bg-purple-600 text-white'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="AI Prompt Mode"
+                >
+                  AI
+                </button>
+              </div>
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Modo SQL */}
+            {sqlQueryMode === 'sql' && (
+            <>
             {/* Área de Input SQL */}
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -2192,6 +2274,142 @@ function Dashboard() {
                   </pre>
                 </div>
               </div>
+            )}
+            </>
+            )}
+
+            {/* Modo AI Prompt */}
+            {sqlQueryMode === 'ai' && (
+              <>
+                {/* Seleção de Tabela */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">
+                    Select Table
+                  </label>
+                  <select
+                    value={selectedTableForPrompt}
+                    onChange={(e) => setSelectedTableForPrompt(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none text-sm text-zinc-200"
+                  >
+                    <option value="">Select a table...</option>
+                    {files.filter(f => f.status === 'PROCESSED').map(file => {
+                      const fileId = file.id || file.uuid
+                      if (!fileId) return null
+                      const tableName = `pointlake_file_${fileId}`
+                      return (
+                        <option key={fileId} value={tableName}>
+                          {file.name || file.filename || tableName}
+                        </option>
+                      )
+                    }).filter(Boolean)}
+                  </select>
+                </div>
+
+                {/* Input do Prompt */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-300 mb-2">
+                    Enter your prompt
+                  </label>
+                  <textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    className="w-full h-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none text-sm text-zinc-200 placeholder-zinc-500"
+                    placeholder="Ex: what is the avg yield?"
+                  />
+                </div>
+
+                {/* Botão Executar Prompt */}
+                <button
+                  onClick={handleAiPrompt}
+                  disabled={loadingAiPrompt || !aiPrompt.trim() || !selectedTableForPrompt}
+                  className="w-full bg-purple-600 text-white py-2 rounded-lg font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 border border-purple-500"
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    {loadingAiPrompt ? (
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    )}
+                    {loadingAiPrompt ? 'Processing...' : 'Execute Prompt'}
+                  </span>
+                </button>
+
+                {/* Resposta do AI Prompt */}
+                {aiPromptResponse && (
+                  <div className="space-y-3">
+                    {/* Reasoning */}
+                    {aiPromptResponse.reasoning && (
+                      <div className="bg-blue-950/30 border border-blue-800 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-blue-300 mb-1 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          Reasoning
+                        </h4>
+                        <p className="text-xs text-blue-200">{aiPromptResponse.reasoning}</p>
+                      </div>
+                    )}
+
+                    {/* SQL Gerado */}
+                    {aiPromptResponse.sql && (
+                      <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-zinc-300 mb-2 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          Generated SQL
+                        </h4>
+                        <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap break-words">{aiPromptResponse.sql}</pre>
+                        <button
+                          onClick={() => {
+                            setSqlQuery(aiPromptResponse.sql)
+                            setSqlQueryMode('sql')
+                          }}
+                          className="mt-2 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition-colors"
+                        >
+                          Use this SQL
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Resultados */}
+                    {aiPromptResponse.rows && Array.isArray(aiPromptResponse.rows) && aiPromptResponse.rows.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-zinc-300 mb-2 flex items-center gap-1">
+                          <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Results
+                        </h4>
+                        <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 max-h-64 overflow-auto">
+                          <pre className="text-xs text-zinc-300 whitespace-pre-wrap">
+                            {JSON.stringify(aiPromptResponse.rows, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mensagem */}
+                    {aiPromptResponse.message && (
+                      <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3">
+                        <p className="text-xs text-zinc-300">{aiPromptResponse.message}</p>
+                      </div>
+                    )}
+
+                    {/* Clarification Question */}
+                    {aiPromptResponse.needsClarification && aiPromptResponse.clarificationQuestion && (
+                      <div className="bg-yellow-950/30 border border-yellow-800 rounded-lg p-3">
+                        <h4 className="text-xs font-semibold text-yellow-300 mb-1">Clarification Needed</h4>
+                        <p className="text-xs text-yellow-200">{aiPromptResponse.clarificationQuestion}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

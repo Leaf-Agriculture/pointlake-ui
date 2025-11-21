@@ -76,6 +76,10 @@ export const leafApiUrl = (path, environment = 'prod') => {
     return `${getPointlakeApiUrl(environment)}/v2/units${unitsPath}`
   }
   
+  if (path.startsWith('/api/v2/prompt')) {
+    return `${getPointlakeApiUrl(environment)}/v2/prompt`
+  }
+  
   if (path.startsWith('/api/users') || path.startsWith('/users')) {
     return `${getUserManagementApiUrl(environment)}/users`
   }

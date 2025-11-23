@@ -158,6 +158,7 @@ function PointsAnalytics() {
           grouped[key] = {
             count: 0,
             operationTypes: {},
+            crops: {},
             date: date
           }
         }
@@ -167,6 +168,11 @@ function PointsAnalytics() {
         if (point.operationType) {
           grouped[key].operationTypes[point.operationType] = 
             (grouped[key].operationTypes[point.operationType] || 0) + 1
+        }
+
+        if (point.crop) {
+          grouped[key].crops[point.crop] = 
+            (grouped[key].crops[point.crop] || 0) + 1
         }
       } catch (e) {
         console.error('Error processing timestamp:', e)
@@ -182,6 +188,7 @@ function PointsAnalytics() {
         count: grouped[key].count,
         percentage: (grouped[key].count / maxCount) * 100,
         operationTypes: grouped[key].operationTypes,
+        crops: grouped[key].crops,
         date: grouped[key].date
       })),
       total: points.length,
@@ -266,6 +273,7 @@ function PointsAnalytics() {
             date: date,
             operations: [],
             byType: {},
+            byCrop: {},
             totalPoints: 0,
             timeRange: { start: date, end: date }
           }
@@ -293,6 +301,13 @@ function PointsAnalytics() {
         if (point.speed != null) typeData.speeds.push(point.speed)
         if (point.elevation != null) typeData.elevations.push(point.elevation)
         if (point.area != null) typeData.areas.push(point.area)
+
+        // Agrupar por crop
+        const crop = point.crop || 'Unknown'
+        if (!grouped[dayKey].byCrop[crop]) {
+          grouped[dayKey].byCrop[crop] = 0
+        }
+        grouped[dayKey].byCrop[crop]++
 
         // Atualizar time range
         if (date < grouped[dayKey].timeRange.start) {
@@ -1619,10 +1634,15 @@ function PointsAnalytics() {
                         ]
                         const colorIndex = index % colors.length
                         
+                        // Get main operation and crop info
+                        const operations = Object.entries(group.operationTypes).sort((a, b) => b[1] - a[1])
+                        const mainOperation = operations[0]?.[0] || ''
+                        const mainOpCount = operations[0]?.[1] || 0
+                        
                         return (
                           <div
                             key={index}
-                            className="group relative flex-1 min-w-[8px] max-w-[60px]"
+                            className="group relative flex-1 min-w-[12px] max-w-[60px]"
                             style={{ height: '100%' }}
                           >
                             {/* Bar */}
@@ -1630,7 +1650,19 @@ function PointsAnalytics() {
                               className={`absolute bottom-0 w-full bg-gradient-to-t ${colors[colorIndex]} rounded-t transition-all duration-300 hover:opacity-80 cursor-pointer`}
                               style={{ height: `${height}%` }}
                               title={`${group.label}: ${group.count} points`}
-                            />
+                            >
+                              {/* Operation label inside bar if tall enough */}
+                              {height > 30 && mainOperation && (
+                                <div className="absolute inset-x-0 bottom-2 flex flex-col items-center justify-center">
+                                  <div className="text-xs font-bold text-white/90 bg-black/40 px-1 rounded whitespace-nowrap" style={{ fontSize: '10px' }}>
+                                    {mainOperation.slice(0, 4)}
+                                  </div>
+                                  <div className="text-xs font-medium text-white/80" style={{ fontSize: '9px' }}>
+                                    {mainOpCount}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
 
                             {/* Tooltip on hover */}
                             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10">
@@ -1677,14 +1709,30 @@ function PointsAnalytics() {
                                 </button>
 
                                 <div className="text-xs text-zinc-400 mb-1">
-                                  Total: {group.count} points
+                                  <strong className="text-zinc-300">{group.count}</strong> points total
                                 </div>
+                                
+                                {/* Operations */}
                                 {Object.keys(group.operationTypes).length > 0 && (
                                   <div className="border-t border-zinc-700 mt-1 pt-1">
+                                    <div className="text-xs font-medium text-zinc-400 mb-1">Operations:</div>
                                     {Object.entries(group.operationTypes).map(([type, count]) => (
                                       <div key={type} className="flex justify-between text-xs text-zinc-400">
                                         <span>{type}:</span>
                                         <span className="text-zinc-300">{count}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Crops */}
+                                {Object.keys(group.crops || {}).length > 0 && (
+                                  <div className="border-t border-zinc-700 mt-1 pt-1">
+                                    <div className="text-xs font-medium text-zinc-400 mb-1">Crops:</div>
+                                    {Object.entries(group.crops).map(([crop, count]) => (
+                                      <div key={crop} className="flex justify-between text-xs text-zinc-400">
+                                        <span>{crop}:</span>
+                                        <span className="text-green-300">{count}</span>
                                       </div>
                                     ))}
                                   </div>
@@ -1697,26 +1745,36 @@ function PointsAnalytics() {
                     </div>
                   </div>
 
-                  {/* X-axis labels */}
+                  {/* X-axis labels with year */}
                   <div className="absolute left-12 right-0 bottom-0 h-8 flex items-start justify-between text-xs text-zinc-500 pt-1">
-                    {timelineData.groups.length <= 20 ? (
-                      // Show all labels for small datasets
+                    {timelineData.groups.length <= 15 ? (
+                      // Show all labels for small datasets with year
                       timelineData.groups.map((group, index) => (
-                        <span key={index} className="transform -rotate-45 origin-top-left text-xs truncate" style={{ maxWidth: '60px' }}>
-                          {timelineGrouping === 'hour' ? group.label.split(' ')[1] :
-                           timelineGrouping === 'day' ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) :
-                           timelineGrouping === 'week' ? group.label.replace('Week of ', '').substring(5) :
-                           new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short' })}
+                        <span key={index} className="transform -rotate-45 origin-top-left text-xs truncate" style={{ maxWidth: '80px' }}>
+                          {timelineGrouping === 'hour' 
+                            ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit' })
+                            : timelineGrouping === 'day' 
+                            ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : timelineGrouping === 'week' 
+                            ? new Date(group.label.replace('Week of ', '')).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                          }
                         </span>
                       ))
                     ) : (
                       // Show sample labels for large datasets
                       <>
-                        <span>{timelineData.groups[0]?.label.substring(0, 10)}</span>
+                        <span className="text-xs">
+                          {new Date(timelineData.groups[0]?.label).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                        </span>
                         <span className="text-zinc-600">...</span>
-                        <span>{timelineData.groups[Math.floor(timelineData.groups.length / 2)]?.label.substring(0, 10)}</span>
+                        <span className="text-xs">
+                          {new Date(timelineData.groups[Math.floor(timelineData.groups.length / 2)]?.label).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                        </span>
                         <span className="text-zinc-600">...</span>
-                        <span>{timelineData.groups[timelineData.groups.length - 1]?.label.substring(0, 10)}</span>
+                        <span className="text-xs">
+                          {new Date(timelineData.groups[timelineData.groups.length - 1]?.label).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                        </span>
                       </>
                     )}
                   </div>

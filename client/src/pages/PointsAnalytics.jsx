@@ -27,7 +27,10 @@ function PointsAnalytics() {
     operationType: [],
     crop: [],
     variety: [],
-    recordingStatus: []
+    recordingStatus: [],
+    speedRange: [0, 100],
+    elevationRange: [0, 10000],
+    dateRange: null
   })
   const [availableFilters, setAvailableFilters] = useState({
     operationType: [],
@@ -35,8 +38,15 @@ function PointsAnalytics() {
     variety: [],
     recordingStatus: []
   })
+  const [numericRanges, setNumericRanges] = useState({
+    speed: { min: 0, max: 100 },
+    elevation: { min: 0, max: 10000 },
+    area: { min: 0, max: 1 }
+  })
   const [filteredPoints, setFilteredPoints] = useState([])
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedDay, setSelectedDay] = useState(null)
+  const [operationsByDay, setOperationsByDay] = useState([])
   const [stats, setStats] = useState(null)
   const mapRef = useRef(null)
 
@@ -179,7 +189,7 @@ function PointsAnalytics() {
     }
   }
 
-  // Extrair valores únicos para filtros
+  // Extrair valores únicos para filtros e calcular ranges numéricos
   const extractUniqueValues = (points) => {
     const unique = {
       operationType: new Set(),
@@ -188,12 +198,45 @@ function PointsAnalytics() {
       recordingStatus: new Set()
     }
 
+    let speeds = []
+    let elevations = []
+    let areas = []
+
     points.forEach(point => {
       if (point.operationType) unique.operationType.add(point.operationType)
       if (point.crop) unique.crop.add(point.crop)
       if (point.variety) unique.variety.add(point.variety)
       if (point.recordingStatus) unique.recordingStatus.add(point.recordingStatus)
+      
+      if (point.speed != null) speeds.push(point.speed)
+      if (point.elevation != null) elevations.push(point.elevation)
+      if (point.area != null) areas.push(point.area)
     })
+
+    // Calcular ranges numéricos
+    const ranges = {
+      speed: {
+        min: speeds.length > 0 ? Math.floor(Math.min(...speeds)) : 0,
+        max: speeds.length > 0 ? Math.ceil(Math.max(...speeds)) : 100
+      },
+      elevation: {
+        min: elevations.length > 0 ? Math.floor(Math.min(...elevations)) : 0,
+        max: elevations.length > 0 ? Math.ceil(Math.max(...elevations)) : 10000
+      },
+      area: {
+        min: areas.length > 0 ? Math.min(...areas) : 0,
+        max: areas.length > 0 ? Math.max(...areas) : 1
+      }
+    }
+
+    setNumericRanges(ranges)
+
+    // Inicializar filtros de range
+    setFilters(prev => ({
+      ...prev,
+      speedRange: [ranges.speed.min, ranges.speed.max],
+      elevationRange: [ranges.elevation.min, ranges.elevation.max]
+    }))
 
     return {
       operationType: Array.from(unique.operationType).sort(),
@@ -203,14 +246,86 @@ function PointsAnalytics() {
     }
   }
 
+  // Agrupar operações por dia
+  const groupOperationsByDay = (points) => {
+    const grouped = {}
+
+    points.forEach(point => {
+      if (!point.timestamp) return
+
+      try {
+        const date = new Date(point.timestamp)
+        const dayKey = date.toISOString().split('T')[0]
+
+        if (!grouped[dayKey]) {
+          grouped[dayKey] = {
+            date: date,
+            operations: [],
+            byType: {},
+            totalPoints: 0,
+            timeRange: { start: date, end: date }
+          }
+        }
+
+        grouped[dayKey].operations.push(point)
+        grouped[dayKey].totalPoints++
+
+        // Agrupar por tipo
+        const type = point.operationType || 'Unknown'
+        if (!grouped[dayKey].byType[type]) {
+          grouped[dayKey].byType[type] = {
+            count: 0,
+            avgSpeed: 0,
+            avgElevation: 0,
+            totalArea: 0,
+            speeds: [],
+            elevations: [],
+            areas: []
+          }
+        }
+
+        const typeData = grouped[dayKey].byType[type]
+        typeData.count++
+        if (point.speed != null) typeData.speeds.push(point.speed)
+        if (point.elevation != null) typeData.elevations.push(point.elevation)
+        if (point.area != null) typeData.areas.push(point.area)
+
+        // Atualizar time range
+        if (date < grouped[dayKey].timeRange.start) {
+          grouped[dayKey].timeRange.start = date
+        }
+        if (date > grouped[dayKey].timeRange.end) {
+          grouped[dayKey].timeRange.end = date
+        }
+      } catch (e) {
+        console.error('Error grouping by day:', e)
+      }
+    })
+
+    // Calcular médias
+    Object.values(grouped).forEach(day => {
+      Object.values(day.byType).forEach(typeData => {
+        if (typeData.speeds.length > 0) {
+          typeData.avgSpeed = typeData.speeds.reduce((a, b) => a + b, 0) / typeData.speeds.length
+        }
+        if (typeData.elevations.length > 0) {
+          typeData.avgElevation = typeData.elevations.reduce((a, b) => a + b, 0) / typeData.elevations.length
+        }
+        if (typeData.areas.length > 0) {
+          typeData.totalArea = typeData.areas.reduce((a, b) => a + b, 0)
+        }
+      })
+    })
+
+    return Object.keys(grouped)
+      .sort((a, b) => new Date(b) - new Date(a))
+      .map(key => ({ key, ...grouped[key] }))
+  }
+
   // Aplicar filtros aos pontos
   const applyFilters = (points, filters) => {
     return points.filter(point => {
-      // Se não há filtros ativos, retorna todos
-      const hasActiveFilters = Object.values(filters).some(arr => arr.length > 0)
-      if (!hasActiveFilters) return true
-
-      // Verifica cada filtro
+      // Filtros categóricos
       if (filters.operationType.length > 0 && !filters.operationType.includes(point.operationType)) {
         return false
       }
@@ -224,8 +339,32 @@ function PointsAnalytics() {
         return false
       }
 
+      // Filtros numéricos
+      if (point.speed != null && filters.speedRange) {
+        if (point.speed < filters.speedRange[0] || point.speed > filters.speedRange[1]) {
+          return false
+        }
+      }
+      if (point.elevation != null && filters.elevationRange) {
+        if (point.elevation < filters.elevationRange[0] || point.elevation > filters.elevationRange[1]) {
+          return false
+        }
+      }
+
       return true
     })
+  }
+
+  // Contar pontos por valor de filtro
+  const getFilterCounts = (points, category) => {
+    const counts = {}
+    points.forEach(point => {
+      const value = point[category]
+      if (value) {
+        counts[value] = (counts[value] || 0) + 1
+      }
+    })
+    return counts
   }
 
   // Toggle filter value
@@ -249,8 +388,23 @@ function PointsAnalytics() {
       operationType: [],
       crop: [],
       variety: [],
-      recordingStatus: []
+      recordingStatus: [],
+      speedRange: [numericRanges.speed.min, numericRanges.speed.max],
+      elevationRange: [numericRanges.elevation.min, numericRanges.elevation.max],
+      dateRange: null
     })
+  }
+
+  // Contar filtros ativos
+  const getActiveFilterCount = () => {
+    let count = 0
+    if (filters.operationType.length > 0) count++
+    if (filters.crop.length > 0) count++
+    if (filters.variety.length > 0) count++
+    if (filters.recordingStatus.length > 0) count++
+    if (filters.speedRange && (filters.speedRange[0] !== numericRanges.speed.min || filters.speedRange[1] !== numericRanges.speed.max)) count++
+    if (filters.elevationRange && (filters.elevationRange[0] !== numericRanges.elevation.min || filters.elevationRange[1] !== numericRanges.elevation.max)) count++
+    return count
   }
 
   // Atualizar pontos filtrados e valores disponíveis
@@ -261,8 +415,13 @@ function PointsAnalytics() {
       
       const filtered = applyFilters(points, filters)
       setFilteredPoints(filtered)
+
+      // Agrupar operações por dia
+      const byDay = groupOperationsByDay(filtered)
+      setOperationsByDay(byDay)
     } else {
       setFilteredPoints([])
+      setOperationsByDay([])
       setAvailableFilters({
         operationType: [],
         crop: [],
@@ -827,6 +986,240 @@ function PointsAnalytics() {
               </div>
             )}
 
+            {/* Filters Card */}
+            {points.length > 0 && (
+              <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    🔍 Filters
+                    {getActiveFilterCount() > 0 && (
+                      <span className="px-2 py-0.5 bg-blue-600 text-white rounded-full text-xs">
+                        {getActiveFilterCount()}
+                      </span>
+                    )}
+                  </h2>
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className="text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    {showFilters ? '▼ Hide' : '▶ Show'}
+                  </button>
+                </div>
+
+                {showFilters && (
+                  <div className="space-y-4">
+                    {/* Operation Type Filter */}
+                    {availableFilters.operationType.length > 0 && (
+                      <div>
+                        <div className="text-sm font-medium text-zinc-300 mb-2">Operation Type</div>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {availableFilters.operationType.map(type => {
+                            const count = getFilterCounts(points, 'operationType')[type] || 0
+                            const isSelected = filters.operationType.includes(type)
+                            return (
+                              <label
+                                key={type}
+                                className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-blue-600/20 border border-blue-500' : 'bg-zinc-700/30 hover:bg-zinc-700/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleFilter('operationType', type)}
+                                    className="rounded"
+                                  />
+                                  <span className="text-xs text-zinc-200">{type}</span>
+                                </div>
+                                <span className="text-xs text-zinc-400">{count}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Crop Filter */}
+                    {availableFilters.crop.length > 0 && (
+                      <div>
+                        <div className="text-sm font-medium text-zinc-300 mb-2">Crop</div>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {availableFilters.crop.map(crop => {
+                            const count = getFilterCounts(points, 'crop')[crop] || 0
+                            const isSelected = filters.crop.includes(crop)
+                            return (
+                              <label
+                                key={crop}
+                                className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-green-600/20 border border-green-500' : 'bg-zinc-700/30 hover:bg-zinc-700/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleFilter('crop', crop)}
+                                    className="rounded"
+                                  />
+                                  <span className="text-xs text-zinc-200">{crop}</span>
+                                </div>
+                                <span className="text-xs text-zinc-400">{count}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Variety Filter */}
+                    {availableFilters.variety.length > 0 && (
+                      <div>
+                        <div className="text-sm font-medium text-zinc-300 mb-2">Variety</div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {availableFilters.variety.map(variety => {
+                            const count = getFilterCounts(points, 'variety')[variety] || 0
+                            const isSelected = filters.variety.includes(variety)
+                            return (
+                              <label
+                                key={variety}
+                                className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-purple-600/20 border border-purple-500' : 'bg-zinc-700/30 hover:bg-zinc-700/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleFilter('variety', variety)}
+                                    className="rounded"
+                                  />
+                                  <span className="text-xs text-zinc-200">{variety}</span>
+                                </div>
+                                <span className="text-xs text-zinc-400">{count}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recording Status Filter */}
+                    {availableFilters.recordingStatus.length > 0 && (
+                      <div>
+                        <div className="text-sm font-medium text-zinc-300 mb-2">Recording Status</div>
+                        <div className="space-y-1">
+                          {availableFilters.recordingStatus.map(status => {
+                            const count = getFilterCounts(points, 'recordingStatus')[status] || 0
+                            const isSelected = filters.recordingStatus.includes(status)
+                            return (
+                              <label
+                                key={status}
+                                className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-yellow-600/20 border border-yellow-500' : 'bg-zinc-700/30 hover:bg-zinc-700/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleFilter('recordingStatus', status)}
+                                    className="rounded"
+                                  />
+                                  <span className="text-xs text-zinc-200 truncate">{status.replace('dtiRecordingStatus', '')}</span>
+                                </div>
+                                <span className="text-xs text-zinc-400">{count}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Speed Range Filter */}
+                    <div>
+                      <div className="text-sm font-medium text-zinc-300 mb-2">
+                        Speed: {filters.speedRange[0].toFixed(1)} - {filters.speedRange[1].toFixed(1)} km/h
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min={numericRanges.speed.min}
+                          max={numericRanges.speed.max}
+                          value={filters.speedRange[0]}
+                          onChange={(e) => setFilters(prev => ({
+                            ...prev,
+                            speedRange: [parseFloat(e.target.value), prev.speedRange[1]]
+                          }))}
+                          className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <input
+                          type="range"
+                          min={numericRanges.speed.min}
+                          max={numericRanges.speed.max}
+                          value={filters.speedRange[1]}
+                          onChange={(e) => setFilters(prev => ({
+                            ...prev,
+                            speedRange: [prev.speedRange[0], parseFloat(e.target.value)]
+                          }))}
+                          className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Elevation Range Filter */}
+                    <div>
+                      <div className="text-sm font-medium text-zinc-300 mb-2">
+                        Elevation: {filters.elevationRange[0].toFixed(0)} - {filters.elevationRange[1].toFixed(0)} m
+                      </div>
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min={numericRanges.elevation.min}
+                          max={numericRanges.elevation.max}
+                          value={filters.elevationRange[0]}
+                          onChange={(e) => setFilters(prev => ({
+                            ...prev,
+                            elevationRange: [parseFloat(e.target.value), prev.elevationRange[1]]
+                          }))}
+                          className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+                        />
+                        <input
+                          type="range"
+                          min={numericRanges.elevation.min}
+                          max={numericRanges.elevation.max}
+                          value={filters.elevationRange[1]}
+                          onChange={(e) => setFilters(prev => ({
+                            ...prev,
+                            elevationRange: [prev.elevationRange[0], parseFloat(e.target.value)]
+                          }))}
+                          className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Clear Filters Button */}
+                    {getActiveFilterCount() > 0 && (
+                      <button
+                        onClick={clearFilters}
+                        className="w-full px-3 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500 text-red-200 rounded text-sm font-medium transition-colors"
+                      >
+                        Clear All Filters
+                      </button>
+                    )}
+
+                    {/* Filtered Results Info */}
+                    <div className="pt-3 border-t border-zinc-700 text-xs text-zinc-400">
+                      Showing {filteredPoints.length} of {points.length} points
+                      {filteredPoints.length < points.length && (
+                        <span className="text-yellow-400"> ({Math.round((filteredPoints.length / points.length) * 100)}% filtered)</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Timeline Card */}
             {timelineData && (
               <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
@@ -922,6 +1315,120 @@ function PointsAnalytics() {
                     <span>Max in Period:</span>
                     <span className="text-zinc-300">{timelineData.maxCount}</span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Operations by Day Card */}
+            {operationsByDay.length > 0 && (
+              <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  📋 Operations by Day
+                  <span className="text-xs text-zinc-400 font-normal">({operationsByDay.length} days)</span>
+                </h2>
+
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {operationsByDay.slice(0, 10).map((day, index) => {
+                    const isExpanded = selectedDay === day.key
+                    const duration = (day.timeRange.end - day.timeRange.start) / (1000 * 60) // minutes
+
+                    return (
+                      <div
+                        key={day.key}
+                        className="bg-zinc-900/50 rounded-lg border border-zinc-700 overflow-hidden"
+                      >
+                        {/* Day Header */}
+                        <button
+                          onClick={() => setSelectedDay(isExpanded ? null : day.key)}
+                          className="w-full p-3 text-left hover:bg-zinc-700/30 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-zinc-200">
+                                {day.date.toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric' 
+                                })}
+                              </span>
+                              <span className="text-xs text-zinc-500">
+                                {isExpanded ? '▼' : '▶'}
+                              </span>
+                            </div>
+                            <span className="text-xs text-zinc-400">
+                              {day.totalPoints} points
+                            </span>
+                          </div>
+
+                          {/* Operations Summary */}
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(day.byType).map(([type, data]) => (
+                              <span
+                                key={type}
+                                className="px-2 py-0.5 bg-blue-600/20 text-blue-300 rounded text-xs"
+                              >
+                                {type}: {data.count}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Time Info */}
+                          <div className="mt-2 text-xs text-zinc-500">
+                            {day.timeRange.start.toLocaleTimeString('en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })} - {day.timeRange.end.toLocaleTimeString('en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })} ({duration.toFixed(0)} min)
+                          </div>
+                        </button>
+
+                        {/* Expanded Details */}
+                        {isExpanded && (
+                          <div className="p-3 border-t border-zinc-700 bg-zinc-900/70">
+                            <div className="space-y-3">
+                              {Object.entries(day.byType).map(([type, data]) => (
+                                <div key={type} className="p-2 bg-zinc-800/50 rounded">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-zinc-200">{type}</span>
+                                    <span className="text-xs text-zinc-400">{data.count} ops</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    {data.avgSpeed > 0 && (
+                                      <div>
+                                        <span className="text-zinc-500">Avg Speed:</span>
+                                        <span className="ml-1 text-zinc-300">{data.avgSpeed.toFixed(1)} km/h</span>
+                                      </div>
+                                    )}
+                                    {data.avgElevation > 0 && (
+                                      <div>
+                                        <span className="text-zinc-500">Avg Elev:</span>
+                                        <span className="ml-1 text-zinc-300">{data.avgElevation.toFixed(0)} m</span>
+                                      </div>
+                                    )}
+                                    {data.totalArea > 0 && (
+                                      <div className="col-span-2">
+                                        <span className="text-zinc-500">Total Area:</span>
+                                        <span className="ml-1 text-zinc-300">{data.totalArea.toFixed(4)} ha</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {operationsByDay.length > 10 && (
+                    <div className="text-center text-xs text-zinc-500 pt-2">
+                      Showing first 10 of {operationsByDay.length} days
+                    </div>
+                  )}
                 </div>
               </div>
             )}

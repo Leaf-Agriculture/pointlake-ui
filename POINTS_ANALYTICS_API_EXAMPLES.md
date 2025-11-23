@@ -613,3 +613,4 @@ function calculateCoverage(points) {
 **Última atualização:** Novembro 2025  
 **Versão da API:** v2/beta
 
+

@@ -216,3 +216,4 @@ A interface é totalmente responsiva:
 - [React Router Documentation](https://reactrouter.com/)
 - [Tailwind CSS Documentation](https://tailwindcss.com/)
 
+

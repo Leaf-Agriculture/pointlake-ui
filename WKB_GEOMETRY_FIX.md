@@ -295,3 +295,4 @@ if (result.valid) {
 **Testado com:** API Dev (https://api-dev.withleaf.team)  
 **Status:** ✅ Produção Ready
 
+

@@ -23,6 +23,20 @@ function PointsAnalytics() {
   const [showErrorDetails, setShowErrorDetails] = useState(false)
   const [timelineData, setTimelineData] = useState(null)
   const [timelineGrouping, setTimelineGrouping] = useState('day') // 'hour', 'day', 'week', 'month'
+  const [filters, setFilters] = useState({
+    operationType: [],
+    crop: [],
+    variety: [],
+    recordingStatus: []
+  })
+  const [availableFilters, setAvailableFilters] = useState({
+    operationType: [],
+    crop: [],
+    variety: [],
+    recordingStatus: []
+  })
+  const [filteredPoints, setFilteredPoints] = useState([])
+  const [showFilters, setShowFilters] = useState(false)
   const [stats, setStats] = useState(null)
   const mapRef = useRef(null)
 
@@ -165,15 +179,108 @@ function PointsAnalytics() {
     }
   }
 
-  // Atualizar timeline quando pontos ou grouping mudarem
+  // Extrair valores únicos para filtros
+  const extractUniqueValues = (points) => {
+    const unique = {
+      operationType: new Set(),
+      crop: new Set(),
+      variety: new Set(),
+      recordingStatus: new Set()
+    }
+
+    points.forEach(point => {
+      if (point.operationType) unique.operationType.add(point.operationType)
+      if (point.crop) unique.crop.add(point.crop)
+      if (point.variety) unique.variety.add(point.variety)
+      if (point.recordingStatus) unique.recordingStatus.add(point.recordingStatus)
+    })
+
+    return {
+      operationType: Array.from(unique.operationType).sort(),
+      crop: Array.from(unique.crop).sort(),
+      variety: Array.from(unique.variety).sort(),
+      recordingStatus: Array.from(unique.recordingStatus).sort()
+    }
+  }
+
+  // Aplicar filtros aos pontos
+  const applyFilters = (points, filters) => {
+    return points.filter(point => {
+      // Se não há filtros ativos, retorna todos
+      const hasActiveFilters = Object.values(filters).some(arr => arr.length > 0)
+      if (!hasActiveFilters) return true
+
+      // Verifica cada filtro
+      if (filters.operationType.length > 0 && !filters.operationType.includes(point.operationType)) {
+        return false
+      }
+      if (filters.crop.length > 0 && !filters.crop.includes(point.crop)) {
+        return false
+      }
+      if (filters.variety.length > 0 && !filters.variety.includes(point.variety)) {
+        return false
+      }
+      if (filters.recordingStatus.length > 0 && !filters.recordingStatus.includes(point.recordingStatus)) {
+        return false
+      }
+
+      return true
+    })
+  }
+
+  // Toggle filter value
+  const toggleFilter = (category, value) => {
+    setFilters(prev => {
+      const current = prev[category]
+      const isSelected = current.includes(value)
+      
+      return {
+        ...prev,
+        [category]: isSelected 
+          ? current.filter(v => v !== value)
+          : [...current, value]
+      }
+    })
+  }
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({
+      operationType: [],
+      crop: [],
+      variety: [],
+      recordingStatus: []
+    })
+  }
+
+  // Atualizar pontos filtrados e valores disponíveis
   useEffect(() => {
     if (points && points.length > 0) {
-      const timeline = generateTimelineData(points, timelineGrouping)
+      const available = extractUniqueValues(points)
+      setAvailableFilters(available)
+      
+      const filtered = applyFilters(points, filters)
+      setFilteredPoints(filtered)
+    } else {
+      setFilteredPoints([])
+      setAvailableFilters({
+        operationType: [],
+        crop: [],
+        variety: [],
+        recordingStatus: []
+      })
+    }
+  }, [points, filters])
+
+  // Atualizar timeline quando pontos filtrados ou grouping mudarem
+  useEffect(() => {
+    if (filteredPoints && filteredPoints.length > 0) {
+      const timeline = generateTimelineData(filteredPoints, timelineGrouping)
       setTimelineData(timeline)
     } else {
       setTimelineData(null)
     }
-  }, [points, timelineGrouping])
+  }, [filteredPoints, timelineGrouping])
 
   // Decodificar geometria WKB (Well-Known Binary) de base64
   const decodeWKBGeometry = (base64String) => {

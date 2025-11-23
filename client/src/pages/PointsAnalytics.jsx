@@ -1634,13 +1634,48 @@ function PointsAnalytics() {
 
                             {/* Tooltip on hover */}
                             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10">
-                              <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-xl min-w-[150px]">
+                              <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-xl min-w-[200px]">
                                 <div className="text-xs font-medium text-zinc-200 mb-1">
                                   {timelineGrouping === 'hour' ? group.label :
                                    timelineGrouping === 'day' ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
                                    timelineGrouping === 'week' ? group.label :
                                    new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                                 </div>
+                                
+                                {/* Copyable ISO date */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const isoDate = timelineGrouping === 'hour' 
+                                      ? new Date(group.label).toISOString()
+                                      : timelineGrouping === 'day'
+                                      ? new Date(group.label + 'T00:00:00.000Z').toISOString()
+                                      : timelineGrouping === 'week'
+                                      ? new Date(group.label.replace('Week of ', '') + 'T00:00:00.000Z').toISOString()
+                                      : new Date(group.label + '-01T00:00:00.000Z').toISOString()
+                                    navigator.clipboard.writeText(isoDate)
+                                    
+                                    // Show feedback
+                                    const btn = e.currentTarget
+                                    const originalText = btn.textContent
+                                    btn.textContent = '✓ Copied!'
+                                    setTimeout(() => {
+                                      btn.textContent = originalText
+                                    }, 1000)
+                                  }}
+                                  className="w-full px-2 py-1 mb-1 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/50 rounded text-xs text-blue-300 font-mono transition-colors"
+                                  title="Click to copy ISO date"
+                                >
+                                  {timelineGrouping === 'hour' 
+                                    ? new Date(group.label).toISOString().slice(0, 19) + 'Z'
+                                    : timelineGrouping === 'day'
+                                    ? group.label + 'T00:00:00Z'
+                                    : timelineGrouping === 'week'
+                                    ? group.label.replace('Week of ', '') + 'T00:00:00Z'
+                                    : group.label + '-01T00:00:00Z'
+                                  }
+                                </button>
+
                                 <div className="text-xs text-zinc-400 mb-1">
                                   Total: {group.count} points
                                 </div>
@@ -1688,12 +1723,43 @@ function PointsAnalytics() {
                 </div>
 
                 {/* Summary Stats */}
-                <div className="mt-4 pt-3 border-t border-zinc-700 flex justify-between text-xs text-zinc-400">
-                  <div className="flex gap-4">
-                    <span>Periods: <span className="text-zinc-300">{timelineData.groups.length}</span></span>
-                    <span>Max: <span className="text-zinc-300">{timelineData.maxCount}</span></span>
-                    <span>Total: <span className="text-zinc-300">{timelineData.total}</span></span>
+                <div className="mt-4 pt-3 border-t border-zinc-700">
+                  <div className="flex justify-between items-center text-xs">
+                    <div className="flex gap-4 text-zinc-400">
+                      <span>Periods: <span className="text-zinc-300">{timelineData.groups.length}</span></span>
+                      <span>Max: <span className="text-zinc-300">{timelineData.maxCount}</span></span>
+                      <span>Total: <span className="text-zinc-300">{timelineData.total}</span></span>
+                    </div>
+                    <div className="text-zinc-500 text-xs">
+                      💡 Hover bars to copy ISO dates
+                    </div>
                   </div>
+                  
+                  {/* Quick copy date range */}
+                  {timelineData.dateRange && (
+                    <div className="mt-2 flex gap-2 text-xs">
+                      <button
+                        onClick={() => {
+                          const isoDate = timelineData.dateRange.start.toISOString()
+                          navigator.clipboard.writeText(isoDate)
+                        }}
+                        className="px-2 py-1 bg-zinc-700/50 hover:bg-zinc-700 border border-zinc-600 rounded text-zinc-300 font-mono transition-colors"
+                        title="Copy start date"
+                      >
+                        📅 Start: {timelineData.dateRange.start.toISOString().slice(0, 10)}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const isoDate = timelineData.dateRange.end.toISOString()
+                          navigator.clipboard.writeText(isoDate)
+                        }}
+                        className="px-2 py-1 bg-zinc-700/50 hover:bg-zinc-700 border border-zinc-600 rounded text-zinc-300 font-mono transition-colors"
+                        title="Copy end date"
+                      >
+                        📅 End: {timelineData.dateRange.end.toISOString().slice(0, 10)}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

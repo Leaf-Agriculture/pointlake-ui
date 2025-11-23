@@ -18,7 +18,9 @@ function PointsAnalytics() {
   const [endDate, setEndDate] = useState('2025-12-01T00:00:00.000Z')
   const [points, setPoints] = useState([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null)
+  const [metadata, setMetadata] = useState(null)
+  const [showErrorDetails, setShowErrorDetails] = useState(false)
   const [stats, setStats] = useState(null)
   const mapRef = useRef(null)
 
@@ -43,6 +45,47 @@ function PointsAnalytics() {
     } catch (e) {
       return dateStr
     }
+  }
+
+  // Extrair mensagem de erro legível de stack traces complexos
+  const extractErrorMessage = (fullMessage) => {
+    if (!fullMessage) return 'Unknown error'
+    
+    // Tentar extrair a causa raiz
+    const causeMatch = fullMessage.match(/Cause: (.+?)(?:\n|$)/)
+    if (causeMatch) {
+      return causeMatch[1]
+    }
+    
+    // Tentar extrair mensagem de erro Spark
+    const sparkMatch = fullMessage.match(/\[([A-Z_]+)\] (.+?)(?:;|\n)/)
+    if (sparkMatch) {
+      return `${sparkMatch[1]}: ${sparkMatch[2]}`
+    }
+    
+    // Extrair primeira linha significativa
+    const lines = fullMessage.split('\n')
+    for (const line of lines) {
+      if (line.trim() && !line.startsWith('at ') && !line.includes('Stack trace')) {
+        return line.trim()
+      }
+    }
+    
+    return fullMessage.substring(0, 200) + '...'
+  }
+
+  // Obter título amigável para tipo de erro
+  const getErrorTitle = (errorType) => {
+    const titles = {
+      'QUERY_EXECUTION_ERROR': 'Query Execution Error',
+      'NUM_COLUMNS_MISMATCH': 'Schema Mismatch Error',
+      'TIMEOUT': 'Request Timeout',
+      'INVALID_QUERY': 'Invalid Query',
+      'api_error': 'API Error',
+      'validation': 'Validation Error',
+      'network': 'Network Error'
+    }
+    return titles[errorType] || 'Error'
   }
 
   // Decodificar geometria WKB (Well-Known Binary) de base64
@@ -100,12 +143,13 @@ function PointsAnalytics() {
   // Carregar pontos
   const loadPoints = async () => {
     if (!userId) {
-      setError('Please select a user')
+      setError({ message: 'Please select a user', type: 'validation' })
       return
     }
 
     setLoading(true)
-    setError('')
+    setError(null)
+    setMetadata(null)
     
     try {
       const environment = getEnvironment()
@@ -131,6 +175,38 @@ function PointsAnalytics() {
 
       console.log('API Response:', response.data)
 
+      // Verificar se há metadata na resposta
+      if (response.data.metadata) {
+        setMetadata(response.data.metadata)
+        console.log('Metadata:', response.data.metadata)
+      }
+
+      // Verificar se há erros na resposta (mesmo com status 200)
+      if (response.data.metadata?.errors && response.data.metadata.errors.length > 0) {
+        const apiErrors = response.data.metadata.errors
+        console.error('API returned errors:', apiErrors)
+        
+        // Processar erros
+        const errorDetails = apiErrors.map(err => ({
+          fileId: err.fileId,
+          error: err.error,
+          message: err.message,
+          shortMessage: extractErrorMessage(err.message)
+        }))
+        
+        setError({
+          type: 'api_error',
+          message: 'Query execution failed',
+          details: errorDetails,
+          metadata: response.data.metadata
+        })
+        
+        setPoints([])
+        setStats(null)
+        setLoading(false)
+        return
+      }
+
       // Verificar formato da resposta
       let pointsData = []
       
@@ -140,6 +216,11 @@ function PointsAnalytics() {
         pointsData = response.data.points
       } else if (response.data.data && Array.isArray(response.data.data)) {
         pointsData = response.data.data
+      }
+      
+      // Se não há pontos mas também não há erro, pode ser resultado vazio válido
+      if (pointsData.length === 0 && response.data.metadata) {
+        console.log('No points returned, but query executed successfully')
       }
 
       // Transformar pontos para o formato esperado pelo MapComponent
@@ -246,18 +327,62 @@ function PointsAnalytics() {
       
       // Tratamento específico para timeout
       if (err.code === 'ECONNABORTED') {
-        setError('Request timeout (20 minutes). Please try with a smaller date range or lower sample rate.')
-      } else {
-        setError(
-          err.response?.data?.message || 
-          err.response?.data?.error ||
-          err.message || 
-          'Error loading points'
-        )
+        setError({
+          type: 'timeout',
+          message: 'Request timeout (20 minutes)',
+          suggestion: 'Please try with a smaller date range or lower sample rate'
+        })
+      } 
+      // Erro de rede
+      else if (!err.response) {
+        setError({
+          type: 'network',
+          message: 'Network error',
+          details: err.message,
+          suggestion: 'Check your internet connection and try again'
+        })
+      }
+      // Erro da API com resposta
+      else if (err.response) {
+        const data = err.response.data
+        
+        // Verificar se há metadata com erros
+        if (data?.metadata?.errors && data.metadata.errors.length > 0) {
+          const apiErrors = data.metadata.errors
+          const errorDetails = apiErrors.map(e => ({
+            fileId: e.fileId,
+            error: e.error,
+            message: e.message,
+            shortMessage: extractErrorMessage(e.message)
+          }))
+          
+          setError({
+            type: 'api_error',
+            message: 'Query execution failed',
+            details: errorDetails,
+            metadata: data.metadata,
+            status: err.response.status
+          })
+        } else {
+          setError({
+            type: 'api_error',
+            message: data?.message || data?.error || 'Error loading points',
+            status: err.response.status,
+            details: data
+          })
+        }
+      }
+      // Erro genérico
+      else {
+        setError({
+          type: 'unknown',
+          message: err.message || 'Error loading points'
+        })
       }
       
       setPoints([])
       setStats(null)
+      setMetadata(null)
     } finally {
       setLoading(false)
     }
@@ -417,6 +542,41 @@ function PointsAnalytics() {
               </p>
             </div>
 
+            {/* Metadata Card */}
+            {metadata && !error && (
+              <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  ⚙️ Query Info
+                </h2>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400 text-xs">Processing Time:</span>
+                    <span className="text-zinc-200 font-medium text-sm">
+                      {metadata.processingTimeMs ? `${(metadata.processingTimeMs / 1000).toFixed(2)}s` : '-'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400 text-xs">Total Files:</span>
+                    <span className="text-zinc-200 font-medium text-sm">{metadata.totalFiles || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400 text-xs">Processed:</span>
+                    <span className="text-green-400 font-medium text-sm">{metadata.processedFiles || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400 text-xs">Failed:</span>
+                    <span className={`font-medium text-sm ${metadata.failedFiles > 0 ? 'text-red-400' : 'text-zinc-200'}`}>
+                      {metadata.failedFiles || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400 text-xs">Sample Rate:</span>
+                    <span className="text-blue-400 font-medium text-sm">{metadata.sampleRate || 100}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Statistics Card */}
             {stats && (
               <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
@@ -495,8 +655,108 @@ function PointsAnalytics() {
           <div className="lg:col-span-2">
             <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl overflow-hidden" style={{ height: 'calc(100vh - 180px)' }}>
               {error && (
-                <div className="p-4 bg-red-900/50 border-b border-red-700 text-red-200">
-                  <p className="text-sm">❌ {error}</p>
+                <div className="bg-red-900/50 border-b border-red-700">
+                  <div className="p-4">
+                    {/* Error Header */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-red-400 text-xl">❌</span>
+                          <h3 className="text-red-200 font-semibold">
+                            {getErrorTitle(error.type)}
+                          </h3>
+                          {error.status && (
+                            <span className="px-2 py-0.5 bg-red-800 text-red-200 rounded text-xs font-mono">
+                              {error.status}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-red-200 text-sm mb-2">
+                          {typeof error === 'string' ? error : error.message}
+                        </p>
+                        {error.suggestion && (
+                          <p className="text-red-300 text-xs italic">
+                            💡 {error.suggestion}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Toggle Details Button */}
+                      {error.details && (
+                        <button
+                          onClick={() => setShowErrorDetails(!showErrorDetails)}
+                          className="ml-4 px-3 py-1 bg-red-800 hover:bg-red-700 text-red-200 rounded text-xs font-medium transition-colors"
+                        >
+                          {showErrorDetails ? '▼ Hide Details' : '▶ Show Details'}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Error Details (Collapsible) */}
+                    {error.details && showErrorDetails && (
+                      <div className="mt-4 p-3 bg-red-950/50 rounded border border-red-800 max-h-96 overflow-y-auto">
+                        {Array.isArray(error.details) ? (
+                          // Multiple errors
+                          error.details.map((detail, index) => (
+                            <div key={index} className={`${index > 0 ? 'mt-4 pt-4 border-t border-red-800' : ''}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="px-2 py-0.5 bg-red-800 text-red-200 rounded text-xs font-mono">
+                                  {detail.error || 'ERROR'}
+                                </span>
+                                {detail.fileId && detail.fileId !== 'SPARK_QUERY' && (
+                                  <span className="text-red-300 text-xs">
+                                    File: {detail.fileId}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-red-200 text-xs mb-2 font-medium">
+                                {detail.shortMessage}
+                              </p>
+                              {detail.message && detail.message !== detail.shortMessage && (
+                                <details className="mt-2">
+                                  <summary className="text-red-300 text-xs cursor-pointer hover:text-red-200">
+                                    Full stack trace
+                                  </summary>
+                                  <pre className="mt-2 p-2 bg-black/30 rounded text-red-300 text-xs overflow-x-auto whitespace-pre-wrap">
+                                    {detail.message}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          // Single error object
+                          <pre className="text-red-300 text-xs overflow-x-auto whitespace-pre-wrap">
+                            {JSON.stringify(error.details, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Metadata Summary */}
+                    {error.metadata && (
+                      <div className="mt-3 pt-3 border-t border-red-800">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <span className="text-red-400">Total Files:</span>
+                            <span className="ml-2 text-red-200 font-medium">{error.metadata.totalFiles || 0}</span>
+                          </div>
+                          <div>
+                            <span className="text-red-400">Processed:</span>
+                            <span className="ml-2 text-red-200 font-medium">{error.metadata.processedFiles || 0}</span>
+                          </div>
+                          <div>
+                            <span className="text-red-400">Failed:</span>
+                            <span className="ml-2 text-red-200 font-medium">{error.metadata.failedFiles || 0}</span>
+                          </div>
+                          <div>
+                            <span className="text-red-400">Time:</span>
+                            <span className="ml-2 text-red-200 font-medium">{error.metadata.processingTimeMs ? `${(error.metadata.processingTimeMs / 1000).toFixed(1)}s` : '-'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               

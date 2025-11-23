@@ -47,6 +47,10 @@ function PointsAnalytics() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedDay, setSelectedDay] = useState(null)
   const [operationsByDay, setOperationsByDay] = useState([])
+  const [useAIAnalysis, setUseAIAnalysis] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false)
   const [stats, setStats] = useState(null)
   const mapRef = useRef(null)
 
@@ -503,11 +507,15 @@ function PointsAnalytics() {
     setLoading(true)
     setError(null)
     setMetadata(null)
+    setAiAnalysis(null)
     
     try {
       const environment = getEnvironment()
       const baseUrl = getPointlakeApiUrl(environment)
-      const url = `${baseUrl}/v2/beta/analytics/user/${userId}/points`
+      
+      // Usar endpoint com AI se solicitado
+      const endpoint = useAIAnalysis ? 'points/prompt' : 'points'
+      const url = `${baseUrl}/v2/beta/analytics/user/${userId}/${endpoint}`
       
       const params = {
         samplerate: sampleRate,
@@ -515,7 +523,12 @@ function PointsAnalytics() {
         endDate: formatDateForApi(endDate)
       }
 
-      console.log('Loading points:', { url, params })
+      // Adicionar prompt se estiver usando AI
+      if (useAIAnalysis && aiPrompt.trim()) {
+        params.prompt = aiPrompt.trim()
+      }
+
+      console.log('Loading points:', { url, params, useAI: useAIAnalysis })
 
       const response = await axios.get(url, {
         headers: {
@@ -532,6 +545,13 @@ function PointsAnalytics() {
       if (response.data.metadata) {
         setMetadata(response.data.metadata)
         console.log('Metadata:', response.data.metadata)
+      }
+
+      // Verificar se há análise de IA
+      if (response.data.aiAnalysis) {
+        setAiAnalysis(response.data.aiAnalysis)
+        setShowAIAnalysis(true)
+        console.log('AI Analysis received:', response.data.aiAnalysis.length, 'characters')
       }
 
       // Verificar se há erros na resposta (mesmo com status 200)
@@ -859,7 +879,7 @@ function PointsAnalytics() {
               </div>
 
               {/* End Date */}
-              <div className="space-y-2 mb-6">
+              <div className="space-y-2 mb-4">
                 <label className="block text-sm font-medium text-zinc-300">
                   End Date
                 </label>
@@ -869,6 +889,39 @@ function PointsAnalytics() {
                   onChange={(e) => setEndDate(e.target.value + ':00.000Z')}
                   className="w-full px-3 py-2 bg-zinc-700/50 border border-zinc-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
                 />
+              </div>
+
+              {/* AI Analysis Toggle */}
+              <div className="space-y-2 mb-4 p-3 bg-purple-900/20 border border-purple-700/50 rounded-lg">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useAIAnalysis}
+                    onChange={(e) => setUseAIAnalysis(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span className="text-sm font-medium text-purple-300">
+                    🤖 Enable AI Analysis
+                  </span>
+                </label>
+                
+                {useAIAnalysis && (
+                  <div className="mt-2">
+                    <label className="block text-xs text-purple-300 mb-1">
+                      AI Prompt (optional):
+                    </label>
+                    <textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="e.g., Analyze crop protection efficiency and recommend improvements..."
+                      className="w-full px-2 py-2 bg-zinc-800/50 border border-purple-600 rounded text-white text-xs placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      rows={3}
+                    />
+                    <p className="text-xs text-purple-400 mt-1">
+                      Leave empty for general analysis
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Load Button */}
@@ -1220,104 +1273,6 @@ function PointsAnalytics() {
               </div>
             )}
 
-            {/* Timeline Card */}
-            {timelineData && (
-              <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    📅 Timeline
-                  </h2>
-                  <select
-                    value={timelineGrouping}
-                    onChange={(e) => setTimelineGrouping(e.target.value)}
-                    className="px-2 py-1 bg-zinc-700/50 border border-zinc-600 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="hour">Hour</option>
-                    <option value="day">Day</option>
-                    <option value="week">Week</option>
-                    <option value="month">Month</option>
-                  </select>
-                </div>
-
-                {/* Date Range */}
-                {timelineData.dateRange && (
-                  <div className="mb-4 text-xs text-zinc-400">
-                    <div>From: {timelineData.dateRange.start.toLocaleDateString()}</div>
-                    <div>To: {timelineData.dateRange.end.toLocaleDateString()}</div>
-                  </div>
-                )}
-
-                {/* Timeline Bars */}
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {timelineData.groups.map((group, index) => (
-                    <div key={index} className="group">
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-zinc-400 truncate" title={group.label}>
-                          {timelineGrouping === 'hour' ? group.label.split(' ')[1] : 
-                           timelineGrouping === 'day' ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) :
-                           timelineGrouping === 'week' ? group.label.replace('Week of ', '') :
-                           new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                        </span>
-                        <span className="text-zinc-300 font-medium ml-2">{group.count}</span>
-                      </div>
-                      
-                      {/* Bar */}
-                      <div className="relative h-6 bg-zinc-700/30 rounded overflow-hidden">
-                        <div
-                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-300 group-hover:from-blue-500 group-hover:to-purple-500"
-                          style={{ width: `${group.percentage}%` }}
-                        />
-                        
-                        {/* Operation types overlay */}
-                        {Object.keys(group.operationTypes).length > 0 && (
-                          <div className="absolute inset-0 flex items-center px-2">
-                            <div className="flex gap-1 overflow-hidden">
-                              {Object.entries(group.operationTypes).slice(0, 3).map(([type, count]) => (
-                                <span
-                                  key={type}
-                                  className="text-xs text-white/80 bg-black/30 px-1 rounded"
-                                  title={`${type}: ${count}`}
-                                >
-                                  {type.slice(0, 3)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Hover details */}
-                      <div className="hidden group-hover:block mt-1 p-2 bg-zinc-900/90 rounded text-xs">
-                        <div className="font-medium text-zinc-200 mb-1">{group.label}</div>
-                        <div className="text-zinc-400">Total: {group.count} points</div>
-                        {Object.keys(group.operationTypes).length > 0 && (
-                          <div className="mt-1 space-y-0.5">
-                            {Object.entries(group.operationTypes).map(([type, count]) => (
-                              <div key={type} className="flex justify-between text-zinc-400">
-                                <span>{type}:</span>
-                                <span className="text-zinc-300">{count}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Summary */}
-                <div className="mt-4 pt-4 border-t border-zinc-700 text-xs text-zinc-400">
-                  <div className="flex justify-between">
-                    <span>Total Periods:</span>
-                    <span className="text-zinc-300">{timelineData.groups.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Max in Period:</span>
-                    <span className="text-zinc-300">{timelineData.maxCount}</span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Operations by Day Card */}
             {operationsByDay.length > 0 && (
@@ -1451,9 +1406,32 @@ function PointsAnalytics() {
             </div>
           </div>
 
-          {/* Map */}
-          <div className="lg:col-span-2">
-            <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl overflow-hidden" style={{ height: 'calc(100vh - 180px)' }}>
+          {/* Map and Timeline Section */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* AI Analysis Card */}
+            {aiAnalysis && showAIAnalysis && (
+              <div className="bg-purple-900/20 backdrop-blur-sm border border-purple-700/50 rounded-xl p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-purple-300 flex items-center gap-2">
+                    🤖 AI Analysis
+                  </h3>
+                  <button
+                    onClick={() => setShowAIAnalysis(false)}
+                    className="text-purple-400 hover:text-purple-300 text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="prose prose-invert prose-sm max-w-none">
+                  <div className="text-zinc-200 text-sm whitespace-pre-wrap leading-relaxed">
+                    {aiAnalysis}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Map */}
+            <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl overflow-hidden" style={{ height: timelineData ? 'calc(60vh - 100px)' : 'calc(100vh - 180px)' }}>
               {error && (
                 <div className="bg-red-900/50 border-b border-red-700">
                   <div className="p-4">
@@ -1589,6 +1567,136 @@ function PointsAnalytics() {
                 </div>
               )}
             </div>
+
+            {/* Timeline Histogram - Below Map */}
+            {timelineData && (
+              <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                      📊 Timeline Histogram
+                    </h3>
+                    {timelineData.dateRange && (
+                      <div className="text-xs text-zinc-500">
+                        {timelineData.dateRange.start.toLocaleDateString()} - {timelineData.dateRange.end.toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  <select
+                    value={timelineGrouping}
+                    onChange={(e) => setTimelineGrouping(e.target.value)}
+                    className="px-2 py-1 bg-zinc-700/50 border border-zinc-600 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="hour">Hour</option>
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                  </select>
+                </div>
+
+                {/* Histogram Chart */}
+                <div className="relative" style={{ height: '200px' }}>
+                  {/* Y-axis labels */}
+                  <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-zinc-500 pr-2 text-right">
+                    <span>{timelineData.maxCount}</span>
+                    <span>{Math.round(timelineData.maxCount * 0.75)}</span>
+                    <span>{Math.round(timelineData.maxCount * 0.5)}</span>
+                    <span>{Math.round(timelineData.maxCount * 0.25)}</span>
+                    <span>0</span>
+                  </div>
+
+                  {/* Chart area */}
+                  <div className="absolute left-12 right-0 top-0 bottom-8 border-l border-b border-zinc-700">
+                    <div className="relative h-full flex items-end justify-start gap-0.5 px-1">
+                      {timelineData.groups.map((group, index) => {
+                        const height = (group.count / timelineData.maxCount) * 100
+                        const colors = [
+                          'from-blue-600 to-blue-400',
+                          'from-purple-600 to-purple-400',
+                          'from-green-600 to-green-400',
+                          'from-yellow-600 to-yellow-400',
+                          'from-red-600 to-red-400'
+                        ]
+                        const colorIndex = index % colors.length
+                        
+                        return (
+                          <div
+                            key={index}
+                            className="group relative flex-1 min-w-[8px] max-w-[60px]"
+                            style={{ height: '100%' }}
+                          >
+                            {/* Bar */}
+                            <div 
+                              className={`absolute bottom-0 w-full bg-gradient-to-t ${colors[colorIndex]} rounded-t transition-all duration-300 hover:opacity-80 cursor-pointer`}
+                              style={{ height: `${height}%` }}
+                              title={`${group.label}: ${group.count} points`}
+                            />
+
+                            {/* Tooltip on hover */}
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                              <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-xl min-w-[150px]">
+                                <div className="text-xs font-medium text-zinc-200 mb-1">
+                                  {timelineGrouping === 'hour' ? group.label :
+                                   timelineGrouping === 'day' ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
+                                   timelineGrouping === 'week' ? group.label :
+                                   new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                </div>
+                                <div className="text-xs text-zinc-400 mb-1">
+                                  Total: {group.count} points
+                                </div>
+                                {Object.keys(group.operationTypes).length > 0 && (
+                                  <div className="border-t border-zinc-700 mt-1 pt-1">
+                                    {Object.entries(group.operationTypes).map(([type, count]) => (
+                                      <div key={type} className="flex justify-between text-xs text-zinc-400">
+                                        <span>{type}:</span>
+                                        <span className="text-zinc-300">{count}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* X-axis labels */}
+                  <div className="absolute left-12 right-0 bottom-0 h-8 flex items-start justify-between text-xs text-zinc-500 pt-1">
+                    {timelineData.groups.length <= 20 ? (
+                      // Show all labels for small datasets
+                      timelineData.groups.map((group, index) => (
+                        <span key={index} className="transform -rotate-45 origin-top-left text-xs truncate" style={{ maxWidth: '60px' }}>
+                          {timelineGrouping === 'hour' ? group.label.split(' ')[1] :
+                           timelineGrouping === 'day' ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) :
+                           timelineGrouping === 'week' ? group.label.replace('Week of ', '').substring(5) :
+                           new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short' })}
+                        </span>
+                      ))
+                    ) : (
+                      // Show sample labels for large datasets
+                      <>
+                        <span>{timelineData.groups[0]?.label.substring(0, 10)}</span>
+                        <span className="text-zinc-600">...</span>
+                        <span>{timelineData.groups[Math.floor(timelineData.groups.length / 2)]?.label.substring(0, 10)}</span>
+                        <span className="text-zinc-600">...</span>
+                        <span>{timelineData.groups[timelineData.groups.length - 1]?.label.substring(0, 10)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Summary Stats */}
+                <div className="mt-4 pt-3 border-t border-zinc-700 flex justify-between text-xs text-zinc-400">
+                  <div className="flex gap-4">
+                    <span>Periods: <span className="text-zinc-300">{timelineData.groups.length}</span></span>
+                    <span>Max: <span className="text-zinc-300">{timelineData.maxCount}</span></span>
+                    <span>Total: <span className="text-zinc-300">{timelineData.total}</span></span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -21,6 +21,8 @@ function PointsAnalytics() {
   const [error, setError] = useState(null)
   const [metadata, setMetadata] = useState(null)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
+  const [timelineData, setTimelineData] = useState(null)
+  const [timelineGrouping, setTimelineGrouping] = useState('day') // 'hour', 'day', 'week', 'month'
   const [stats, setStats] = useState(null)
   const mapRef = useRef(null)
 
@@ -87,6 +89,91 @@ function PointsAnalytics() {
     }
     return titles[errorType] || 'Error'
   }
+
+  // Gerar dados de timeline agrupados por período
+  const generateTimelineData = (points, grouping) => {
+    if (!points || points.length === 0) return null
+
+    const grouped = {}
+    const timestamps = []
+
+    points.forEach(point => {
+      if (!point.timestamp && !point.timestampFormatted) return
+
+      try {
+        const date = new Date(point.timestamp)
+        if (isNaN(date.getTime())) return
+
+        timestamps.push(date.getTime())
+
+        let key
+        switch (grouping) {
+          case 'hour':
+            key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:00`
+            break
+          case 'day':
+            key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+            break
+          case 'week':
+            const weekStart = new Date(date)
+            weekStart.setDate(date.getDate() - date.getDay())
+            key = `Week of ${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`
+            break
+          case 'month':
+            key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+            break
+          default:
+            key = date.toISOString().split('T')[0]
+        }
+
+        if (!grouped[key]) {
+          grouped[key] = {
+            count: 0,
+            operationTypes: {},
+            date: date
+          }
+        }
+
+        grouped[key].count++
+
+        if (point.operationType) {
+          grouped[key].operationTypes[point.operationType] = 
+            (grouped[key].operationTypes[point.operationType] || 0) + 1
+        }
+      } catch (e) {
+        console.error('Error processing timestamp:', e)
+      }
+    })
+
+    const sortedKeys = Object.keys(grouped).sort()
+    const maxCount = Math.max(...Object.values(grouped).map(g => g.count))
+
+    return {
+      groups: sortedKeys.map(key => ({
+        label: key,
+        count: grouped[key].count,
+        percentage: (grouped[key].count / maxCount) * 100,
+        operationTypes: grouped[key].operationTypes,
+        date: grouped[key].date
+      })),
+      total: points.length,
+      maxCount,
+      dateRange: timestamps.length > 0 ? {
+        start: new Date(Math.min(...timestamps)),
+        end: new Date(Math.max(...timestamps))
+      } : null
+    }
+  }
+
+  // Atualizar timeline quando pontos ou grouping mudarem
+  useEffect(() => {
+    if (points && points.length > 0) {
+      const timeline = generateTimelineData(points, timelineGrouping)
+      setTimelineData(timeline)
+    } else {
+      setTimelineData(null)
+    }
+  }, [points, timelineGrouping])
 
   // Decodificar geometria WKB (Well-Known Binary) de base64
   const decodeWKBGeometry = (base64String) => {
@@ -629,6 +716,105 @@ function PointsAnalytics() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Timeline Card */}
+            {timelineData && (
+              <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    📅 Timeline
+                  </h2>
+                  <select
+                    value={timelineGrouping}
+                    onChange={(e) => setTimelineGrouping(e.target.value)}
+                    className="px-2 py-1 bg-zinc-700/50 border border-zinc-600 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="hour">Hour</option>
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                  </select>
+                </div>
+
+                {/* Date Range */}
+                {timelineData.dateRange && (
+                  <div className="mb-4 text-xs text-zinc-400">
+                    <div>From: {timelineData.dateRange.start.toLocaleDateString()}</div>
+                    <div>To: {timelineData.dateRange.end.toLocaleDateString()}</div>
+                  </div>
+                )}
+
+                {/* Timeline Bars */}
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {timelineData.groups.map((group, index) => (
+                    <div key={index} className="group">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-zinc-400 truncate" title={group.label}>
+                          {timelineGrouping === 'hour' ? group.label.split(' ')[1] : 
+                           timelineGrouping === 'day' ? new Date(group.label).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) :
+                           timelineGrouping === 'week' ? group.label.replace('Week of ', '') :
+                           new Date(group.label + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                        </span>
+                        <span className="text-zinc-300 font-medium ml-2">{group.count}</span>
+                      </div>
+                      
+                      {/* Bar */}
+                      <div className="relative h-6 bg-zinc-700/30 rounded overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-600 to-purple-600 transition-all duration-300 group-hover:from-blue-500 group-hover:to-purple-500"
+                          style={{ width: `${group.percentage}%` }}
+                        />
+                        
+                        {/* Operation types overlay */}
+                        {Object.keys(group.operationTypes).length > 0 && (
+                          <div className="absolute inset-0 flex items-center px-2">
+                            <div className="flex gap-1 overflow-hidden">
+                              {Object.entries(group.operationTypes).slice(0, 3).map(([type, count]) => (
+                                <span
+                                  key={type}
+                                  className="text-xs text-white/80 bg-black/30 px-1 rounded"
+                                  title={`${type}: ${count}`}
+                                >
+                                  {type.slice(0, 3)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Hover details */}
+                      <div className="hidden group-hover:block mt-1 p-2 bg-zinc-900/90 rounded text-xs">
+                        <div className="font-medium text-zinc-200 mb-1">{group.label}</div>
+                        <div className="text-zinc-400">Total: {group.count} points</div>
+                        {Object.keys(group.operationTypes).length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {Object.entries(group.operationTypes).map(([type, count]) => (
+                              <div key={type} className="flex justify-between text-zinc-400">
+                                <span>{type}:</span>
+                                <span className="text-zinc-300">{count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Summary */}
+                <div className="mt-4 pt-4 border-t border-zinc-700 text-xs text-zinc-400">
+                  <div className="flex justify-between">
+                    <span>Total Periods:</span>
+                    <span className="text-zinc-300">{timelineData.groups.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Max in Period:</span>
+                    <span className="text-zinc-300">{timelineData.maxCount}</span>
+                  </div>
                 </div>
               </div>
             )}

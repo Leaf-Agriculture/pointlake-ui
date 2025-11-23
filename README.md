@@ -9,6 +9,7 @@ Dashboard com mapas para visualização de dados da API Leaf.
 - ✅ Dashboard com mapa interativo
 - ✅ Query SQL para buscar dados da API
 - ✅ Upload de arquivos ZIP para processamento
+- ✅ **Points Analytics** - Visualização de pontos de operações agrícolas por usuário
 - ✅ Interface moderna com Tailwind CSS e abas
 
 ## Tecnologias
@@ -53,6 +54,11 @@ O frontend estará disponível em `http://localhost:3000`
 3. No dashboard, você pode:
    - Executar queries SQL ou fazer upload de arquivos ZIP (painel esquerdo com abas)
    - Visualizar resultados no mapa no painel direito
+   - Acessar o **Points Analytics** clicando no botão no header
+4. No Points Analytics:
+   - Selecione um usuário e configure os filtros (sample rate, datas)
+   - Clique em "Buscar Pontos" para visualizar no mapa
+   - Veja estatísticas em tempo real dos pontos carregados
 
 ## Endpoints da API Leaf
 
@@ -64,6 +70,7 @@ O frontend faz chamadas diretas à API Leaf:
 - `GET /services/operations/api/batch` - Listar batches
 - `GET /services/pointlake/api/v2/files` - Listar arquivos
 - `GET /services/pointlake/api/v2/query` - Executar queries SQL
+- `GET /services/pointlake/api/v2/beta/analytics/user/{userId}/points` - Buscar pontos de um usuário
 
 ## Autenticação
 
@@ -78,6 +85,7 @@ https://learn.withleaf.io/docs/authentication
 
 - `SQL_EXAMPLES.md` - Exemplos de queries SQL
 - `UPLOAD_GUIDE.md` - Guia de upload de arquivos ZIP
+- `POINTS_ANALYTICS.md` - **Documentação completa do Points Analytics** 📍
 
 ## Estrutura do Projeto
 

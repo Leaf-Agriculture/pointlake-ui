@@ -114,8 +114,6 @@ const createAdvancedHeatmap = (data, mapInstance) => {
 // Função para decodificar geometria binária (base64)
 const decodeBinaryGeometry = (binaryString) => {
   try {
-    console.log('Geometria binária detectada:', binaryString)
-    
     // Decodificar Base64 para bytes
     const binaryData = atob(binaryString)
     const bytes = new Uint8Array(binaryData.length)
@@ -123,52 +121,43 @@ const decodeBinaryGeometry = (binaryString) => {
       bytes[i] = binaryData.charCodeAt(i)
     }
     
-    console.log('Bytes decodificados:', Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '))
-    
     // Tentar interpretar como Well-Known Binary (WKB)
-    // WKB tem a estrutura: [endianness][type][coordinates...]
     if (bytes.length >= 5) {
-      const endianness = bytes[0] // 0 = big endian, 1 = little endian
-      const geometryType = bytes[1] // Tipo da geometria
+      // Ler endianness (byte 0)
+      const littleEndian = bytes[0] === 1
       
-      console.log('Endianness:', endianness === 0 ? 'big' : 'little')
-      console.log('Tipo de geometria:', geometryType)
+      // Ler tipo de geometria (bytes 1-4)
+      const view = new DataView(bytes.buffer)
+      const geometryTypeRaw = view.getUint32(1, littleEndian)
       
-      // Para pontos (type = 1), coordenadas começam no byte 5
-      if (geometryType === 1 && bytes.length >= 21) { // 1 + 4 + 8 + 8 = 21 bytes mínimo
-        let offset = 5
+      // Extrair o tipo base (removendo flags de Z/M)
+      // 0x80000000 = Has Z (elevação), 0x40000000 = Has M (medida)
+      const hasZ = (geometryTypeRaw & 0x80000000) !== 0
+      const hasM = (geometryTypeRaw & 0x40000000) !== 0
+      const geometryType = geometryTypeRaw & 0x0FFFFFFF
+      
+      // Tipo 1 = Point
+      if (geometryType === 1) {
+        const minBytes = 5 + 8 + 8 + (hasZ ? 8 : 0) + (hasM ? 8 : 0)
         
-        // Ler coordenadas (assumindo little endian para double)
-        const lngBytes = bytes.slice(offset, offset + 8)
-        const latBytes = bytes.slice(offset + 8, offset + 16)
-        
-        // Converter bytes para double (little endian)
-        const lng = new DataView(lngBytes.buffer).getFloat64(0, true)
-        const lat = new DataView(latBytes.buffer).getFloat64(0, true)
-        
-        console.log('Coordenadas decodificadas:', { lng, lat })
-        
-        // Verificar se as coordenadas são válidas
-        if (lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
-          console.log('✅ Geometria binária decodificada com sucesso!')
-          return [lat, lng] // Leaflet usa [lat, lng]
-        } else {
-          console.log('⚠️ Coordenadas inválidas, usando fallback')
+        if (bytes.length >= minBytes) {
+          // Ler coordenadas (bytes 5+)
+          const lng = view.getFloat64(5, littleEndian)
+          const lat = view.getFloat64(13, littleEndian)
+          
+          // Verificar se as coordenadas são válidas
+          if (lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+            return [lat, lng] // Leaflet usa [lat, lng]
+          }
         }
       }
-      
-      // Para outros tipos de geometria ou se a decodificação falhar,
-      // usar coordenadas aproximadas baseadas no polígono do summary
-      console.log('Usando coordenadas aproximadas')
-      return [-97.515, 37.987] // [lat, lng] - centro aproximado da área
     }
     
-    // Fallback para coordenadas aproximadas
-    return [-97.515, 37.987]
+    // Fallback: retornar null para indicar que não foi possível decodificar
+    return null
   } catch (error) {
     console.error('Erro ao decodificar geometria binária:', error)
-    // Fallback para coordenadas aproximadas
-    return [-97.515, 37.987]
+    return null
   }
 }
 

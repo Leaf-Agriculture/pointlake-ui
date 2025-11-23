@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import FileQueryWindow from './pages/FileQueryWindow'
+import PointsAnalytics from './pages/PointsAnalytics'
 import ErrorBoundary from './components/ErrorBoundary'
 import { AuthProvider } from './context/AuthContext'
 import { LeafUserProvider } from './context/LeafUserContext'
@@ -19,6 +20,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/file/:fileId" element={<FileQueryWindow />} />
+              <Route path="/points-analytics" element={<PointsAnalytics />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>
           </Router>

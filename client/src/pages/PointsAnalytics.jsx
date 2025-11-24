@@ -613,6 +613,22 @@ function PointsAnalytics() {
 
       // Transformar pontos para o formato esperado pelo MapComponent
       const transformedPoints = pointsData.map((point, index) => {
+        // Inferir tipo de operação baseado em campos disponíveis
+        let inferredOperationType = point.operationType
+        
+        // Se tem seedRate ou seedRateTarget, é Planting
+        if (!inferredOperationType && (point.seedRate != null || point.seedRateTarget != null)) {
+          inferredOperationType = 'Planting'
+        }
+        // Se tem harvestMoisture ou yieldVolume, é Harvesting
+        else if (!inferredOperationType && (point.harvestMoisture != null || point.yieldVolume != null)) {
+          inferredOperationType = 'Harvesting'
+        }
+        // Se tem appliedRate e tankMix, é CropProtection
+        else if (!inferredOperationType && point.appliedRate != null && point.tankMix != null) {
+          inferredOperationType = 'CropProtection'
+        }
+
         // Tentar extrair coordenadas de diferentes formatos possíveis
         let lat = null
         let lng = null
@@ -643,18 +659,20 @@ function PointsAnalytics() {
           // Apenas garantir que o ponto tem o campo geometry
           return {
             ...point,
+            operationType: inferredOperationType,
             id: point.id || `point-${index}`,
             // Adicionar timestamp formatado se existir
-            timestampFormatted: point.timestamp ? new Date(point.timestamp).toLocaleString('pt-BR') : null
+            timestampFormatted: point.timestamp ? new Date(point.timestamp).toLocaleString('en-US') : null
           }
         }
 
         return {
           ...point,
+          operationType: inferredOperationType,
           latitude: lat,
           longitude: lng,
           id: point.id || `point-${index}`,
-          timestampFormatted: point.timestamp ? new Date(point.timestamp).toLocaleString('pt-BR') : null
+          timestampFormatted: point.timestamp ? new Date(point.timestamp).toLocaleString('en-US') : null
         }
       }).filter(point => {
         // Filtrar pontos sem coordenadas válidas

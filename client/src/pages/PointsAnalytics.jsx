@@ -1578,7 +1578,7 @@ function PointsAnalytics() {
                       </div>
                     </div>
                   )}
-                  <MapComponent data={points} mapRef={mapRef} />
+                  <MapComponent data={filteredPoints.length > 0 ? filteredPoints : points} mapRef={mapRef} />
                 </div>
               )}
             </div>
@@ -1610,9 +1610,9 @@ function PointsAnalytics() {
                 </div>
 
                 {/* Histogram Chart */}
-                <div className="relative" style={{ height: '200px' }}>
+                <div className="relative" style={{ height: '250px' }}>
                   {/* Y-axis labels */}
-                  <div className="absolute left-0 top-0 bottom-0 w-12 flex flex-col justify-between text-xs text-zinc-500 pr-2 text-right">
+                  <div className="absolute left-0 top-0 bottom-16 w-12 flex flex-col justify-between text-xs text-zinc-500 pr-2 text-right">
                     <span>{timelineData.maxCount}</span>
                     <span>{Math.round(timelineData.maxCount * 0.75)}</span>
                     <span>{Math.round(timelineData.maxCount * 0.5)}</span>
@@ -1621,7 +1621,7 @@ function PointsAnalytics() {
                   </div>
 
                   {/* Chart area */}
-                  <div className="absolute left-12 right-0 top-0 bottom-8 border-l border-b border-zinc-700">
+                  <div className="absolute left-12 right-0 top-0 bottom-16 border-l border-b border-zinc-700">
                     <div className="relative h-full flex items-end justify-start gap-0.5 px-1">
                       {timelineData.groups.map((group, index) => {
                         const height = (group.count / timelineData.maxCount) * 100
@@ -1746,7 +1746,7 @@ function PointsAnalytics() {
                   </div>
 
                   {/* X-axis labels with year */}
-                  <div className="absolute left-12 right-0 bottom-0 h-8 flex items-start justify-between text-xs text-zinc-500 pt-1">
+                  <div className="absolute left-12 right-0 bottom-0 h-16 flex items-start justify-between text-xs text-zinc-500 pt-2">
                     {timelineData.groups.length <= 15 ? (
                       // Show all labels for small datasets with year
                       timelineData.groups.map((group, index) => (

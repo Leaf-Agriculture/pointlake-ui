@@ -614,3 +614,6 @@ function calculateCoverage(points) {
 **Versão da API:** v2/beta
 
 
+
+
+

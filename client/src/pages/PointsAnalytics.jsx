@@ -5,6 +5,8 @@ import { useLeafUser } from '../context/LeafUserContext'
 import MapComponent from '../components/MapComponent'
 import axios from 'axios'
 import { getPointlakeApiUrl } from '../config/api'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 function PointsAnalytics() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
@@ -53,6 +55,13 @@ function PointsAnalytics() {
   const [showAIAnalysis, setShowAIAnalysis] = useState(false)
   const [stats, setStats] = useState(null)
   const mapRef = useRef(null)
+  
+  // Estados para zonas H3
+  const [zones, setZones] = useState(null)
+  const [loadingZones, setLoadingZones] = useState(false)
+  const [zonesError, setZonesError] = useState(null)
+  const [selectedZone, setSelectedZone] = useState(null)
+  const [showZones, setShowZones] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -794,6 +803,79 @@ function PointsAnalytics() {
     }
   }
 
+  // Carregar zonas de produtividade (H3)
+  const loadZones = async () => {
+    if (!userId) {
+      setZonesError({ message: 'Please select a user', type: 'validation' })
+      return
+    }
+
+    setLoadingZones(true)
+    setZonesError(null)
+    
+    try {
+      const environment = getEnvironment()
+      const baseUrl = getPointlakeApiUrl(environment)
+      const url = `${baseUrl}/v2/beta/analytics/user/${userId}/zones`
+      
+      const params = {
+        startDate: formatDateForApi(startDate),
+        endDate: formatDateForApi(endDate)
+      }
+
+      console.log('Loading zones:', { url, params })
+
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': '*/*'
+        },
+        params,
+        timeout: 1200000 // 20 minutos
+      })
+
+      console.log('Zones API Response:', response.data)
+
+      setZones(response.data)
+      setShowZones(true)
+
+    } catch (err) {
+      console.error('Error loading zones:', err)
+      
+      if (err.code === 'ECONNABORTED') {
+        setZonesError({
+          type: 'timeout',
+          message: 'Request timeout (20 minutes)',
+          suggestion: 'Please try with a smaller date range'
+        })
+      } else if (!err.response) {
+        setZonesError({
+          type: 'network',
+          message: 'Network error',
+          details: err.message,
+          suggestion: 'Check your internet connection and try again'
+        })
+      } else if (err.response) {
+        const data = err.response.data
+        setZonesError({
+          type: 'api_error',
+          message: data?.message || data?.error || 'Error loading zones',
+          status: err.response.status,
+          details: data
+        })
+      } else {
+        setZonesError({
+          type: 'unknown',
+          message: err.message || 'Error loading zones'
+        })
+      }
+      
+      setZones(null)
+    } finally {
+      setLoadingZones(false)
+    }
+  }
+
   // Não carregar automaticamente - apenas quando o usuário clicar no botão
   // useEffect removido para evitar carregamento automático
 
@@ -804,6 +886,157 @@ function PointsAnalytics() {
 
   const handleBackToDashboard = () => {
     navigate('/dashboard')
+  }
+
+  // Função para baixar análise em PDF
+  const downloadAnalysisPDF = async () => {
+    try {
+      // Criar novo PDF
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 15
+      let yPosition = margin
+
+      // Adicionar título
+      pdf.setFontSize(20)
+      pdf.setTextColor(59, 130, 246) // Blue
+      pdf.text('📍 Points Analytics Report', margin, yPosition)
+      yPosition += 10
+
+      // Adicionar data e hora
+      pdf.setFontSize(10)
+      pdf.setTextColor(100, 100, 100)
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, yPosition)
+      yPosition += 8
+
+      // Adicionar informações do usuário
+      pdf.setFontSize(11)
+      pdf.setTextColor(50, 50, 50)
+      pdf.text(`User ID: ${userId}`, margin, yPosition)
+      yPosition += 6
+      pdf.text(`Period: ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`, margin, yPosition)
+      yPosition += 6
+      pdf.text(`Sample Rate: ${sampleRate}%`, margin, yPosition)
+      yPosition += 10
+
+      // Adicionar estatísticas se existirem
+      if (stats) {
+        pdf.setFontSize(14)
+        pdf.setTextColor(59, 130, 246)
+        pdf.text('📊 Statistics', margin, yPosition)
+        yPosition += 8
+
+        pdf.setFontSize(10)
+        pdf.setTextColor(50, 50, 50)
+        pdf.text(`Total Points: ${stats.total.toLocaleString()}`, margin, yPosition)
+        yPosition += 5
+        pdf.text(`With Coordinates: ${stats.withCoordinates.toLocaleString()}`, margin, yPosition)
+        yPosition += 5
+
+        // Tipos de operação
+        if (stats.operationTypes && Object.keys(stats.operationTypes).length > 0) {
+          yPosition += 3
+          pdf.setTextColor(100, 100, 100)
+          pdf.text('Operation Types:', margin, yPosition)
+          yPosition += 5
+          Object.entries(stats.operationTypes).forEach(([type, count]) => {
+            pdf.text(`  • ${type}: ${count.toLocaleString()}`, margin + 5, yPosition)
+            yPosition += 4
+          })
+        }
+
+        // Culturas
+        if (stats.crops && Object.keys(stats.crops).length > 0) {
+          yPosition += 3
+          pdf.setTextColor(100, 100, 100)
+          pdf.text('Crops:', margin, yPosition)
+          yPosition += 5
+          Object.entries(stats.crops).forEach(([crop, count]) => {
+            pdf.text(`  • ${crop}: ${count.toLocaleString()}`, margin + 5, yPosition)
+            yPosition += 4
+          })
+        }
+
+        yPosition += 5
+      }
+
+      // Adicionar análise AI se existir
+      if (aiAnalysis) {
+        // Verificar se precisa de nova página
+        if (yPosition > pageHeight - 50) {
+          pdf.addPage()
+          yPosition = margin
+        }
+
+        pdf.setFontSize(14)
+        pdf.setTextColor(147, 51, 234) // Purple
+        pdf.text('🤖 AI Analysis', margin, yPosition)
+        yPosition += 8
+
+        // Dividir texto em linhas que cabem na página
+        pdf.setFontSize(9)
+        pdf.setTextColor(50, 50, 50)
+        const maxWidth = pageWidth - (margin * 2)
+        const lines = pdf.splitTextToSize(aiAnalysis, maxWidth)
+        
+        lines.forEach(line => {
+          // Verificar se precisa de nova página
+          if (yPosition > pageHeight - margin) {
+            pdf.addPage()
+            yPosition = margin
+          }
+          pdf.text(line, margin, yPosition)
+          yPosition += 4
+        })
+
+        yPosition += 10
+      }
+
+      // Capturar mapa
+      const mapContainer = mapRef.current?.getContainer()
+      if (mapContainer) {
+        // Verificar se precisa de nova página
+        if (yPosition > pageHeight - 100) {
+          pdf.addPage()
+          yPosition = margin
+        }
+
+        pdf.setFontSize(14)
+        pdf.setTextColor(59, 130, 246)
+        pdf.text('🗺️ Map View', margin, yPosition)
+        yPosition += 8
+
+        // Capturar canvas do mapa
+        const canvas = await html2canvas(mapContainer, {
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#27272a',
+          scale: 2
+        })
+
+        // Adicionar imagem ao PDF
+        const imgData = canvas.toDataURL('image/jpeg', 0.8)
+        const imgWidth = pageWidth - (margin * 2)
+        const imgHeight = (canvas.height * imgWidth) / canvas.width
+        
+        // Verificar se a imagem cabe na página
+        if (yPosition + imgHeight > pageHeight - margin) {
+          pdf.addPage()
+          yPosition = margin
+        }
+
+        pdf.addImage(imgData, 'JPEG', margin, yPosition, imgWidth, imgHeight)
+      }
+
+      // Salvar PDF
+      const fileName = `points-analysis-${new Date().toISOString().split('T')[0]}.pdf`
+      pdf.save(fileName)
+
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Erro ao gerar PDF. Por favor, tente novamente.')
+    }
   }
 
   return (
@@ -957,24 +1190,44 @@ function PointsAnalytics() {
                 )}
               </div>
 
-              {/* Load Button */}
-              <button
-                onClick={loadPoints}
-                disabled={loading || !userId}
-                className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-zinc-700 disabled:to-zinc-700 disabled:cursor-not-allowed rounded-lg font-medium transition-all duration-200 transform hover:scale-105 disabled:transform-none"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Loading...
-                  </span>
-                ) : (
-                  '🔍 Load Points'
-                )}
-              </button>
+              {/* Load Buttons */}
+              <div className="space-y-2">
+                <button
+                  onClick={loadPoints}
+                  disabled={loading || !userId}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-zinc-700 disabled:to-zinc-700 disabled:cursor-not-allowed rounded-lg font-medium transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Loading...
+                    </span>
+                  ) : (
+                    '🔍 Load Points'
+                  )}
+                </button>
+
+                <button
+                  onClick={loadZones}
+                  disabled={loadingZones || !userId}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-zinc-700 disabled:to-zinc-700 disabled:cursor-not-allowed rounded-lg font-medium transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+                >
+                  {loadingZones ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Loading...
+                    </span>
+                  ) : (
+                    '🗺️ Load Zones (H3)'
+                  )}
+                </button>
+              </div>
               
               <p className="text-xs text-zinc-500 mt-2 text-center">
                 ⏱️ Large requests may take up to 20 minutes
@@ -1019,9 +1272,18 @@ function PointsAnalytics() {
             {/* Statistics Card */}
             {stats && (
               <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  📊 Statistics
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    📊 Statistics
+                  </h2>
+                  <button
+                    onClick={downloadAnalysisPDF}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                    title="Baixar relatório em PDF"
+                  >
+                    📥 PDF
+                  </button>
+                </div>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-400 text-sm">Total Points:</span>
@@ -1421,6 +1683,229 @@ function PointsAnalytics() {
               </div>
             )}
 
+            {/* Zonas de Produtividade Card */}
+            {zones && showZones && (
+              <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 backdrop-blur-sm border border-green-700/50 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2 text-green-300">
+                    🗺️ Zonas de Produtividade
+                    {zones.zones && (
+                      <span className="px-2 py-0.5 bg-green-600 text-white rounded-full text-xs">
+                        {zones.zones.length}
+                      </span>
+                    )}
+                  </h2>
+                  <button
+                    onClick={() => setShowZones(false)}
+                    className="text-green-400 hover:text-green-300 text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Metadados Gerais */}
+                <div className="mb-4 p-3 bg-zinc-900/50 rounded-lg border border-green-800/50">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-zinc-400">Resolução H3:</span>
+                      <span className="ml-2 text-green-300 font-medium">{zones.h3Resolution}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400">Buffer:</span>
+                      <span className="ml-2 text-green-300 font-medium">{zones.bufferMeters}m</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400">Total Células:</span>
+                      <span className="ml-2 text-green-300 font-medium">{zones.totalCells}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400">Total Pontos:</span>
+                      <span className="ml-2 text-green-300 font-medium">{zones.totalPoints?.toLocaleString()}</span>
+                    </div>
+                    {zones.processingTimeMs && (
+                      <div className="col-span-2">
+                        <span className="text-zinc-400">Tempo Processamento:</span>
+                        <span className="ml-2 text-green-300 font-medium">
+                          {(zones.processingTimeMs / 1000).toFixed(2)}s
+                        </span>
+                      </div>
+                    )}
+                    {zones.metadata && (
+                      <>
+                        <div>
+                          <span className="text-zinc-400">Método:</span>
+                          <span className="ml-2 text-green-300 font-medium">{zones.metadata.clusteringMethod}</span>
+                        </div>
+                        <div>
+                          <span className="text-zinc-400">Arquivos:</span>
+                          <span className="ml-2 text-green-300 font-medium">{zones.metadata.totalFiles}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Análise AI */}
+                {zones.aiAnalysis && (
+                  <div className="mb-4 p-3 bg-purple-900/20 rounded-lg border border-purple-700/50">
+                    <div className="text-sm font-medium text-purple-300 mb-2 flex items-center gap-2">
+                      🤖 Análise AI
+                    </div>
+                    <div className="text-xs text-zinc-300 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      {zones.aiAnalysis}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de Zonas */}
+                {zones.zones && zones.zones.length > 0 && (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {zones.zones.map((zone, index) => {
+                      const isExpanded = selectedZone === zone.zoneId
+                      
+                      return (
+                        <div
+                          key={zone.zoneId}
+                          className="bg-zinc-900/50 rounded-lg border border-green-800/50 overflow-hidden hover:border-green-700 transition-colors"
+                        >
+                          {/* Zone Header */}
+                          <button
+                            onClick={() => setSelectedZone(isExpanded ? null : zone.zoneId)}
+                            className="w-full p-3 text-left hover:bg-zinc-800/50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-green-300">
+                                  {zone.name}
+                                </span>
+                                <span className="text-xs text-zinc-500">
+                                  {isExpanded ? '▼' : '▶'}
+                                </span>
+                              </div>
+                              <span className="text-xs text-zinc-400">
+                                {zone.areaHectares?.toFixed(2)} ha
+                              </span>
+                            </div>
+
+                            {/* Estatísticas Rápidas */}
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              <span className="px-2 py-0.5 bg-blue-600/20 text-blue-300 rounded">
+                                {zone.cellCount} células
+                              </span>
+                              <span className="px-2 py-0.5 bg-green-600/20 text-green-300 rounded">
+                                {zone.statistics?.totalPoints} pontos
+                              </span>
+                              {zone.statistics?.avgYield && (
+                                <span className="px-2 py-0.5 bg-yellow-600/20 text-yellow-300 rounded">
+                                  Yield: {zone.statistics.avgYield.toFixed(1)}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+
+                          {/* Zone Details */}
+                          {isExpanded && (
+                            <div className="p-3 border-t border-green-800/50 bg-zinc-900/70">
+                              {/* Estatísticas Detalhadas */}
+                              {zone.statistics && (
+                                <div className="mb-3 p-2 bg-zinc-800/50 rounded">
+                                  <div className="text-xs font-medium text-zinc-300 mb-2">
+                                    📊 Estatísticas
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    {zone.statistics.avgYield && (
+                                      <div>
+                                        <span className="text-zinc-500">Avg Yield:</span>
+                                        <span className="ml-1 text-zinc-300">{zone.statistics.avgYield.toFixed(1)}</span>
+                                      </div>
+                                    )}
+                                    {zone.statistics.yieldCV && (
+                                      <div>
+                                        <span className="text-zinc-500">Yield CV:</span>
+                                        <span className="ml-1 text-zinc-300">{zone.statistics.yieldCV.toFixed(1)}%</span>
+                                      </div>
+                                    )}
+                                    {zone.statistics.avgMoisture && (
+                                      <div>
+                                        <span className="text-zinc-500">Avg Moisture:</span>
+                                        <span className="ml-1 text-zinc-300">{zone.statistics.avgMoisture.toFixed(1)}%</span>
+                                      </div>
+                                    )}
+                                    {zone.statistics.avgElevation && (
+                                      <div>
+                                        <span className="text-zinc-500">Avg Elevation:</span>
+                                        <span className="ml-1 text-zinc-300">{zone.statistics.avgElevation.toFixed(1)}m</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Recomendações */}
+                              {zone.recommendations && zone.recommendations.length > 0 && (
+                                <div className="p-2 bg-amber-900/20 rounded border border-amber-700/50">
+                                  <div className="text-xs font-medium text-amber-300 mb-2 flex items-center gap-1">
+                                    💡 Recomendações
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {zone.recommendations.map((rec, idx) => (
+                                      <li key={idx} className="text-xs text-zinc-300 flex items-start gap-1">
+                                        <span className="text-amber-400">•</span>
+                                        <span>{rec}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {/* Células H3 (sample) */}
+                              {zone.h3Cells && zone.h3Cells.length > 0 && (
+                                <div className="mt-2 text-xs text-zinc-500">
+                                  <details>
+                                    <summary className="cursor-pointer hover:text-zinc-400">
+                                      H3 Cells ({zone.h3Cells.length})
+                                    </summary>
+                                    <div className="mt-1 p-2 bg-zinc-800/30 rounded font-mono text-xs max-h-32 overflow-y-auto">
+                                      {zone.h3Cells.slice(0, 10).join(', ')}
+                                      {zone.h3Cells.length > 10 && (
+                                        <span className="text-zinc-600"> ... +{zone.h3Cells.length - 10} more</span>
+                                      )}
+                                    </div>
+                                  </details>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Zone Error */}
+            {zonesError && (
+              <div className="bg-red-900/30 backdrop-blur-sm border border-red-700/50 rounded-xl p-4">
+                <div className="flex items-start gap-2">
+                  <span className="text-red-400 text-xl">❌</span>
+                  <div className="flex-1">
+                    <h3 className="text-red-300 font-semibold mb-1">
+                      Erro ao carregar zonas
+                    </h3>
+                    <p className="text-red-200 text-sm">
+                      {zonesError.message}
+                    </p>
+                    {zonesError.suggestion && (
+                      <p className="text-red-300 text-xs italic mt-2">
+                        💡 {zonesError.suggestion}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Endpoint Information */}
             <div className="bg-zinc-800/50 backdrop-blur-sm border border-zinc-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -1428,12 +1913,20 @@ function PointsAnalytics() {
               </h2>
               <div className="space-y-2 text-xs text-zinc-400">
                 <p>
-                  <strong className="text-zinc-300">Endpoint:</strong>
+                  <strong className="text-zinc-300">Points Endpoint:</strong>
                   <br />
                   <code className="text-blue-400">/v2/beta/analytics/user/&#123;userId&#125;/points</code>
                 </p>
                 <p className="mt-2">
                   This endpoint returns all agricultural operation points for a specific user in the selected period.
+                </p>
+                <p className="mt-4">
+                  <strong className="text-zinc-300">Zones Endpoint:</strong>
+                  <br />
+                  <code className="text-green-400">/v2/beta/analytics/user/&#123;userId&#125;/zones</code>
+                </p>
+                <p className="mt-2">
+                  This endpoint returns productivity zones using H3 clustering with AI analysis and recommendations.
                 </p>
               </div>
             </div>
@@ -1448,12 +1941,21 @@ function PointsAnalytics() {
                   <h3 className="text-lg font-semibold text-purple-300 flex items-center gap-2">
                     🤖 AI Analysis
                   </h3>
-                  <button
-                    onClick={() => setShowAIAnalysis(false)}
-                    className="text-purple-400 hover:text-purple-300 text-sm"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={downloadAnalysisPDF}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                      title="Baixar análise em PDF"
+                    >
+                      📥 Download PDF
+                    </button>
+                    <button
+                      onClick={() => setShowAIAnalysis(false)}
+                      className="text-purple-400 hover:text-purple-300 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 <div className="prose prose-invert prose-sm max-w-none">
                   <div className="text-zinc-200 text-sm whitespace-pre-wrap leading-relaxed">

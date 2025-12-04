@@ -126,6 +126,9 @@ function FieldPerformanceAnalytics() {
   const leftMapRef = useRef(null)
   const rightMapRef = useRef(null)
   
+  // Estado para painel de análise retrátil
+  const [analysisPanelCollapsed, setAnalysisPanelCollapsed] = useState(false)
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -1521,32 +1524,89 @@ function FieldPerformanceAnalytics() {
             ) : (
               <div className="p-2 space-y-1">
                 {filteredFields.map((field) => (
-                  <button
-                    key={field.id}
-                    onClick={() => handleSelectField(field)}
-                    className={`w-full text-left p-3 rounded transition-all ${
-                      selectedField?.id === field.id
-                        ? 'bg-blue-950 border border-blue-800'
-                        : 'bg-zinc-800/50 hover:bg-zinc-800 border border-transparent'
-                    }`}
-                  >
-                    <div className="text-sm font-medium text-zinc-100 truncate">
-                      {field.name || field.fieldName || `Field ${field.id.substring(0, 8)}`}
-                    </div>
-                    {field.farmName && (
-                      <div className="text-xs text-zinc-400 truncate mt-0.5">
-                        {field.farmName}
+                  <div key={field.id} className="space-y-1">
+                    <button
+                      onClick={() => handleSelectField(field)}
+                      className={`w-full text-left p-3 rounded transition-all ${
+                        selectedField?.id === field.id
+                          ? 'bg-blue-950 border border-blue-800'
+                          : 'bg-zinc-800/50 hover:bg-zinc-800 border border-transparent'
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-zinc-100 truncate">
+                        {field.name || field.fieldName || `Field ${field.id.substring(0, 8)}`}
+                      </div>
+                      {field.farmName && (
+                        <div className="text-xs text-zinc-400 truncate mt-0.5">
+                          {field.farmName}
+                        </div>
+                      )}
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {getFieldArea(field)}
+                      </div>
+                      {field.providerName && (
+                        <div className="text-xs text-zinc-600 mt-0.5">
+                          {field.providerName}
+                        </div>
+                      )}
+                    </button>
+                    
+                    {/* Zones do Field - exibido quando o field está selecionado */}
+                    {selectedField?.id === field.id && (
+                      <div className="ml-3 pl-3 border-l-2 border-blue-800 space-y-1">
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-xs text-zinc-400 font-medium">Zones</span>
+                          <button
+                            onClick={() => {
+                              setIsDrawingZone(true)
+                              setDrawnZoneCoords([])
+                            }}
+                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Draw
+                          </button>
+                        </div>
+                        
+                        {loadingZones ? (
+                          <div className="flex items-center justify-center py-2">
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                          </div>
+                        ) : fieldZones.length > 0 ? (
+                          <div className="space-y-1">
+                            {fieldZones.map(zone => (
+                              <div 
+                                key={zone.id} 
+                                className="flex items-center justify-between px-2 py-1.5 bg-zinc-800/70 rounded text-xs group"
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <svg className="w-3 h-3 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                                  </svg>
+                                  <span className="text-zinc-300 truncate">{zone.name}</span>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteZone(zone.id)
+                                  }}
+                                  className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-zinc-600 py-1 italic">No zones created</div>
+                        )}
                       </div>
                     )}
-                    <div className="text-xs text-zinc-500 mt-1">
-                      {getFieldArea(field)}
-                    </div>
-                    {field.providerName && (
-                      <div className="text-xs text-zinc-600 mt-0.5">
-                        {field.providerName}
-                      </div>
-                    )}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -1695,61 +1755,129 @@ function FieldPerformanceAnalytics() {
                 {/* Container dos 2 mapas */}
                 <div className="flex-1 flex">
                   {/* Mapa Esquerdo */}
-                  <div className="w-1/2 relative border-r border-zinc-700">
-                    <MapComponent 
-                      data={leftMapData} 
-                      mapRef={leftMapRef}
-                    />
-                    {/* Seletor de layer */}
-                    <div className="absolute top-2 left-2 z-20">
-                      <select
-                        value={leftLayerId || ''}
-                        onChange={(e) => setLeftLayerId(e.target.value || null)}
-                        className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
-                      >
-                        <option value="">Select Layer</option>
-                        {availableDataLayers.map(layer => {
-                          const hasData = filteredPoints.some(p => p[layer.id] != null)
-                          if (!hasData) return null
-                          return (
-                            <option key={layer.id} value={layer.id}>{layer.name}</option>
-                          )
-                        })}
-                      </select>
+                  <div className="w-1/2 relative border-r border-zinc-700 flex flex-col">
+                    <div className="flex-1 relative">
+                      <MapComponent 
+                        data={leftMapData} 
+                        mapRef={leftMapRef}
+                      />
+                      {/* Seletor de layer */}
+                      <div className="absolute top-2 left-2 z-20">
+                        <select
+                          value={leftLayerId || ''}
+                          onChange={(e) => setLeftLayerId(e.target.value || null)}
+                          className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
+                        >
+                          <option value="">Select Layer</option>
+                          {availableDataLayers.map(layer => {
+                            const hasData = filteredPoints.some(p => p[layer.id] != null)
+                            if (!hasData) return null
+                            return (
+                              <option key={layer.id} value={layer.id}>{layer.name}</option>
+                            )
+                          })}
+                        </select>
+                      </div>
                     </div>
+                    {/* Stats do lado esquerdo */}
                     {leftLayerId && (
-                      <div className="absolute bottom-2 left-2 z-20 bg-zinc-900/95 rounded px-2 py-1">
-                        <span className="text-xs text-zinc-300 font-medium">{availableDataLayers.find(l => l.id === leftLayerId)?.name}</span>
+                      <div className="bg-zinc-900 border-t border-zinc-700 p-2">
+                        {(() => {
+                          const layer = availableDataLayers.find(l => l.id === leftLayerId)
+                          const values = filteredPoints.map(p => p[leftLayerId]).filter(v => v != null)
+                          const min = values.length > 0 ? Math.min(...values) : 0
+                          const max = values.length > 0 ? Math.max(...values) : 0
+                          const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
+                          const std = values.length > 0 ? Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length) : 0
+                          return (
+                            <div>
+                              <div className="text-xs font-medium text-zinc-300 mb-1">{layer?.name}</div>
+                              <div className="grid grid-cols-4 gap-1 text-xs">
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Min</div>
+                                  <div className="text-blue-400 font-medium">{min.toFixed(1)}</div>
+                                </div>
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Avg</div>
+                                  <div className="text-yellow-400 font-medium">{avg.toFixed(1)}</div>
+                                </div>
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Max</div>
+                                  <div className="text-red-400 font-medium">{max.toFixed(1)}</div>
+                                </div>
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Std</div>
+                                  <div className="text-purple-400 font-medium">{std.toFixed(1)}</div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-zinc-500 mt-1 text-center">{values.length} points</div>
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
                   
                   {/* Mapa Direito */}
-                  <div className="w-1/2 relative">
-                    <MapComponent 
-                      data={rightMapData} 
-                      mapRef={rightMapRef}
-                    />
-                    {/* Seletor de layer */}
-                    <div className="absolute top-2 left-2 z-20">
-                      <select
-                        value={rightLayerId || ''}
-                        onChange={(e) => setRightLayerId(e.target.value || null)}
-                        className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
-                      >
-                        <option value="">Select Layer</option>
-                        {availableDataLayers.map(layer => {
-                          const hasData = filteredPoints.some(p => p[layer.id] != null)
-                          if (!hasData) return null
-                          return (
-                            <option key={layer.id} value={layer.id}>{layer.name}</option>
-                          )
-                        })}
-                      </select>
+                  <div className="w-1/2 relative flex flex-col">
+                    <div className="flex-1 relative">
+                      <MapComponent 
+                        data={rightMapData} 
+                        mapRef={rightMapRef}
+                      />
+                      {/* Seletor de layer */}
+                      <div className="absolute top-2 left-2 z-20">
+                        <select
+                          value={rightLayerId || ''}
+                          onChange={(e) => setRightLayerId(e.target.value || null)}
+                          className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
+                        >
+                          <option value="">Select Layer</option>
+                          {availableDataLayers.map(layer => {
+                            const hasData = filteredPoints.some(p => p[layer.id] != null)
+                            if (!hasData) return null
+                            return (
+                              <option key={layer.id} value={layer.id}>{layer.name}</option>
+                            )
+                          })}
+                        </select>
+                      </div>
                     </div>
+                    {/* Stats do lado direito */}
                     {rightLayerId && (
-                      <div className="absolute bottom-2 left-2 z-20 bg-zinc-900/95 rounded px-2 py-1">
-                        <span className="text-xs text-zinc-300 font-medium">{availableDataLayers.find(l => l.id === rightLayerId)?.name}</span>
+                      <div className="bg-zinc-900 border-t border-zinc-700 p-2">
+                        {(() => {
+                          const layer = availableDataLayers.find(l => l.id === rightLayerId)
+                          const values = filteredPoints.map(p => p[rightLayerId]).filter(v => v != null)
+                          const min = values.length > 0 ? Math.min(...values) : 0
+                          const max = values.length > 0 ? Math.max(...values) : 0
+                          const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
+                          const std = values.length > 0 ? Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length) : 0
+                          return (
+                            <div>
+                              <div className="text-xs font-medium text-zinc-300 mb-1">{layer?.name}</div>
+                              <div className="grid grid-cols-4 gap-1 text-xs">
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Min</div>
+                                  <div className="text-blue-400 font-medium">{min.toFixed(1)}</div>
+                                </div>
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Avg</div>
+                                  <div className="text-yellow-400 font-medium">{avg.toFixed(1)}</div>
+                                </div>
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Max</div>
+                                  <div className="text-red-400 font-medium">{max.toFixed(1)}</div>
+                                </div>
+                                <div className="text-center bg-zinc-800 rounded p-1">
+                                  <div className="text-zinc-500">Std</div>
+                                  <div className="text-purple-400 font-medium">{std.toFixed(1)}</div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-zinc-500 mt-1 text-center">{values.length} points</div>
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
@@ -1847,76 +1975,36 @@ function FieldPerformanceAnalytics() {
                         </>
                       )}
                       
-                      {/* Zones Section */}
-                      {selectedField && (
+                      {/* Drawing Mode Info - exibido quando o modo de desenho está ativo */}
+                      {isDrawingZone && (
                         <>
                           <div className="border-t border-zinc-700 my-1"></div>
                           <div className="px-2 py-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-zinc-400">Zones</span>
-                              <button
-                                onClick={() => {
-                                  if (isDrawingZone) {
+                            <div className="bg-emerald-950 border border-emerald-700 rounded p-2">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs text-emerald-300 font-medium">Drawing Zone</span>
+                                <button
+                                  onClick={() => {
                                     setIsDrawingZone(false)
                                     setDrawnZoneCoords([])
-                                  } else {
-                                    setIsDrawingZone(true)
-                                  }
-                                }}
-                                className={`px-2 py-0.5 text-xs rounded transition ${
-                                  isDrawingZone 
-                                    ? 'bg-red-600 text-white hover:bg-red-500' 
-                                    : 'bg-emerald-700 text-white hover:bg-emerald-600'
-                                }`}
-                              >
-                                {isDrawingZone ? 'Cancel' : '+ Draw'}
-                              </button>
+                                  }}
+                                  className="text-xs text-red-400 hover:text-red-300"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              <div className="text-xs text-emerald-300/80 mb-2">
+                                Click on map to add points ({drawnZoneCoords.length} points)
+                              </div>
+                              {drawnZoneCoords.length >= 3 && (
+                                <button
+                                  onClick={() => setShowZoneModal(true)}
+                                  className="w-full px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-500"
+                                >
+                                  Save Zone
+                                </button>
+                              )}
                             </div>
-                            
-                            {/* Drawing Mode Info */}
-                            {isDrawingZone && (
-                              <div className="bg-emerald-950 border border-emerald-700 rounded p-2 mb-2">
-                                <div className="text-xs text-emerald-300 mb-1">
-                                  Click on map to add points ({drawnZoneCoords.length} points)
-                                </div>
-                                {drawnZoneCoords.length >= 3 && (
-                                  <button
-                                    onClick={() => setShowZoneModal(true)}
-                                    className="w-full px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-500"
-                                  >
-                                    Save Zone
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                            
-                            {/* Zones List */}
-                            {loadingZones ? (
-                              <div className="flex items-center justify-center py-2">
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                              </div>
-                            ) : fieldZones.length > 0 ? (
-                              <div className="space-y-1 max-h-32 overflow-auto">
-                                {fieldZones.map(zone => (
-                                  <div 
-                                    key={zone.id} 
-                                    className="flex items-center justify-between px-2 py-1 bg-zinc-800 rounded text-xs"
-                                  >
-                                    <span className="text-zinc-300 truncate">{zone.name}</span>
-                                    <button
-                                      onClick={() => handleDeleteZone(zone.id)}
-                                      className="text-red-400 hover:text-red-300 ml-1"
-                                    >
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-zinc-500 text-center py-1">No zones</div>
-                            )}
                           </div>
                         </>
                       )}
@@ -1967,49 +2055,84 @@ function FieldPerformanceAnalytics() {
             </div>
             )}
 
-            {/* Painel de Resultados da Análise */}
+            {/* Painel de Resultados da Análise - Retrátil */}
             {showAnalysisResults && analysisData && (
-              <div className="w-1/2 bg-zinc-900 border-l border-zinc-800 flex flex-col">
-                <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    Analysis Results
-                    {filteredPoints.length !== analysisPoints.length && (
-                      <span className="text-xs bg-blue-600 px-2 py-0.5 rounded">
-                        {filteredPoints.length} / {analysisPoints.length}
-                      </span>
-                    )}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowFilters(!showFilters)}
-                      className={`px-2 py-1 text-xs rounded flex items-center gap-1 transition ${
-                        showFilters ? 'bg-blue-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-                      }`}
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                      </svg>
-                      Filters
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAnalysisResults(false)
-                        setAnalysisData(null)
-                        setAnalysisPoints([])
-                        setFilteredPoints([])
-                        setShowFilters(false)
-                      }}
-                      className="text-zinc-400 hover:text-zinc-200"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+              <div className={`${analysisPanelCollapsed ? 'w-10' : 'w-1/2'} bg-zinc-900 border-l border-zinc-800 flex flex-col transition-all duration-300`}>
+                {/* Botão de expandir/recolher na lateral */}
+                <button
+                  onClick={() => setAnalysisPanelCollapsed(!analysisPanelCollapsed)}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-30 bg-zinc-800 border border-zinc-700 rounded-full p-1 hover:bg-zinc-700 transition"
+                  style={{ marginLeft: analysisPanelCollapsed ? '0' : '-12px' }}
+                >
+                  <svg 
+                    className={`w-4 h-4 text-zinc-400 transition-transform ${analysisPanelCollapsed ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                
+                {analysisPanelCollapsed ? (
+                  /* Painel Recolhido - apenas ícone vertical */
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="writing-mode-vertical text-xs text-zinc-500 transform rotate-180" style={{ writingMode: 'vertical-rl' }}>
+                      Analysis ({filteredPoints.length} pts)
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Painel Expandido */
+                  <>
+                    <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Analysis Results
+                        {filteredPoints.length !== analysisPoints.length && (
+                          <span className="text-xs bg-blue-600 px-2 py-0.5 rounded">
+                            {filteredPoints.length} / {analysisPoints.length}
+                          </span>
+                        )}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowFilters(!showFilters)}
+                          className={`px-2 py-1 text-xs rounded flex items-center gap-1 transition ${
+                            showFilters ? 'bg-blue-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                          }`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                          </svg>
+                          Filters
+                        </button>
+                        <button
+                          onClick={() => setAnalysisPanelCollapsed(true)}
+                          className="text-zinc-400 hover:text-zinc-200"
+                          title="Collapse panel"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowAnalysisResults(false)
+                            setAnalysisData(null)
+                            setAnalysisPoints([])
+                            setFilteredPoints([])
+                            setShowFilters(false)
+                          }}
+                          className="text-zinc-400 hover:text-zinc-200"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                 
                 <div className="flex-1 overflow-auto p-3">
                   {/* Summary */}
@@ -2352,6 +2475,8 @@ function FieldPerformanceAnalytics() {
                     )}
                   </div>
                 </div>
+                  </>
+                )}
               </div>
             )}
           </div>

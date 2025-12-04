@@ -31,6 +31,15 @@ function FieldPerformanceAnalytics() {
   const [newFarmId, setNewFarmId] = useState('')
   const [newBoundaryGeoJson, setNewBoundaryGeoJson] = useState('')
   
+  // Estados para análise
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false)
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false)
+  const [analysisData, setAnalysisData] = useState(null)
+  const [analysisSampleRate, setAnalysisSampleRate] = useState(21)
+  const [analysisStartDate, setAnalysisStartDate] = useState('2020-01-01')
+  const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
+  const [showAnalysisResults, setShowAnalysisResults] = useState(false)
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -196,6 +205,73 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Função para criar análise do projeto
+  const handleCreateAnalysis = async () => {
+    if (!token || !selectedLeafUserId) {
+      setError('Authentication required')
+      return
+    }
+
+    setLoadingAnalysis(true)
+    setError(null)
+    setShowAnalysisModal(false)
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      // Formatar datas para ISO
+      const startDateISO = `${analysisStartDate}T00:00:00.000Z`
+      const endDateISO = `${analysisEndDate}T00:00:00.000Z`
+      
+      console.log('📊 Creating analysis with params:', {
+        userId: selectedLeafUserId,
+        sampleRate: analysisSampleRate,
+        startDate: startDateISO,
+        endDate: endDateISO
+      })
+
+      const response = await axios.get(
+        `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params: {
+            samplerate: analysisSampleRate,
+            startDate: startDateISO,
+            endDate: endDateISO
+          }
+        }
+      )
+
+      console.log('📊 Analysis data received:', response.data)
+      setAnalysisData(response.data)
+      setShowAnalysisResults(true)
+      
+      // Se tiver pontos, mostrar no mapa
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        setMapData(response.data)
+        setSuccessMessage(`Analysis completed! ${response.data.length} points loaded.`)
+      } else if (response.data?.points && Array.isArray(response.data.points)) {
+        setMapData(response.data.points)
+        setSuccessMessage(`Analysis completed! ${response.data.points.length} points loaded.`)
+      } else {
+        setSuccessMessage('Analysis completed!')
+      }
+      
+      setTimeout(() => setSuccessMessage(null), 3000)
+      
+    } catch (err) {
+      console.error('Error creating analysis:', err)
+      console.error('Response:', err.response?.data)
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error creating analysis')
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
   // Criar novo field com boundary
   const handleCreateField = async () => {
     if (!token || !selectedLeafUserId || !newFieldName.trim()) {
@@ -311,6 +387,8 @@ function FieldPerformanceAnalytics() {
   // Selecionar field
   const handleSelectField = (field) => {
     setSelectedField(field)
+    setAnalysisData(null)
+    setShowAnalysisResults(false)
     loadFieldBoundary(field)
   }
 
@@ -332,6 +410,8 @@ function FieldPerformanceAnalytics() {
   // Desafixar projeto
   const handleUnpinProject = () => {
     setPinnedProject(null)
+    setAnalysisData(null)
+    setShowAnalysisResults(false)
     sessionStorage.removeItem('pinnedFieldProject')
   }
 
@@ -390,7 +470,7 @@ function FieldPerformanceAnalytics() {
   return (
     <div className="h-screen bg-zinc-950 flex flex-col">
       {/* Barra de Progresso Global */}
-      {(loadingFields || loadingBoundary || creatingField) && (
+      {(loadingFields || loadingBoundary || creatingField || loadingAnalysis) && (
         <div className="w-full h-1 bg-zinc-800 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500 animate-pulse"></div>
           <div className="absolute inset-0 shimmer-effect"></div>
@@ -504,6 +584,27 @@ function FieldPerformanceAnalytics() {
                   Farm: {pinnedProject.field.farmName}
                 </div>
               )}
+              
+              {/* Botão de Criar Análise */}
+              <button
+                onClick={() => setShowAnalysisModal(true)}
+                disabled={loadingAnalysis}
+                className="w-full mt-3 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loadingAnalysis ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Create Analysis
+                  </>
+                )}
+              </button>
             </div>
           )}
 
@@ -609,7 +710,7 @@ function FieldPerformanceAnalytics() {
           </div>
         </div>
 
-        {/* Área Central - Mapa */}
+        {/* Área Central - Mapa e Resultados */}
         <div className="flex-1 flex flex-col">
           {/* Info do Field Selecionado */}
           {selectedField && (
@@ -654,6 +755,8 @@ function FieldPerformanceAnalytics() {
                       setSelectedField(null)
                       setFieldBoundary(null)
                       setMapData(null)
+                      setAnalysisData(null)
+                      setShowAnalysisResults(false)
                     }}
                     className="text-zinc-400 hover:text-zinc-200"
                   >
@@ -666,28 +769,125 @@ function FieldPerformanceAnalytics() {
             </div>
           )}
 
-          {/* Mapa */}
-          <div className="flex-1 relative">
-            <MapComponent data={mapData} mapRef={mapRef} />
-            
-            {/* Loading Overlay */}
-            {loadingBoundary && (
-              <div className="absolute inset-0 bg-zinc-950/50 flex items-center justify-center z-10">
-                <div className="bg-zinc-900 rounded-lg p-4 flex items-center gap-3 border border-zinc-800">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                  <span className="text-zinc-300 text-sm">Loading boundary...</span>
+          {/* Mapa e Resultados de Análise */}
+          <div className="flex-1 flex">
+            {/* Mapa */}
+            <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all`}>
+              <MapComponent data={mapData} mapRef={mapRef} />
+              
+              {/* Loading Overlay */}
+              {(loadingBoundary || loadingAnalysis) && (
+                <div className="absolute inset-0 bg-zinc-950/50 flex items-center justify-center z-10">
+                  <div className="bg-zinc-900 rounded-lg p-4 flex items-center gap-3 border border-zinc-800">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                    <span className="text-zinc-300 text-sm">
+                      {loadingAnalysis ? 'Running analysis...' : 'Loading boundary...'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Mensagem quando não há field selecionado */}
-            {!selectedField && !loadingFields && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-zinc-900/90 rounded-lg p-6 text-center border border-zinc-800 max-w-sm">
-                  <svg className="w-12 h-12 text-zinc-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                  </svg>
-                  <p className="text-zinc-400 text-sm">Select a field from the list to view its boundary on the map</p>
+              {/* Mensagem quando não há field selecionado */}
+              {!selectedField && !loadingFields && !analysisData && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="bg-zinc-900/90 rounded-lg p-6 text-center border border-zinc-800 max-w-sm">
+                    <svg className="w-12 h-12 text-zinc-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    <p className="text-zinc-400 text-sm">Select a field from the list to view its boundary on the map</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Painel de Resultados da Análise */}
+            {showAnalysisResults && analysisData && (
+              <div className="w-1/2 bg-zinc-900 border-l border-zinc-800 flex flex-col">
+                <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Analysis Results
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowAnalysisResults(false)
+                      setAnalysisData(null)
+                    }}
+                    className="text-zinc-400 hover:text-zinc-200"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-auto p-3">
+                  {/* Summary */}
+                  <div className="bg-zinc-800 rounded-lg p-3 mb-3">
+                    <h4 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Summary</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-zinc-500">Total Points:</span>
+                        <span className="text-zinc-100 ml-2">
+                          {Array.isArray(analysisData) ? analysisData.length : (analysisData?.points?.length || 0)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Sample Rate:</span>
+                        <span className="text-zinc-100 ml-2">{analysisSampleRate}%</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Start Date:</span>
+                        <span className="text-zinc-100 ml-2">{analysisStartDate}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">End Date:</span>
+                        <span className="text-zinc-100 ml-2">{analysisEndDate}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Data Table */}
+                  <div className="bg-zinc-800 rounded-lg overflow-hidden">
+                    <h4 className="text-xs font-semibold text-zinc-400 uppercase p-3 border-b border-zinc-700">
+                      Data Points
+                    </h4>
+                    <div className="max-h-96 overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-zinc-900 sticky top-0">
+                          <tr>
+                            <th className="text-left p-2 text-zinc-400">#</th>
+                            <th className="text-left p-2 text-zinc-400">Timestamp</th>
+                            <th className="text-left p-2 text-zinc-400">Operation</th>
+                            <th className="text-left p-2 text-zinc-400">Crop</th>
+                            <th className="text-right p-2 text-zinc-400">Area</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(Array.isArray(analysisData) ? analysisData : analysisData?.points || []).slice(0, 100).map((point, idx) => (
+                            <tr key={idx} className="border-t border-zinc-700 hover:bg-zinc-700/50">
+                              <td className="p-2 text-zinc-500">{idx + 1}</td>
+                              <td className="p-2 text-zinc-300">
+                                {point.timestamp ? new Date(point.timestamp).toLocaleString() : '-'}
+                              </td>
+                              <td className="p-2 text-zinc-300">{point.operationType || '-'}</td>
+                              <td className="p-2 text-zinc-300">{point.crop || '-'}</td>
+                              <td className="p-2 text-zinc-300 text-right">
+                                {point.area ? parseFloat(point.area).toFixed(4) : '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(Array.isArray(analysisData) ? analysisData.length : analysisData?.points?.length || 0) > 100 && (
+                        <div className="p-2 text-center text-zinc-500 text-xs border-t border-zinc-700">
+                          Showing first 100 of {Array.isArray(analysisData) ? analysisData.length : analysisData?.points?.length} points
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -775,6 +975,97 @@ function FieldPerformanceAnalytics() {
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
                 Create Field
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Create Analysis */}
+      {showAnalysisModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-lg border border-zinc-800 w-full max-w-md mx-4">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-100">Create Analysis</h3>
+              <button
+                onClick={() => setShowAnalysisModal(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div className="bg-zinc-800 rounded-lg p-3">
+                <div className="text-xs text-zinc-500 uppercase">Project</div>
+                <div className="text-sm font-medium text-zinc-100">
+                  {pinnedProject?.field?.name || pinnedProject?.field?.fieldName || 'Unnamed Field'}
+                </div>
+              </div>
+
+              {/* Sample Rate */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Sample Rate (%)
+                </label>
+                <input
+                  type="number"
+                  value={analysisSampleRate}
+                  onChange={(e) => setAnalysisSampleRate(parseInt(e.target.value) || 1)}
+                  min={1}
+                  max={100}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <p className="text-xs text-zinc-500 mt-1">
+                  Percentage of points to sample (1-100)
+                </p>
+              </div>
+
+              {/* Start Date */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={analysisStartDate}
+                  onChange={(e) => setAnalysisStartDate(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* End Date */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={analysisEndDate}
+                  onChange={(e) => setAnalysisEndDate(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+              <button
+                onClick={() => setShowAnalysisModal(false)}
+                className="px-4 py-2 text-sm font-medium bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition border border-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateAnalysis}
+                disabled={loadingAnalysis}
+                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loadingAnalysis && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                )}
+                Run Analysis
               </button>
             </div>
           </div>

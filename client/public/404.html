@@ -8,18 +8,20 @@
     // Single Page App redirect for GitHub Pages
     // This script takes the current URL and converts it to a proper hash-based URL
     // that the SPA can handle, then redirects to index.html
-    const pathSegmentsToKeep = 1; // Keep /pointlake-ui/
-    const location = window.location;
-    const path = location.pathname
-      .split('/')
-      .slice(pathSegmentsToKeep + 1)
-      .join('/');
-    const search = location.search;
-    const hash = location.hash;
-    
-    // Redirect to the root with the path as a query parameter
-    const redirectUrl = location.origin + '/pointlake-ui/?p=/' + path + (search ? '&q=' + encodeURIComponent(search.slice(1)) : '') + hash;
-    location.replace(redirectUrl);
+    (function() {
+      var pathSegmentsToKeep = 1; // Keep /pointlake-ui/
+      var loc = window.location;
+      var path = loc.pathname
+        .split('/')
+        .slice(pathSegmentsToKeep + 1)
+        .join('/');
+      var search = loc.search;
+      var hash = loc.hash;
+      
+      // Redirect to the root with the path as a query parameter
+      var redirectUrl = loc.origin + '/pointlake-ui/?p=/' + path + (search ? '&q=' + encodeURIComponent(search.slice(1)) : '') + hash;
+      loc.replace(redirectUrl);
+    })();
   </script>
 </head>
 <body>

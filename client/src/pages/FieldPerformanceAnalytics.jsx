@@ -107,6 +107,16 @@ function FieldPerformanceAnalytics() {
     { id: 'seedRate', name: 'Seed Rate', unit: '' }
   ]
   
+  // Estados para criar zonas
+  const [isDrawingZone, setIsDrawingZone] = useState(false)
+  const [drawnZoneCoords, setDrawnZoneCoords] = useState([])
+  const [showZoneModal, setShowZoneModal] = useState(false)
+  const [creatingZone, setCreatingZone] = useState(false)
+  const [newZoneName, setNewZoneName] = useState('')
+  const [newZoneNote, setNewZoneNote] = useState('')
+  const [fieldZones, setFieldZones] = useState([])
+  const [loadingZones, setLoadingZones] = useState(false)
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -900,6 +910,156 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Carregar zonas do field
+  const loadFieldZones = async (fieldId) => {
+    if (!token || !selectedLeafUserId || !fieldId) return
+    
+    setLoadingZones(true)
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      const response = await axios.get(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params: {
+            fieldId: fieldId
+          }
+        }
+      )
+      
+      console.log('🗺️ Zones loaded:', response.data)
+      setFieldZones(Array.isArray(response.data) ? response.data : [])
+    } catch (err) {
+      console.error('Error loading zones:', err)
+      setFieldZones([])
+    } finally {
+      setLoadingZones(false)
+    }
+  }
+
+  // Criar zona
+  const handleCreateZone = async () => {
+    if (!token || !selectedLeafUserId || !selectedField?.id) {
+      setError('Please select a field first')
+      return
+    }
+    
+    if (!newZoneName.trim()) {
+      setError('Zone name is required')
+      return
+    }
+    
+    if (drawnZoneCoords.length < 3) {
+      setError('Please draw a zone on the map first (at least 3 points)')
+      return
+    }
+    
+    setCreatingZone(true)
+    setError(null)
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      // Converter coordenadas para GeoJSON MultiPolygon
+      // Fechar o polígono se necessário
+      const coords = [...drawnZoneCoords]
+      if (coords.length > 0) {
+        const first = coords[0]
+        const last = coords[coords.length - 1]
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+          coords.push([...first])
+        }
+      }
+      
+      const geometry = {
+        type: 'MultiPolygon',
+        coordinates: [[[...coords.map(c => [c[1], c[0]])]]] // [lng, lat] format
+      }
+      
+      const zoneData = {
+        fieldId: selectedField.id,
+        name: newZoneName.trim(),
+        note: newZoneNote.trim() || undefined,
+        geometry: geometry,
+        status: 'ACTIVE',
+        timespan: 'PERMANENT'
+      }
+      
+      console.log('Creating zone:', zoneData)
+      
+      const response = await axios.post(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
+        zoneData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'accept': 'application/json'
+          }
+        }
+      )
+      
+      console.log('Zone created:', response.data)
+      setSuccessMessage(`Zone "${newZoneName}" created successfully!`)
+      setTimeout(() => setSuccessMessage(null), 3000)
+      
+      // Limpar estado
+      setShowZoneModal(false)
+      setNewZoneName('')
+      setNewZoneNote('')
+      setDrawnZoneCoords([])
+      setIsDrawingZone(false)
+      
+      // Recarregar zonas
+      await loadFieldZones(selectedField.id)
+      
+    } catch (err) {
+      console.error('Error creating zone:', err)
+      setError(err.response?.data?.message || err.message || 'Error creating zone')
+    } finally {
+      setCreatingZone(false)
+    }
+  }
+
+  // Deletar zona
+  const handleDeleteZone = async (zoneId) => {
+    if (!token || !selectedLeafUserId || !zoneId) return
+    
+    if (!confirm('Are you sure you want to delete this zone?')) return
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      await axios.delete(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones/${zoneId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          }
+        }
+      )
+      
+      setSuccessMessage('Zone deleted successfully!')
+      setTimeout(() => setSuccessMessage(null), 3000)
+      
+      // Recarregar zonas
+      if (selectedField?.id) {
+        await loadFieldZones(selectedField.id)
+      }
+    } catch (err) {
+      console.error('Error deleting zone:', err)
+      setError(err.response?.data?.message || 'Error deleting zone')
+    }
+  }
+
   // Rodar análise para uma season específica
   const handleRunSeasonAnalysis = async (season) => {
     if (!token || !selectedLeafUserId || !season) return
@@ -1030,8 +1190,11 @@ function FieldPerformanceAnalytics() {
     setAnalysisData(null)
     setShowAnalysisResults(false)
     setSelectedSeason(null)
+    setIsDrawingZone(false)
+    setDrawnZoneCoords([])
     loadFieldBoundary(field)
     loadFieldSeasons(field.id)
+    loadFieldZones(field.id)
   }
 
   // Fixar field como projeto da sessão
@@ -1478,7 +1641,13 @@ function FieldPerformanceAnalytics() {
           <div className="flex-1 flex">
             {/* Mapa */}
             <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all`}>
-              <MapComponent data={mapData} mapRef={mapRef} />
+              <MapComponent 
+                data={mapData} 
+                mapRef={mapRef}
+                isDrawingMode={isDrawingZone}
+                drawnCoords={drawnZoneCoords}
+                onCoordsChange={setDrawnZoneCoords}
+              />
               
               {/* Painel de Controle de Layers */}
               {(boundaryData || analysisPoints.length > 0) && (
@@ -1546,6 +1715,80 @@ function FieldPerformanceAnalytics() {
                               </label>
                             )
                           })}
+                        </>
+                      )}
+                      
+                      {/* Zones Section */}
+                      {selectedField && (
+                        <>
+                          <div className="border-t border-zinc-700 my-1"></div>
+                          <div className="px-2 py-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-zinc-400">Zones</span>
+                              <button
+                                onClick={() => {
+                                  if (isDrawingZone) {
+                                    setIsDrawingZone(false)
+                                    setDrawnZoneCoords([])
+                                  } else {
+                                    setIsDrawingZone(true)
+                                  }
+                                }}
+                                className={`px-2 py-0.5 text-xs rounded transition ${
+                                  isDrawingZone 
+                                    ? 'bg-red-600 text-white hover:bg-red-500' 
+                                    : 'bg-emerald-700 text-white hover:bg-emerald-600'
+                                }`}
+                              >
+                                {isDrawingZone ? 'Cancel' : '+ Draw'}
+                              </button>
+                            </div>
+                            
+                            {/* Drawing Mode Info */}
+                            {isDrawingZone && (
+                              <div className="bg-emerald-950 border border-emerald-700 rounded p-2 mb-2">
+                                <div className="text-xs text-emerald-300 mb-1">
+                                  Click on map to add points ({drawnZoneCoords.length} points)
+                                </div>
+                                {drawnZoneCoords.length >= 3 && (
+                                  <button
+                                    onClick={() => setShowZoneModal(true)}
+                                    className="w-full px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-500"
+                                  >
+                                    Save Zone
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Zones List */}
+                            {loadingZones ? (
+                              <div className="flex items-center justify-center py-2">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                              </div>
+                            ) : fieldZones.length > 0 ? (
+                              <div className="space-y-1 max-h-32 overflow-auto">
+                                {fieldZones.map(zone => (
+                                  <div 
+                                    key={zone.id} 
+                                    className="flex items-center justify-between px-2 py-1 bg-zinc-800 rounded text-xs"
+                                  >
+                                    <span className="text-zinc-300 truncate">{zone.name}</span>
+                                    <button
+                                      onClick={() => handleDeleteZone(zone.id)}
+                                      className="text-red-400 hover:text-red-300 ml-1"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-zinc-500 text-center py-1">No zones</div>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
@@ -2140,6 +2383,83 @@ function FieldPerformanceAnalytics() {
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
                 Run Analysis
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Create Zone */}
+      {showZoneModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-lg border border-zinc-800 w-full max-w-md mx-4">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-100">Create Zone</h3>
+              <button
+                onClick={() => setShowZoneModal(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Zone Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newZoneName}
+                  onChange={(e) => setNewZoneName(e.target.value)}
+                  placeholder="e.g., Treatment Area A"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Note <span className="text-zinc-500">(optional)</span>
+                </label>
+                <textarea
+                  value={newZoneNote}
+                  onChange={(e) => setNewZoneNote(e.target.value)}
+                  placeholder="Additional information about this zone..."
+                  rows={3}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div className="bg-zinc-800 rounded p-3">
+                <div className="text-xs text-zinc-400 mb-1">Zone Polygon</div>
+                <div className="text-sm text-zinc-300">
+                  {drawnZoneCoords.length} points drawn
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowZoneModal(false)
+                  setNewZoneName('')
+                  setNewZoneNote('')
+                }}
+                className="px-4 py-2 text-sm text-zinc-300 hover:text-zinc-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateZone}
+                disabled={creatingZone || !newZoneName.trim() || drawnZoneCoords.length < 3}
+                className="px-4 py-2 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {creatingZone && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                )}
+                Create Zone
               </button>
             </div>
           </div>

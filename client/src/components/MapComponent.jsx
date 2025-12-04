@@ -286,7 +286,7 @@ const decodeBinaryGeometry = (binaryString) => {
   }
 }
 
-function MapComponent({ data, mapRef: externalMapRef }) {
+function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, drawnCoords = [], onCoordsChange }) {
   const internalMapRef = useRef(null)
   const mapRef = externalMapRef || internalMapRef
   const mapInstance = useRef(null)
@@ -384,6 +384,97 @@ function MapComponent({ data, mapRef: externalMapRef }) {
       }
     }
   }, [])
+
+  // Refs para desenho de zonas
+  const drawingLayerRef = useRef(null)
+  const drawingMarkersRef = useRef([])
+
+  // Lidar com modo de desenho
+  useEffect(() => {
+    if (!mapInstance.current) return
+    
+    // Limpar marcadores de desenho anteriores
+    drawingMarkersRef.current.forEach(marker => {
+      try {
+        mapInstance.current.removeLayer(marker)
+      } catch (e) {}
+    })
+    drawingMarkersRef.current = []
+    
+    if (drawingLayerRef.current) {
+      try {
+        mapInstance.current.removeLayer(drawingLayerRef.current)
+      } catch (e) {}
+      drawingLayerRef.current = null
+    }
+    
+    if (isDrawingMode) {
+      console.log('🎨 Drawing mode enabled')
+      
+      // Mudar cursor
+      mapInstance.current.getContainer().style.cursor = 'crosshair'
+      
+      // Desenhar pontos existentes
+      if (drawnCoords.length > 0) {
+        drawnCoords.forEach((coord, idx) => {
+          const marker = L.circleMarker([coord[0], coord[1]], {
+            radius: 6,
+            fillColor: '#10b981',
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          }).addTo(mapInstance.current)
+          marker.bindTooltip(`Point ${idx + 1}`, { permanent: false })
+          drawingMarkersRef.current.push(marker)
+        })
+        
+        // Desenhar linha conectando pontos
+        if (drawnCoords.length >= 2) {
+          const lineCoords = [...drawnCoords]
+          if (drawnCoords.length >= 3) {
+            lineCoords.push(drawnCoords[0]) // Fechar polígono
+          }
+          const polyline = L.polyline(lineCoords, {
+            color: '#10b981',
+            weight: 2,
+            opacity: 0.8,
+            dashArray: '5, 5'
+          }).addTo(mapInstance.current)
+          drawingLayerRef.current = polyline
+        }
+        
+        // Se tiver 3+ pontos, mostrar preenchimento
+        if (drawnCoords.length >= 3) {
+          const polygon = L.polygon(drawnCoords, {
+            color: '#10b981',
+            fillColor: '#10b981',
+            fillOpacity: 0.2,
+            weight: 2
+          }).addTo(mapInstance.current)
+          drawingMarkersRef.current.push(polygon)
+        }
+      }
+      
+      // Handler de clique
+      const handleMapClick = (e) => {
+        const { lat, lng } = e.latlng
+        console.log('🎯 Map clicked:', lat, lng)
+        if (onCoordsChange) {
+          onCoordsChange([...drawnCoords, [lat, lng]])
+        }
+      }
+      
+      mapInstance.current.on('click', handleMapClick)
+      
+      return () => {
+        mapInstance.current.off('click', handleMapClick)
+        mapInstance.current.getContainer().style.cursor = ''
+      }
+    } else {
+      mapInstance.current.getContainer().style.cursor = ''
+    }
+  }, [isDrawingMode, drawnCoords, onCoordsChange])
 
   // Atualizar marcadores quando os dados mudarem
   useEffect(() => {

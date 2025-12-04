@@ -118,40 +118,55 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     return null
   }
   
-  // Segundo passo: calcular percentis para normalização robusta (evita outliers)
+  // Segundo passo: calcular média e desvio padrão para remover outliers
   const values = rawPoints.map(p => p.rawValue)
-  const sortedValues = [...values].sort((a, b) => a - b)
+  const n = values.length
   
-  // Usar percentis 2% e 98% para ignorar outliers extremos
-  const p2Index = Math.floor(sortedValues.length * 0.02)
-  const p98Index = Math.min(Math.floor(sortedValues.length * 0.98), sortedValues.length - 1)
-  const minValue = sortedValues[p2Index]
-  const maxValue = sortedValues[p98Index]
+  // Calcular média
+  const mean = values.reduce((sum, v) => sum + v, 0) / n
+  
+  // Calcular desvio padrão
+  const squaredDiffs = values.map(v => Math.pow(v - mean, 2))
+  const variance = squaredDiffs.reduce((sum, v) => sum + v, 0) / n
+  const stdDev = Math.sqrt(variance)
+  
+  // Definir limites: mean ± 1 desvio padrão
+  const lowerBound = mean - stdDev
+  const upperBound = mean + stdDev
+  
+  // Filtrar valores dentro do range (remover outliers)
+  const filteredValues = values.filter(v => v >= lowerBound && v <= upperBound)
+  
+  // Usar min/max dos valores filtrados para a rampa
+  const minValue = filteredValues.length > 0 ? Math.min(...filteredValues) : mean - stdDev
+  const maxValue = filteredValues.length > 0 ? Math.max(...filteredValues) : mean + stdDev
   const range = maxValue - minValue
   
   // Stats completos para debug
-  const absMin = sortedValues[0]
-  const absMax = sortedValues[sortedValues.length - 1]
-  const median = sortedValues[Math.floor(sortedValues.length / 2)]
+  const absMin = Math.min(...values)
+  const absMax = Math.max(...values)
+  const outlierCount = n - filteredValues.length
+  const outlierPct = ((outlierCount / n) * 100).toFixed(1)
   
   console.log(`📊 Raw data stats for "${heatmapField}":`)
   console.log(`   Absolute: min=${absMin?.toFixed(4)}, max=${absMax?.toFixed(4)}`)
-  console.log(`   Percentile (p2-p98): min=${minValue?.toFixed(4)}, max=${maxValue?.toFixed(4)}, range=${range?.toFixed(4)}`)
-  console.log(`   Median: ${median?.toFixed(4)}`)
+  console.log(`   Mean: ${mean?.toFixed(4)}, StdDev: ${stdDev?.toFixed(4)}`)
+  console.log(`   Bounds (±1σ): [${lowerBound?.toFixed(4)}, ${upperBound?.toFixed(4)}]`)
+  console.log(`   After outlier removal: min=${minValue?.toFixed(4)}, max=${maxValue?.toFixed(4)}, range=${range?.toFixed(4)}`)
+  console.log(`   Outliers removed: ${outlierCount} (${outlierPct}%)`)
   
-  // Terceiro passo: normalizar valores para 0.0-1.0 range usando percentis
+  // Terceiro passo: normalizar valores para 0.0-1.0 range usando mean ± 1σ
   const heatmapData = rawPoints.map(point => {
     let normalizedIntensity
     if (range > 0.0001) { // Precisa ter alguma variação significativa
-      // Normalizar usando percentis - valores fora do range são clampados
+      // Normalizar usando os bounds - valores fora são clampados para 0 ou 1
       normalizedIntensity = (point.rawValue - minValue) / range
     } else {
       // Sem variação significativa - usar índice baseado na posição
-      // Isso cria um gradiente artificial baseado na ordem dos pontos
       const idx = rawPoints.indexOf(point)
       normalizedIntensity = idx / rawPoints.length
     }
-    // Clampar para [0, 1]
+    // Clampar para [0, 1] - outliers ficam nas extremidades
     normalizedIntensity = Math.max(0, Math.min(1, normalizedIntensity))
     return [point.coords[0], point.coords[1], normalizedIntensity]
   })
@@ -162,7 +177,10 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   const ip10 = sortedIntensities[Math.floor(sortedIntensities.length * 0.1)]
   const ip50 = sortedIntensities[Math.floor(sortedIntensities.length * 0.5)]
   const ip90 = sortedIntensities[Math.floor(sortedIntensities.length * 0.9)]
+  const atMin = intensities.filter(i => i === 0).length
+  const atMax = intensities.filter(i => i === 1).length
   console.log(`🎨 Final intensity distribution: p10=${ip10?.toFixed(3)}, p50=${ip50?.toFixed(3)}, p90=${ip90?.toFixed(3)}`)
+  console.log(`🎨 Clamped to extremes: ${atMin} at 0 (${((atMin/n)*100).toFixed(1)}%), ${atMax} at 1 (${((atMax/n)*100).toFixed(1)}%)`)
   
   if (heatmapData.length === 0) {
     console.log('❌ No valid heatmap data - returning null')

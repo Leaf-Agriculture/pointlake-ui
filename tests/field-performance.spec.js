@@ -194,56 +194,64 @@ test.describe('Field Performance Analytics', () => {
     });
     
     console.log('Leaf User ID:', leafUserId);
-    
+
     if (!token || !leafUserId) {
       console.log('❌ Missing token or leaf user ID');
       return;
     }
     
-    // Testar a API diretamente
-    const apiUrl = `https://api-dev.withleaf.team/services/fields/api/users/${leafUserId}/fields`;
+    // Testar a API de Analytics usando o leafUserId logado
+    // O usuário precisa ter acesso aos dados do leafUser
+    const analyticsUrl = `https://api-dev.withleaf.team/services/pointlake/api/v2/beta/analytics/user/${leafUserId}/points?samplerate=100&startDate=2019-01-01T00:00:00.000Z&endDate=2025-12-31T00:00:00.000Z`;
     
-    // NOTA: A API Leaf Fields requer MultiPolygon, não Polygon!
-    // MultiPolygon format: [ [ [ring_coords] ] ] where ring_coords is [[lng,lat], ...]
-    const fieldData = {
-      name: 'API Test Field ' + Date.now(),
-      geometry: {
-        type: 'MultiPolygon',
-        coordinates: [[
-          [
-            [-93.48, 41.77],
-            [-93.48, 41.76],
-            [-93.47, 41.76],
-            [-93.47, 41.77],
-            [-93.48, 41.77]
-          ]
-        ]]
-      }
-    };
-    
-    console.log('\n📤 Testing API directly:');
-    console.log('URL:', apiUrl);
-    console.log('Body:', JSON.stringify(fieldData, null, 2));
+    console.log('\n📊 Testing Analytics API:');
+    console.log('URL:', analyticsUrl);
     
     try {
-      const response = await request.post(apiUrl, {
+      const response = await request.get(analyticsUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
           'Accept': 'application/json'
-        },
-        data: fieldData
+        }
       });
       
       console.log('📥 Response Status:', response.status());
       const body = await response.json().catch(() => response.text());
-      console.log('📥 Response Body:', JSON.stringify(body, null, 2));
       
-      if (response.status() === 201 || response.status() === 200) {
-        console.log('✅ Field created successfully via API!');
-      } else {
-        console.log('❌ Field creation failed');
+      console.log('📥 Response type:', typeof body);
+      console.log('📥 Is array:', Array.isArray(body));
+      
+      if (body.data) {
+        console.log('📥 Has data field:', Array.isArray(body.data), 'length:', body.data?.length);
       }
+      if (body.points) {
+        console.log('📥 Has points field:', Array.isArray(body.points), 'length:', body.points?.length);
+      }
+      
+      let points = [];
+      if (Array.isArray(body)) {
+        points = body;
+      } else if (body.data && Array.isArray(body.data)) {
+        points = body.data;
+      } else if (body.points && Array.isArray(body.points)) {
+        points = body.points;
+      }
+      
+      console.log('📥 Points count:', points.length);
+      
+      if (points.length > 0) {
+        console.log('📥 First point keys:', Object.keys(points[0]));
+        console.log('📥 First point geometry:', points[0].geometry?.substring(0, 60));
+        console.log('📥 First point sample:', JSON.stringify(points[0]).substring(0, 300));
+        
+        // Testar decodificação WKB
+        if (points[0].geometry) {
+          const geometry = points[0].geometry;
+          console.log('\n🔍 Testing WKB decode for first point:');
+          console.log('Geometry base64:', geometry.substring(0, 60) + '...');
+        }
+      }
+      
     } catch (error) {
       console.log('❌ API Error:', error.message);
     }

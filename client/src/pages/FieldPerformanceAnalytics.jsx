@@ -35,7 +35,7 @@ function FieldPerformanceAnalytics() {
   const [showAnalysisModal, setShowAnalysisModal] = useState(false)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [analysisData, setAnalysisData] = useState(null)
-  const [analysisSampleRate, setAnalysisSampleRate] = useState(21)
+  const [analysisSampleRate, setAnalysisSampleRate] = useState(100)
   const [analysisStartDate, setAnalysisStartDate] = useState('2020-01-01')
   const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)

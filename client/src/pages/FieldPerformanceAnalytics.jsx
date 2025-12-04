@@ -40,6 +40,35 @@ function FieldPerformanceAnalytics() {
   const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
   
+  // Estados para filtros de pontos
+  const [analysisPoints, setAnalysisPoints] = useState([]) // Pontos originais
+  const [filteredPoints, setFilteredPoints] = useState([]) // Pontos filtrados
+  const [showFilters, setShowFilters] = useState(false)
+  const [availableFilters, setAvailableFilters] = useState({
+    operationType: [],
+    crop: [],
+    variety: [],
+    recordingStatus: []
+  })
+  const [selectedFilters, setSelectedFilters] = useState({
+    operationType: [],
+    crop: [],
+    variety: [],
+    recordingStatus: []
+  })
+  const [numericFilters, setNumericFilters] = useState({
+    speed: { min: null, max: null, enabled: false },
+    elevation: { min: null, max: null, enabled: false },
+    appliedRate: { min: null, max: null, enabled: false },
+    area: { min: null, max: null, enabled: false }
+  })
+  const [numericRanges, setNumericRanges] = useState({
+    speed: { min: 0, max: 100 },
+    elevation: { min: 0, max: 10000 },
+    appliedRate: { min: 0, max: 1000 },
+    area: { min: 0, max: 1 }
+  })
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -66,6 +95,133 @@ function FieldPerformanceAnalytics() {
       }
     }
   }, [])
+
+  // Aplicar filtros quando mudarem
+  useEffect(() => {
+    if (analysisPoints.length === 0) {
+      setFilteredPoints([])
+      return
+    }
+
+    let filtered = [...analysisPoints]
+
+    // Filtros categóricos
+    if (selectedFilters.operationType.length > 0) {
+      filtered = filtered.filter(p => selectedFilters.operationType.includes(p.operationType))
+    }
+    if (selectedFilters.crop.length > 0) {
+      filtered = filtered.filter(p => selectedFilters.crop.includes(p.crop))
+    }
+    if (selectedFilters.variety.length > 0) {
+      filtered = filtered.filter(p => selectedFilters.variety.includes(p.variety))
+    }
+    if (selectedFilters.recordingStatus.length > 0) {
+      filtered = filtered.filter(p => selectedFilters.recordingStatus.includes(p.recordingStatus))
+    }
+
+    // Filtros numéricos
+    if (numericFilters.speed.enabled) {
+      filtered = filtered.filter(p => {
+        if (p.speed == null) return false
+        return p.speed >= (numericFilters.speed.min || 0) && 
+               p.speed <= (numericFilters.speed.max || Infinity)
+      })
+    }
+    if (numericFilters.elevation.enabled) {
+      filtered = filtered.filter(p => {
+        if (p.elevation == null) return false
+        return p.elevation >= (numericFilters.elevation.min || 0) && 
+               p.elevation <= (numericFilters.elevation.max || Infinity)
+      })
+    }
+    if (numericFilters.appliedRate.enabled) {
+      filtered = filtered.filter(p => {
+        if (p.appliedRate == null) return false
+        return p.appliedRate >= (numericFilters.appliedRate.min || 0) && 
+               p.appliedRate <= (numericFilters.appliedRate.max || Infinity)
+      })
+    }
+    if (numericFilters.area.enabled) {
+      filtered = filtered.filter(p => {
+        if (p.area == null) return false
+        return p.area >= (numericFilters.area.min || 0) && 
+               p.area <= (numericFilters.area.max || Infinity)
+      })
+    }
+
+    console.log(`🔍 Filtered ${analysisPoints.length} -> ${filtered.length} points`)
+    setFilteredPoints(filtered)
+    
+    // Atualizar mapa com pontos filtrados
+    if (filtered.length > 0) {
+      setMapData(filtered)
+    }
+  }, [analysisPoints, selectedFilters, numericFilters])
+
+  // Extrair filtros disponíveis dos pontos
+  const extractAvailableFilters = (points) => {
+    const filters = {
+      operationType: [...new Set(points.map(p => p.operationType).filter(Boolean))],
+      crop: [...new Set(points.map(p => p.crop).filter(Boolean))],
+      variety: [...new Set(points.map(p => p.variety).filter(Boolean))],
+      recordingStatus: [...new Set(points.map(p => p.recordingStatus).filter(Boolean))]
+    }
+
+    // Calcular ranges numéricos
+    const speeds = points.map(p => p.speed).filter(v => v != null)
+    const elevations = points.map(p => p.elevation).filter(v => v != null)
+    const appliedRates = points.map(p => p.appliedRate).filter(v => v != null)
+    const areas = points.map(p => p.area).filter(v => v != null)
+
+    const ranges = {
+      speed: speeds.length > 0 ? { min: Math.min(...speeds), max: Math.max(...speeds) } : { min: 0, max: 100 },
+      elevation: elevations.length > 0 ? { min: Math.min(...elevations), max: Math.max(...elevations) } : { min: 0, max: 10000 },
+      appliedRate: appliedRates.length > 0 ? { min: Math.min(...appliedRates), max: Math.max(...appliedRates) } : { min: 0, max: 1000 },
+      area: areas.length > 0 ? { min: Math.min(...areas), max: Math.max(...areas) } : { min: 0, max: 1 }
+    }
+
+    console.log('📊 Available filters:', filters)
+    console.log('📊 Numeric ranges:', ranges)
+
+    setAvailableFilters(filters)
+    setNumericRanges(ranges)
+    
+    // Inicializar filtros numéricos com os ranges
+    setNumericFilters({
+      speed: { min: ranges.speed.min, max: ranges.speed.max, enabled: false },
+      elevation: { min: ranges.elevation.min, max: ranges.elevation.max, enabled: false },
+      appliedRate: { min: ranges.appliedRate.min, max: ranges.appliedRate.max, enabled: false },
+      area: { min: ranges.area.min, max: ranges.area.max, enabled: false }
+    })
+  }
+
+  // Resetar filtros
+  const resetFilters = () => {
+    setSelectedFilters({
+      operationType: [],
+      crop: [],
+      variety: [],
+      recordingStatus: []
+    })
+    setNumericFilters({
+      speed: { min: numericRanges.speed.min, max: numericRanges.speed.max, enabled: false },
+      elevation: { min: numericRanges.elevation.min, max: numericRanges.elevation.max, enabled: false },
+      appliedRate: { min: numericRanges.appliedRate.min, max: numericRanges.appliedRate.max, enabled: false },
+      area: { min: numericRanges.area.min, max: numericRanges.area.max, enabled: false }
+    })
+  }
+
+  // Toggle filtro categórico
+  const toggleCategoryFilter = (category, value) => {
+    setSelectedFilters(prev => {
+      const current = prev[category] || []
+      if (current.includes(value)) {
+        return { ...prev, [category]: current.filter(v => v !== value) }
+      } else {
+        return { ...prev, [category]: [...current, value] }
+      }
+    })
+  }
 
   // Função para converter GeoJSON para WKT POLYGON
   const geoJsonToWkt = (geometry) => {
@@ -301,12 +457,21 @@ function FieldPerformanceAnalytics() {
         console.log(`📊 ${transformedPoints.length} valid points transformed for map`)
         
         if (transformedPoints.length > 0) {
+          // Salvar pontos e extrair filtros disponíveis
+          setAnalysisPoints(transformedPoints)
+          setFilteredPoints(transformedPoints)
+          extractAvailableFilters(transformedPoints)
           setMapData(transformedPoints)
-          setSuccessMessage(`Analysis completed! ${transformedPoints.length} points loaded on map.`)
+          setShowFilters(true)
+          setSuccessMessage(`Analysis completed! ${transformedPoints.length} points loaded. Use filters to refine.`)
         } else {
+          setAnalysisPoints([])
+          setFilteredPoints([])
           setSuccessMessage(`Analysis completed! ${pointsData.length} points found but no valid coordinates.`)
         }
       } else {
+        setAnalysisPoints([])
+        setFilteredPoints([])
         setSuccessMessage('Analysis completed! No points found for this period.')
       }
       
@@ -906,18 +1071,39 @@ function FieldPerformanceAnalytics() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                     Analysis Results
+                    {filteredPoints.length !== analysisPoints.length && (
+                      <span className="text-xs bg-blue-600 px-2 py-0.5 rounded">
+                        {filteredPoints.length} / {analysisPoints.length}
+                      </span>
+                    )}
                   </h3>
-                  <button
-                    onClick={() => {
-                      setShowAnalysisResults(false)
-                      setAnalysisData(null)
-                    }}
-                    className="text-zinc-400 hover:text-zinc-200"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowFilters(!showFilters)}
+                      className={`px-2 py-1 text-xs rounded flex items-center gap-1 transition ${
+                        showFilters ? 'bg-blue-600 text-white' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                      }`}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                      Filters
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAnalysisResults(false)
+                        setAnalysisData(null)
+                        setAnalysisPoints([])
+                        setFilteredPoints([])
+                        setShowFilters(false)
+                      }}
+                      className="text-zinc-400 hover:text-zinc-200"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="flex-1 overflow-auto p-3">
@@ -927,29 +1113,245 @@ function FieldPerformanceAnalytics() {
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-zinc-500">Total Points:</span>
-                        <span className="text-zinc-100 ml-2">
-                          {Array.isArray(analysisData) ? analysisData.length : (analysisData?.points?.length || 0)}
-                        </span>
+                        <span className="text-zinc-100 ml-2">{analysisPoints.length}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Filtered:</span>
+                        <span className="text-zinc-100 ml-2">{filteredPoints.length}</span>
                       </div>
                       <div>
                         <span className="text-zinc-500">Sample Rate:</span>
                         <span className="text-zinc-100 ml-2">{analysisSampleRate}%</span>
                       </div>
                       <div>
-                        <span className="text-zinc-500">Start Date:</span>
-                        <span className="text-zinc-100 ml-2">{analysisStartDate}</span>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500">End Date:</span>
-                        <span className="text-zinc-100 ml-2">{analysisEndDate}</span>
+                        <span className="text-zinc-500">Period:</span>
+                        <span className="text-zinc-100 ml-2">{analysisStartDate} - {analysisEndDate}</span>
                       </div>
                     </div>
                   </div>
 
+                  {/* Filters Panel */}
+                  {showFilters && (
+                    <div className="bg-zinc-800 rounded-lg p-3 mb-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-semibold text-zinc-400 uppercase">Filters</h4>
+                        <button
+                          onClick={resetFilters}
+                          className="text-xs text-blue-400 hover:text-blue-300"
+                        >
+                          Reset All
+                        </button>
+                      </div>
+
+                      {/* Categorical Filters */}
+                      <div className="space-y-3">
+                        {/* Operation Type */}
+                        {availableFilters.operationType.length > 0 && (
+                          <div>
+                            <label className="text-xs text-zinc-400 block mb-1">Operation Type</label>
+                            <div className="flex flex-wrap gap-1">
+                              {availableFilters.operationType.map(type => (
+                                <button
+                                  key={type}
+                                  onClick={() => toggleCategoryFilter('operationType', type)}
+                                  className={`px-2 py-1 text-xs rounded transition ${
+                                    selectedFilters.operationType.includes(type)
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                                  }`}
+                                >
+                                  {type}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Crop */}
+                        {availableFilters.crop.length > 0 && (
+                          <div>
+                            <label className="text-xs text-zinc-400 block mb-1">Crop</label>
+                            <div className="flex flex-wrap gap-1">
+                              {availableFilters.crop.map(crop => (
+                                <button
+                                  key={crop}
+                                  onClick={() => toggleCategoryFilter('crop', crop)}
+                                  className={`px-2 py-1 text-xs rounded transition ${
+                                    selectedFilters.crop.includes(crop)
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                                  }`}
+                                >
+                                  {crop}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Recording Status */}
+                        {availableFilters.recordingStatus.length > 0 && (
+                          <div>
+                            <label className="text-xs text-zinc-400 block mb-1">Recording Status</label>
+                            <div className="flex flex-wrap gap-1">
+                              {availableFilters.recordingStatus.map(status => (
+                                <button
+                                  key={status}
+                                  onClick={() => toggleCategoryFilter('recordingStatus', status)}
+                                  className={`px-2 py-1 text-xs rounded transition ${
+                                    selectedFilters.recordingStatus.includes(status)
+                                      ? 'bg-amber-600 text-white'
+                                      : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                                  }`}
+                                >
+                                  {status.replace('dtiRecordingStatus', '')}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Numeric Filters */}
+                        <div className="pt-2 border-t border-zinc-700">
+                          <label className="text-xs text-zinc-400 block mb-2">Numeric Filters</label>
+                          
+                          {/* Speed */}
+                          <div className="mb-2">
+                            <div className="flex items-center gap-2 mb-1">
+                              <input
+                                type="checkbox"
+                                checked={numericFilters.speed.enabled}
+                                onChange={(e) => setNumericFilters(prev => ({
+                                  ...prev,
+                                  speed: { ...prev.speed, enabled: e.target.checked }
+                                }))}
+                                className="rounded bg-zinc-700 border-zinc-600"
+                              />
+                              <span className="text-xs text-zinc-300">Speed</span>
+                              <span className="text-xs text-zinc-500">
+                                ({numericRanges.speed.min?.toFixed(1)} - {numericRanges.speed.max?.toFixed(1)})
+                              </span>
+                            </div>
+                            {numericFilters.speed.enabled && (
+                              <div className="flex gap-2 ml-5">
+                                <input
+                                  type="number"
+                                  value={numericFilters.speed.min || ''}
+                                  onChange={(e) => setNumericFilters(prev => ({
+                                    ...prev,
+                                    speed: { ...prev.speed, min: parseFloat(e.target.value) || 0 }
+                                  }))}
+                                  placeholder="Min"
+                                  className="w-20 px-2 py-1 text-xs bg-zinc-700 border border-zinc-600 rounded text-zinc-200"
+                                />
+                                <input
+                                  type="number"
+                                  value={numericFilters.speed.max || ''}
+                                  onChange={(e) => setNumericFilters(prev => ({
+                                    ...prev,
+                                    speed: { ...prev.speed, max: parseFloat(e.target.value) || Infinity }
+                                  }))}
+                                  placeholder="Max"
+                                  className="w-20 px-2 py-1 text-xs bg-zinc-700 border border-zinc-600 rounded text-zinc-200"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Elevation */}
+                          <div className="mb-2">
+                            <div className="flex items-center gap-2 mb-1">
+                              <input
+                                type="checkbox"
+                                checked={numericFilters.elevation.enabled}
+                                onChange={(e) => setNumericFilters(prev => ({
+                                  ...prev,
+                                  elevation: { ...prev.elevation, enabled: e.target.checked }
+                                }))}
+                                className="rounded bg-zinc-700 border-zinc-600"
+                              />
+                              <span className="text-xs text-zinc-300">Elevation</span>
+                              <span className="text-xs text-zinc-500">
+                                ({numericRanges.elevation.min?.toFixed(0)} - {numericRanges.elevation.max?.toFixed(0)})
+                              </span>
+                            </div>
+                            {numericFilters.elevation.enabled && (
+                              <div className="flex gap-2 ml-5">
+                                <input
+                                  type="number"
+                                  value={numericFilters.elevation.min || ''}
+                                  onChange={(e) => setNumericFilters(prev => ({
+                                    ...prev,
+                                    elevation: { ...prev.elevation, min: parseFloat(e.target.value) || 0 }
+                                  }))}
+                                  placeholder="Min"
+                                  className="w-20 px-2 py-1 text-xs bg-zinc-700 border border-zinc-600 rounded text-zinc-200"
+                                />
+                                <input
+                                  type="number"
+                                  value={numericFilters.elevation.max || ''}
+                                  onChange={(e) => setNumericFilters(prev => ({
+                                    ...prev,
+                                    elevation: { ...prev.elevation, max: parseFloat(e.target.value) || Infinity }
+                                  }))}
+                                  placeholder="Max"
+                                  className="w-20 px-2 py-1 text-xs bg-zinc-700 border border-zinc-600 rounded text-zinc-200"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Applied Rate */}
+                          <div className="mb-2">
+                            <div className="flex items-center gap-2 mb-1">
+                              <input
+                                type="checkbox"
+                                checked={numericFilters.appliedRate.enabled}
+                                onChange={(e) => setNumericFilters(prev => ({
+                                  ...prev,
+                                  appliedRate: { ...prev.appliedRate, enabled: e.target.checked }
+                                }))}
+                                className="rounded bg-zinc-700 border-zinc-600"
+                              />
+                              <span className="text-xs text-zinc-300">Applied Rate</span>
+                              <span className="text-xs text-zinc-500">
+                                ({numericRanges.appliedRate.min?.toFixed(1)} - {numericRanges.appliedRate.max?.toFixed(1)})
+                              </span>
+                            </div>
+                            {numericFilters.appliedRate.enabled && (
+                              <div className="flex gap-2 ml-5">
+                                <input
+                                  type="number"
+                                  value={numericFilters.appliedRate.min || ''}
+                                  onChange={(e) => setNumericFilters(prev => ({
+                                    ...prev,
+                                    appliedRate: { ...prev.appliedRate, min: parseFloat(e.target.value) || 0 }
+                                  }))}
+                                  placeholder="Min"
+                                  className="w-20 px-2 py-1 text-xs bg-zinc-700 border border-zinc-600 rounded text-zinc-200"
+                                />
+                                <input
+                                  type="number"
+                                  value={numericFilters.appliedRate.max || ''}
+                                  onChange={(e) => setNumericFilters(prev => ({
+                                    ...prev,
+                                    appliedRate: { ...prev.appliedRate, max: parseFloat(e.target.value) || Infinity }
+                                  }))}
+                                  placeholder="Max"
+                                  className="w-20 px-2 py-1 text-xs bg-zinc-700 border border-zinc-600 rounded text-zinc-200"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Data Table */}
                   <div className="bg-zinc-800 rounded-lg overflow-hidden">
                     <h4 className="text-xs font-semibold text-zinc-400 uppercase p-3 border-b border-zinc-700">
-                      Data Points
+                      Data Points ({filteredPoints.length})
                     </h4>
                     <div className="max-h-96 overflow-auto">
                       <table className="w-full text-xs">
@@ -959,11 +1361,12 @@ function FieldPerformanceAnalytics() {
                             <th className="text-left p-2 text-zinc-400">Timestamp</th>
                             <th className="text-left p-2 text-zinc-400">Operation</th>
                             <th className="text-left p-2 text-zinc-400">Crop</th>
-                            <th className="text-right p-2 text-zinc-400">Area</th>
+                            <th className="text-right p-2 text-zinc-400">Speed</th>
+                            <th className="text-right p-2 text-zinc-400">Rate</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {(Array.isArray(analysisData) ? analysisData : analysisData?.points || []).slice(0, 100).map((point, idx) => (
+                          {filteredPoints.slice(0, 100).map((point, idx) => (
                             <tr key={idx} className="border-t border-zinc-700 hover:bg-zinc-700/50">
                               <td className="p-2 text-zinc-500">{idx + 1}</td>
                               <td className="p-2 text-zinc-300">
@@ -972,15 +1375,18 @@ function FieldPerformanceAnalytics() {
                               <td className="p-2 text-zinc-300">{point.operationType || '-'}</td>
                               <td className="p-2 text-zinc-300">{point.crop || '-'}</td>
                               <td className="p-2 text-zinc-300 text-right">
-                                {point.area ? parseFloat(point.area).toFixed(4) : '-'}
+                                {point.speed ? point.speed.toFixed(1) : '-'}
+                              </td>
+                              <td className="p-2 text-zinc-300 text-right">
+                                {point.appliedRate ? point.appliedRate.toFixed(1) : '-'}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      {(Array.isArray(analysisData) ? analysisData.length : analysisData?.points?.length || 0) > 100 && (
+                      {filteredPoints.length > 100 && (
                         <div className="p-2 text-center text-zinc-500 text-xs border-t border-zinc-700">
-                          Showing first 100 of {Array.isArray(analysisData) ? analysisData.length : analysisData?.points?.length} points
+                          Showing first 100 of {filteredPoints.length} filtered points
                         </div>
                       )}
                     </div>

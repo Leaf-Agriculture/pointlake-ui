@@ -305,16 +305,26 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
-      // Criar field
+      // Criar field com geometry incluído
       const fieldData = {
-        name: newFieldName.trim()
+        name: newFieldName.trim(),
+        geometry: parsedGeometry || {
+          type: 'Polygon',
+          coordinates: [[
+            [-93.48, 41.77],
+            [-93.48, 41.76],
+            [-93.47, 41.76],
+            [-93.47, 41.77],
+            [-93.48, 41.77]
+          ]]
+        }
       }
       
       if (newFarmId.trim()) {
         fieldData.farmId = newFarmId.trim()
       }
 
-      console.log('Creating field:', fieldData)
+      console.log('Creating field with geometry:', fieldData)
 
       const createResponse = await axios.post(
         `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields`,
@@ -329,38 +339,6 @@ function FieldPerformanceAnalytics() {
       )
 
       console.log('✅ Field created:', createResponse.data)
-      const newFieldId = createResponse.data.id
-
-      // Se tiver boundary, criar também
-      if (parsedGeometry && newFieldId) {
-        try {
-          console.log('Creating boundary for field:', newFieldId)
-          console.log('Boundary geometry:', JSON.stringify(parsedGeometry).substring(0, 200))
-          
-          await axios.put(
-            `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${newFieldId}/boundary`,
-            {
-              geometry: parsedGeometry
-            },
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'accept': 'application/json'
-              }
-            }
-          )
-          console.log('✅ Boundary created for field')
-        } catch (boundaryErr) {
-          console.error('Error creating boundary:', boundaryErr)
-          console.error('Response:', boundaryErr.response?.data)
-          setError('Field created but boundary failed: ' + (boundaryErr.response?.data?.message || boundaryErr.response?.data?.error || boundaryErr.message))
-          // Ainda recarregar a lista mesmo com erro no boundary
-          await loadFields()
-          setShowCreateModal(false)
-          return
-        }
-      }
 
       // Sucesso total
       setSuccessMessage('Field created successfully!')

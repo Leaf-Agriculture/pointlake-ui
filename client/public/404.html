@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Point Lake GIS Studio</title>
+  <script>
+    // Single Page App redirect for GitHub Pages
+    // This script takes the current URL and converts it to a proper hash-based URL
+    // that the SPA can handle, then redirects to index.html
+    const pathSegmentsToKeep = 1; // Keep /pointlake-ui/
+    const location = window.location;
+    const path = location.pathname
+      .split('/')
+      .slice(pathSegmentsToKeep + 1)
+      .join('/');
+    const search = location.search;
+    const hash = location.hash;
+    
+    // Redirect to the root with the path as a query parameter
+    const redirectUrl = location.origin + '/pointlake-ui/?p=/' + path + (search ? '&q=' + encodeURIComponent(search.slice(1)) : '') + hash;
+    location.replace(redirectUrl);
+  </script>
+</head>
+<body>
+  <noscript>
+    <meta http-equiv="refresh" content="0; url=/pointlake-ui/">
+  </noscript>
+  <p>Redirecting...</p>
+</body>
+</html>
+

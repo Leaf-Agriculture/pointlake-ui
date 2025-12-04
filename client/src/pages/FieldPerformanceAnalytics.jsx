@@ -960,32 +960,15 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
-      // Tentar endpoint por field primeiro
-      let response
-      try {
-        response = await axios.get(
-          `${baseUrl}/services/fields/api/fields/${fieldId}/zones`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'accept': 'application/json'
-            }
+      const response = await axios.get(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${fieldId}/zones`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
           }
-        )
-      } catch (e) {
-        // Fallback: tentar endpoint por user com fieldId como param
-        console.log('Trying fallback endpoint for zones...')
-        response = await axios.get(
-          `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'accept': 'application/json'
-            },
-            params: { fieldId }
-          }
-        )
-      }
+        }
+      )
       
       console.log('🗺️ Zones loaded:', response.data)
       setFieldZones(Array.isArray(response.data) ? response.data : [])
@@ -1048,39 +1031,17 @@ function FieldPerformanceAnalytics() {
       
       console.log('Creating zone:', zoneData)
       
-      // Tentar endpoint por field primeiro
-      let response
-      try {
-        response = await axios.post(
-          `${baseUrl}/services/fields/api/fields/${selectedField.id}/zones`,
-          zoneData,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-              'accept': 'application/json'
-            }
+      const response = await axios.post(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${selectedField.id}/zones`,
+        zoneData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'accept': 'application/json'
           }
-        )
-      } catch (e) {
-        if (e.response?.status === 404) {
-          // Fallback: tentar endpoint por user
-          console.log('Trying fallback endpoint for create zone...')
-          response = await axios.post(
-            `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
-            zoneData,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'accept': 'application/json'
-              }
-            }
-          )
-        } else {
-          throw e
         }
-      }
+      )
       
       console.log('Zone created:', response.data)
       setSuccessMessage(`Zone "${newZoneName}" created successfully!`)
@@ -1114,32 +1075,15 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
-      // Tentar endpoint por field primeiro, depois fallback
-      try {
-        await axios.delete(
-          `${baseUrl}/services/fields/api/zones/${zoneId}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'accept': 'application/json'
-            }
+      await axios.delete(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${selectedField.id}/zones/${zoneId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
           }
-        )
-      } catch (e) {
-        if (e.response?.status === 404) {
-          await axios.delete(
-            `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones/${zoneId}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'accept': 'application/json'
-              }
-            }
-          )
-        } else {
-          throw e
         }
-      }
+      )
       
       setSuccessMessage('Zone deleted successfully!')
       setTimeout(() => setSuccessMessage(null), 3000)

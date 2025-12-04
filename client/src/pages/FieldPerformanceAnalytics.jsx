@@ -816,6 +816,130 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Rodar análise para uma season específica
+  const handleRunSeasonAnalysis = async (season) => {
+    if (!token || !selectedLeafUserId || !season) return
+
+    // Selecionar a season
+    setSelectedSeason(season)
+    
+    // Extrair datas da season
+    const startDate = season.startDate?.split('T')[0] || '2020-01-01'
+    const endDate = season.endDate?.split('T')[0] || '2025-12-01'
+    
+    // Atualizar estados de data
+    setAnalysisStartDate(startDate)
+    setAnalysisEndDate(endDate)
+
+    setLoadingAnalysis(true)
+    setError(null)
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      // Formatar datas para ISO
+      const startDateISO = `${startDate}T00:00:00.000Z`
+      const endDateISO = `${endDate}T00:00:00.000Z`
+      
+      console.log('📊 Running season analysis:', {
+        seasonName: season.name,
+        userId: selectedLeafUserId,
+        sampleRate: analysisSampleRate,
+        startDate: startDateISO,
+        endDate: endDateISO
+      })
+
+      const response = await axios.get(
+        `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params: {
+            samplerate: analysisSampleRate,
+            startDate: startDateISO,
+            endDate: endDateISO
+          }
+        }
+      )
+
+      console.log('📊 Season analysis data received:', response.data)
+      setAnalysisData(response.data)
+      setShowAnalysisResults(true)
+      
+      // Extrair pontos da resposta
+      let pointsData = []
+      if (Array.isArray(response.data)) {
+        pointsData = response.data
+      } else if (response.data?.points && Array.isArray(response.data.points)) {
+        pointsData = response.data.points
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        pointsData = response.data.data
+      }
+      
+      console.log(`📊 Found ${pointsData.length} points for season "${season.name}"`)
+      
+      // Transformar pontos
+      if (pointsData.length > 0) {
+        const transformedPoints = pointsData.map((point, index) => {
+          let lat = point.latitude || point.lat
+          let lng = point.longitude || point.lng || point.lon
+          
+          if ((!lat || !lng) && point.geometry) {
+            return {
+              ...point,
+              geometry: point.geometry,
+              id: point.id || index
+            }
+          }
+          
+          if (lat && lng) {
+            return {
+              ...point,
+              latitude: parseFloat(lat),
+              longitude: parseFloat(lng),
+              lat: parseFloat(lat),
+              lng: parseFloat(lng),
+              id: point.id || index
+            }
+          }
+          
+          return {
+            ...point,
+            id: point.id || index
+          }
+        }).filter(p => p.geometry || (p.latitude && p.longitude))
+        
+        if (transformedPoints.length > 0) {
+          setAnalysisPoints(transformedPoints)
+          setFilteredPoints(transformedPoints)
+          extractAvailableFilters(transformedPoints)
+          setMapData(transformedPoints)
+          setShowFilters(true)
+          setSuccessMessage(`Season "${season.name}" analysis: ${transformedPoints.length} points loaded.`)
+        } else {
+          setAnalysisPoints([])
+          setFilteredPoints([])
+          setSuccessMessage(`Season "${season.name}": ${pointsData.length} points found but no valid coordinates.`)
+        }
+      } else {
+        setAnalysisPoints([])
+        setFilteredPoints([])
+        setSuccessMessage(`Season "${season.name}": No points found for this period.`)
+      }
+      
+      setTimeout(() => setSuccessMessage(null), 5000)
+      
+    } catch (err) {
+      console.error('Error running season analysis:', err)
+      setError(err.response?.data?.message || err.message || 'Error running analysis')
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
   // Selecionar field
   const handleSelectField = (field) => {
     setSelectedField(field)
@@ -1178,22 +1302,42 @@ function FieldPerformanceAnalytics() {
                     ) : seasons.length > 0 ? (
                       <div className="flex items-center gap-1">
                         {seasons.slice(0, 3).map(season => (
-                          <button
-                            key={season.id}
-                            onClick={() => {
-                              setSelectedSeason(season)
-                              setAnalysisStartDate(season.startDate?.split('T')[0] || '')
-                              setAnalysisEndDate(season.endDate?.split('T')[0] || '')
-                            }}
-                            className={`px-2 py-1 text-xs rounded transition ${
-                              selectedSeason?.id === season.id
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-                            }`}
-                            title={`${season.startDate} - ${season.endDate}`}
-                          >
-                            {season.name || 'Unnamed'}
-                          </button>
+                          <div key={season.id} className="flex items-center gap-0.5">
+                            <button
+                              onClick={() => {
+                                setSelectedSeason(season)
+                                setAnalysisStartDate(season.startDate?.split('T')[0] || '')
+                                setAnalysisEndDate(season.endDate?.split('T')[0] || '')
+                              }}
+                              className={`px-2 py-1 text-xs rounded-l transition ${
+                                selectedSeason?.id === season.id
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                              }`}
+                              title={`${season.crop || 'No crop'} • ${season.startDate?.split('T')[0]} to ${season.endDate?.split('T')[0]}`}
+                            >
+                              {season.name || 'Unnamed'}
+                            </button>
+                            <button
+                              onClick={() => handleRunSeasonAnalysis(season)}
+                              disabled={loadingAnalysis}
+                              className={`px-1.5 py-1 text-xs rounded-r transition ${
+                                selectedSeason?.id === season.id
+                                  ? 'bg-blue-600 text-white hover:bg-blue-500'
+                                  : 'bg-zinc-600 text-zinc-200 hover:bg-blue-600'
+                              }`}
+                              title="Run Analysis for this season"
+                            >
+                              {loadingAnalysis && selectedSeason?.id === season.id ? (
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                              ) : (
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
                         ))}
                         {seasons.length > 3 && (
                           <span className="text-xs text-zinc-500">+{seasons.length - 3}</span>

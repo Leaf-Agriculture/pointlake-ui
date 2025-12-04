@@ -356,7 +356,25 @@ function FieldPerformanceAnalytics() {
     } catch (err) {
       console.error('Error creating field:', err)
       console.error('Response:', err.response?.data)
-      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error creating field')
+      
+      // Extrair mensagem de erro mais detalhada
+      let errorMsg = 'Error creating field'
+      if (err.response?.data) {
+        const data = err.response.data
+        if (data.fieldErrors && Array.isArray(data.fieldErrors)) {
+          errorMsg = data.fieldErrors.map(e => `${e.field}: ${e.message}`).join(', ')
+        } else if (data.message) {
+          errorMsg = data.message
+        } else if (data.error) {
+          errorMsg = data.error
+        } else if (data.title) {
+          errorMsg = data.title
+        }
+      } else if (err.message) {
+        errorMsg = err.message
+      }
+      
+      setError(errorMsg)
     } finally {
       setCreatingField(false)
     }

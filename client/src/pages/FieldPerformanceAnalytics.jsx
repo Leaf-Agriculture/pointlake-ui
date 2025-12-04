@@ -69,6 +69,18 @@ function FieldPerformanceAnalytics() {
     area: { min: 0, max: 1 }
   })
   
+  // Estados para Seasons
+  const [seasons, setSeasons] = useState([])
+  const [loadingSeasons, setLoadingSeasons] = useState(false)
+  const [showSeasonModal, setShowSeasonModal] = useState(false)
+  const [creatingSeason, setCreatingSeason] = useState(false)
+  const [newSeasonName, setNewSeasonName] = useState('')
+  const [newSeasonCrop, setNewSeasonCrop] = useState('')
+  const [newSeasonStartDate, setNewSeasonStartDate] = useState('')
+  const [newSeasonEndDate, setNewSeasonEndDate] = useState('')
+  const [newSeasonActivityTypes, setNewSeasonActivityTypes] = useState([])
+  const [selectedSeason, setSelectedSeason] = useState(null)
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -646,12 +658,172 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Carregar seasons do field
+  const loadFieldSeasons = async (fieldId) => {
+    if (!token || !selectedLeafUserId || !fieldId) return
+
+    setLoadingSeasons(true)
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      const response = await axios.get(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/seasons`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params: {
+            fieldId: fieldId
+          }
+        }
+      )
+
+      console.log('📅 Seasons loaded:', response.data)
+      const seasonsData = Array.isArray(response.data) ? response.data : (response.data?.content || [])
+      setSeasons(seasonsData)
+      
+    } catch (err) {
+      console.error('Error loading seasons:', err)
+      setSeasons([])
+    } finally {
+      setLoadingSeasons(false)
+    }
+  }
+
+  // Criar nova season
+  const handleCreateSeason = async () => {
+    if (!token || !selectedLeafUserId || !selectedField?.id) {
+      setError('Please select a field first')
+      return
+    }
+
+    if (!newSeasonName.trim()) {
+      setError('Season name is required')
+      return
+    }
+
+    if (!newSeasonStartDate || !newSeasonEndDate) {
+      setError('Start and end dates are required')
+      return
+    }
+
+    setCreatingSeason(true)
+    setError(null)
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      const seasonData = {
+        name: newSeasonName.trim(),
+        fieldId: selectedField.id,
+        startDate: newSeasonStartDate,
+        endDate: newSeasonEndDate,
+        crop: newSeasonCrop.trim() || null,
+        activityTypes: newSeasonActivityTypes.length > 0 ? newSeasonActivityTypes : null
+      }
+
+      console.log('Creating season:', seasonData)
+
+      const response = await axios.post(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/seasons`,
+        seasonData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'accept': 'application/json'
+          }
+        }
+      )
+
+      console.log('✅ Season created:', response.data)
+
+      setSuccessMessage('Season created successfully!')
+      setTimeout(() => setSuccessMessage(null), 3000)
+      
+      // Limpar formulário e fechar modal
+      setNewSeasonName('')
+      setNewSeasonCrop('')
+      setNewSeasonStartDate('')
+      setNewSeasonEndDate('')
+      setNewSeasonActivityTypes([])
+      setShowSeasonModal(false)
+      
+      // Recarregar seasons
+      await loadFieldSeasons(selectedField.id)
+      
+    } catch (err) {
+      console.error('Error creating season:', err)
+      console.error('Response:', err.response?.data)
+      
+      if (err.response?.status === 401) {
+        setError('Session expired. Please logout and login again.')
+        return
+      }
+      
+      let errorMsg = 'Error creating season'
+      if (err.response?.data) {
+        const data = err.response.data
+        if (data.fieldErrors && Array.isArray(data.fieldErrors)) {
+          errorMsg = data.fieldErrors.map(e => `${e.field}: ${e.message}`).join(', ')
+        } else if (data.message) {
+          errorMsg = data.message
+        } else if (data.detail) {
+          errorMsg = data.detail
+        }
+      }
+      
+      setError(errorMsg)
+    } finally {
+      setCreatingSeason(false)
+    }
+  }
+
+  // Deletar season
+  const handleDeleteSeason = async (seasonId) => {
+    if (!token || !selectedLeafUserId || !seasonId) return
+    
+    if (!confirm('Are you sure you want to delete this season?')) return
+
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      await axios.delete(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/seasons/${seasonId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          }
+        }
+      )
+
+      setSuccessMessage('Season deleted successfully!')
+      setTimeout(() => setSuccessMessage(null), 3000)
+      
+      // Recarregar seasons
+      if (selectedField?.id) {
+        await loadFieldSeasons(selectedField.id)
+      }
+      
+    } catch (err) {
+      console.error('Error deleting season:', err)
+      setError(err.response?.data?.message || 'Error deleting season')
+    }
+  }
+
   // Selecionar field
   const handleSelectField = (field) => {
     setSelectedField(field)
     setAnalysisData(null)
     setShowAnalysisResults(false)
+    setSelectedSeason(null)
     loadFieldBoundary(field)
+    loadFieldSeasons(field.id)
   }
 
   // Fixar field como projeto da sessão
@@ -997,6 +1169,47 @@ function FieldPerformanceAnalytics() {
                       )}
                     </p>
                   </div>
+                  
+                  {/* Seasons do Field */}
+                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-zinc-700">
+                    <span className="text-xs text-zinc-500">Seasons:</span>
+                    {loadingSeasons ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                    ) : seasons.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        {seasons.slice(0, 3).map(season => (
+                          <button
+                            key={season.id}
+                            onClick={() => {
+                              setSelectedSeason(season)
+                              setAnalysisStartDate(season.startDate?.split('T')[0] || '')
+                              setAnalysisEndDate(season.endDate?.split('T')[0] || '')
+                            }}
+                            className={`px-2 py-1 text-xs rounded transition ${
+                              selectedSeason?.id === season.id
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                            }`}
+                            title={`${season.startDate} - ${season.endDate}`}
+                          >
+                            {season.name || 'Unnamed'}
+                          </button>
+                        ))}
+                        {seasons.length > 3 && (
+                          <span className="text-xs text-zinc-500">+{seasons.length - 3}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-zinc-500">None</span>
+                    )}
+                    <button
+                      onClick={() => setShowSeasonModal(true)}
+                      className="px-2 py-1 text-xs bg-emerald-950 text-emerald-300 rounded hover:bg-emerald-900 border border-emerald-800"
+                      title="Add Season"
+                    >
+                      + Season
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {fieldBoundary && (
@@ -1019,6 +1232,8 @@ function FieldPerformanceAnalytics() {
                       setMapData(null)
                       setAnalysisData(null)
                       setShowAnalysisResults(false)
+                      setSeasons([])
+                      setSelectedSeason(null)
                     }}
                     className="text-zinc-400 hover:text-zinc-200"
                   >
@@ -1569,6 +1784,135 @@ function FieldPerformanceAnalytics() {
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
                 Run Analysis
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Create Season */}
+      {showSeasonModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-lg border border-zinc-800 w-full max-w-md mx-4">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-100">Create Season</h3>
+              <button
+                onClick={() => setShowSeasonModal(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div className="bg-zinc-800 rounded-lg p-3">
+                <div className="text-xs text-zinc-500 uppercase">Field</div>
+                <div className="text-sm font-medium text-zinc-100">
+                  {selectedField?.name || selectedField?.fieldName || 'Select a field first'}
+                </div>
+              </div>
+
+              {/* Season Name */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Season Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newSeasonName}
+                  onChange={(e) => setNewSeasonName(e.target.value)}
+                  placeholder="e.g., 2024 Corn Season"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Crop */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Crop <span className="text-zinc-500">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={newSeasonCrop}
+                  onChange={(e) => setNewSeasonCrop(e.target.value)}
+                  placeholder="e.g., Corn, Soybean, Wheat"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Start Date */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Start Date <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={newSeasonStartDate}
+                  onChange={(e) => setNewSeasonStartDate(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* End Date */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  End Date <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={newSeasonEndDate}
+                  onChange={(e) => setNewSeasonEndDate(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Activity Types */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Activity Types <span className="text-zinc-500">(optional)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['Planting', 'Harvesting', 'CropProtection', 'Tillage', 'Other'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setNewSeasonActivityTypes(prev => 
+                          prev.includes(type) 
+                            ? prev.filter(t => t !== type)
+                            : [...prev, type]
+                        )
+                      }}
+                      className={`px-2 py-1 text-xs rounded transition ${
+                        newSeasonActivityTypes.includes(type)
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+              <button
+                onClick={() => setShowSeasonModal(false)}
+                className="px-4 py-2 text-sm font-medium bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition border border-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSeason}
+                disabled={creatingSeason || !newSeasonName.trim() || !newSeasonStartDate || !newSeasonEndDate}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded hover:bg-emerald-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {creatingSeason && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                )}
+                Create Season
               </button>
             </div>
           </div>

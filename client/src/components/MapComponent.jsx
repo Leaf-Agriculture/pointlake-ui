@@ -543,9 +543,60 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         hasBoundary: !!data?.boundary,
         hasPoints: !!data?.points,
         hasGeometry: !!data?.geometry,
+        hasZones: !!data?.zones,
+        zonesCount: data?.zones?.length || 0,
         dataLength: Array.isArray(data) ? data.length : (data?.points?.length || 'N/A'),
         sample: JSON.stringify(data)?.substring(0, 300)
       })
+      
+      // Função auxiliar para renderizar zones
+      const renderZones = (zones, bounds) => {
+        if (!zones || !Array.isArray(zones) || zones.length === 0) return
+        
+        console.log('🗺️ Rendering', zones.length, 'zones')
+        
+        zones.forEach(zone => {
+          if (!zone.geometry) return
+          
+          try {
+            let coords = null
+            
+            // A zone geometry pode ser GeoJSON ou WKT
+            if (zone.geometry.type === 'Polygon' && zone.geometry.coordinates) {
+              // GeoJSON Polygon - converter para Leaflet format [lat, lng]
+              coords = zone.geometry.coordinates[0].map(c => [c[1], c[0]])
+            } else if (zone.geometry.type === 'MultiPolygon' && zone.geometry.coordinates) {
+              // GeoJSON MultiPolygon - usar primeiro polígono
+              coords = zone.geometry.coordinates[0][0].map(c => [c[1], c[0]])
+            } else if (typeof zone.geometry === 'string' && zone.geometry.includes('POLYGON')) {
+              // WKT format
+              coords = parsePolygonWKT(zone.geometry)
+            }
+            
+            if (coords && coords.length > 2) {
+              const polygon = L.polygon(coords, {
+                color: '#a855f7', // purple
+                fillColor: '#a855f7',
+                fillOpacity: 0.25,
+                weight: 2,
+                dashArray: '3, 6'
+              }).addTo(mapInstance.current)
+              
+              polygon.bindPopup(`<div style="font-family: Arial, sans-serif;">
+                <strong style="color: #a855f7;">Zone: ${zone.name || 'Unnamed'}</strong>
+                ${zone.note ? `<br/><span style="color: #666;">${zone.note}</span>` : ''}
+              </div>`)
+              
+              markersRef.current.push(polygon)
+              if (bounds) bounds.extend(polygon.getBounds())
+              
+              console.log('✅ Zone rendered:', zone.name)
+            }
+          } catch (err) {
+            console.error('Error rendering zone:', zone.name, err)
+          }
+        })
+      }
       
       // Novo formato: { boundary: wkt, points: array, heatmapField: string }
       if (data.boundary && data.points) {
@@ -604,9 +655,24 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
           }
         }
         
+        // Renderizar zones se existirem
+        if (data.zones && data.zones.length > 0) {
+          renderZones(data.zones, bounds)
+        }
+        
         // Ajustar zoom para mostrar tudo
         if (!bounds.isEmpty()) {
           mapInstance.current.fitBounds(bounds.pad(0.05))
+        }
+      }
+      // Verificar se há apenas zones (sem boundary e sem points)
+      else if (data.zones && data.zones.length > 0 && !data.boundary && !data.points && !data.geometry) {
+        console.log('📍 Rendering only zones:', data.zones.length)
+        const bounds = L.latLngBounds()
+        renderZones(data.zones, bounds)
+        
+        if (!bounds.isEmpty()) {
+          mapInstance.current.fitBounds(bounds.pad(0.1))
         }
       }
       // Verificar se há geometria POLYGON nos dados (formato antigo)
@@ -637,8 +703,14 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
           polygon.bindPopup(popupContent)
           markersRef.current.push(polygon)
           
-          // Ajustar o zoom para mostrar o polígono
-          mapInstance.current.fitBounds(polygon.getBounds().pad(0.05))
+          // Renderizar zones se existirem
+          const bounds = polygon.getBounds()
+          if (data.zones && data.zones.length > 0) {
+            renderZones(data.zones, bounds)
+          }
+          
+          // Ajustar o zoom para mostrar o polígono e zones
+          mapInstance.current.fitBounds(bounds.pad(0.05))
         }
       } else if (Array.isArray(data)) {
         // Otimização para grandes datasets

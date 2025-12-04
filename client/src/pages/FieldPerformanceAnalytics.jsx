@@ -116,6 +116,8 @@ function FieldPerformanceAnalytics() {
   const [newZoneNote, setNewZoneNote] = useState('')
   const [fieldZones, setFieldZones] = useState([])
   const [loadingZones, setLoadingZones] = useState(false)
+  const [selectedZone, setSelectedZone] = useState(null)
+  const [visibleZones, setVisibleZones] = useState({}) // { zoneId: true/false }
   
   // Estados para modo de comparação lado a lado
   const [compareMode, setCompareMode] = useState(false)
@@ -426,11 +428,22 @@ function FieldPerformanceAnalytics() {
     // Encontrar qual layer de dados está ativa (apenas uma por vez)
     const activeLayerId = Object.entries(activeLayers).find(([, isActive]) => isActive)?.[0] || null
     
+    // Coletar geometrias das zones visíveis
+    const zoneGeometries = fieldZones
+      .filter(zone => visibleZones[zone.id])
+      .map(zone => ({
+        id: zone.id,
+        name: zone.name,
+        geometry: zone.geometry,
+        type: 'zone'
+      }))
+    
     console.log('🔄 updateMapDisplay:', {
       hasBoundary: !!currentBoundary?.geometry,
       pointsCount: currentPoints?.length || 0,
       showBoundaryLayer,
-      activeLayerId
+      activeLayerId,
+      visibleZonesCount: zoneGeometries.length
     })
     
     // Se temos pontos e alguma layer de dados está ativa
@@ -444,19 +457,30 @@ function FieldPerformanceAnalytics() {
       
       console.log('📍 Points prepared for map:', pointsWithHeatmapValue.length, 'layer:', activeLayerId)
       
-      // Combinar boundary + pontos se ambas layers estão ativas
+      // Combinar boundary + pontos + zones se layers estão ativas
       if (showBoundaryLayer && currentBoundary?.geometry) {
         setMapData({
           boundary: currentBoundary.geometry,
           points: pointsWithHeatmapValue,
-          heatmapField: activeLayerId
+          heatmapField: activeLayerId,
+          zones: zoneGeometries
         })
       } else {
-        setMapData(pointsWithHeatmapValue)
+        setMapData({
+          points: pointsWithHeatmapValue,
+          heatmapField: activeLayerId,
+          zones: zoneGeometries
+        })
       }
     } else if (showBoundaryLayer && currentBoundary?.geometry) {
-      // Apenas boundary
-      setMapData({ geometry: currentBoundary.geometry })
+      // Apenas boundary + zones
+      setMapData({ 
+        geometry: currentBoundary.geometry,
+        zones: zoneGeometries
+      })
+    } else if (zoneGeometries.length > 0) {
+      // Apenas zones
+      setMapData({ zones: zoneGeometries })
     } else {
       setMapData(null)
     }
@@ -477,7 +501,7 @@ function FieldPerformanceAnalytics() {
   // Atualizar mapa quando layers mudarem
   useEffect(() => {
     updateMapDisplay(boundaryData, filteredPoints)
-  }, [showBoundaryLayer, activeLayers, boundaryData])
+  }, [showBoundaryLayer, activeLayers, boundaryData, visibleZones, fieldZones])
 
   // Preparar dados para modo de comparação
   const prepareCompareMapData = (layerId) => {
@@ -1078,8 +1102,10 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
+      // Endpoint de delete usa apenas /zones/{zoneId}
+      console.log('🗑️ Deleting zone:', zoneId)
       await axios.delete(
-        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${selectedField.id}/zones/${zoneId}`,
+        `${baseUrl}/services/fields/api/zones/${zoneId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -1090,6 +1116,13 @@ function FieldPerformanceAnalytics() {
       
       setSuccessMessage('Zone deleted successfully!')
       setTimeout(() => setSuccessMessage(null), 3000)
+      
+      // Remover a zone dos visibleZones
+      setVisibleZones(prev => {
+        const newState = { ...prev }
+        delete newState[zoneId]
+        return newState
+      })
       
       // Recarregar zonas
       if (selectedField?.id) {
@@ -1576,30 +1609,47 @@ function FieldPerformanceAnalytics() {
                           </div>
                         ) : fieldZones.length > 0 ? (
                           <div className="space-y-1">
-                            {fieldZones.map(zone => (
-                              <div 
-                                key={zone.id} 
-                                className="flex items-center justify-between px-2 py-1.5 bg-zinc-800/70 rounded text-xs group"
-                              >
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <svg className="w-3 h-3 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
-                                  </svg>
-                                  <span className="text-zinc-300 truncate">{zone.name}</span>
-                                </div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleDeleteZone(zone.id)
+                            {fieldZones.map(zone => {
+                              const isVisible = visibleZones[zone.id] || false
+                              return (
+                                <div 
+                                  key={zone.id} 
+                                  className={`flex items-center justify-between px-2 py-1.5 rounded text-xs group cursor-pointer transition ${
+                                    isVisible ? 'bg-purple-950/70 border border-purple-700' : 'bg-zinc-800/70 hover:bg-zinc-700/70'
+                                  }`}
+                                  onClick={() => {
+                                    setVisibleZones(prev => ({
+                                      ...prev,
+                                      [zone.id]: !prev[zone.id]
+                                    }))
                                   }}
-                                  className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
                                 >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </div>
-                            ))}
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isVisible}
+                                      onChange={() => {}}
+                                      className="rounded bg-zinc-700 border-zinc-600 text-purple-500 w-3 h-3"
+                                    />
+                                    <svg className={`w-3 h-3 flex-shrink-0 ${isVisible ? 'text-purple-400' : 'text-zinc-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                                    </svg>
+                                    <span className={`truncate ${isVisible ? 'text-purple-300' : 'text-zinc-300'}`}>{zone.name}</span>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteZone(zone.id)
+                                    }}
+                                    className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              )
+                            })}
                           </div>
                         ) : (
                           <div className="text-xs text-zinc-600 py-1 italic">No zones created</div>

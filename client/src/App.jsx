@@ -3,6 +3,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import FileQueryWindow from './pages/FileQueryWindow'
 import PointsAnalytics from './pages/PointsAnalytics'
+import FieldPerformanceAnalytics from './pages/FieldPerformanceAnalytics'
 import ErrorBoundary from './components/ErrorBoundary'
 import { AuthProvider } from './context/AuthContext'
 import { LeafUserProvider } from './context/LeafUserContext'
@@ -21,6 +22,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/file/:fileId" element={<FileQueryWindow />} />
               <Route path="/points-analytics" element={<PointsAnalytics />} />
+              <Route path="/field-performance" element={<FieldPerformanceAnalytics />} />
               <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>
           </Router>

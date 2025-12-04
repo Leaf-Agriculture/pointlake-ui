@@ -146,11 +146,11 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   
   // Configurações avançadas do heatmap - adaptativas para qualquer número de pontos
   const heatmapOptions = {
-    radius: data.length > 10000 ? 15 : data.length > 5000 ? 20 : data.length > 1000 ? 25 : data.length > 100 ? 30 : 40,
-    blur: data.length > 10000 ? 10 : data.length > 5000 ? 15 : data.length > 1000 ? 20 : data.length > 100 ? 25 : 30,
+    radius: data.length > 10000 ? 20 : data.length > 5000 ? 25 : data.length > 1000 ? 30 : data.length > 100 ? 35 : 50,
+    blur: data.length > 10000 ? 15 : data.length > 5000 ? 20 : data.length > 1000 ? 25 : data.length > 100 ? 30 : 35,
     maxZoom: 18,
     max: 3.0,
-    minOpacity: data.length < 100 ? 0.3 : 0.1, // Maior opacidade para poucos pontos
+    minOpacity: 0.4, // Opacidade mínima aumentada para visibilidade
     gradient: {
       0.0: '#0000ff',  // Azul para baixa intensidade
       0.2: '#00ffff',  // Ciano
@@ -160,6 +160,8 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
       1.0: '#ff0000'   // Vermelho para alta intensidade
     }
   }
+  
+  console.log(`🎨 Heatmap options: radius=${heatmapOptions.radius}, blur=${heatmapOptions.blur}, points=${heatmapData.length}`)
   
   // Verificar se L.heatLayer está disponível
   if (!L.heatLayer) {
@@ -338,9 +340,19 @@ function MapComponent({ data, mapRef: externalMapRef }) {
     if (!data) return
 
     try {
+      console.log('🗺️ MapComponent received data:', {
+        type: typeof data,
+        isArray: Array.isArray(data),
+        hasBoundary: !!data?.boundary,
+        hasPoints: !!data?.points,
+        hasGeometry: !!data?.geometry,
+        dataLength: Array.isArray(data) ? data.length : (data?.points?.length || 'N/A'),
+        sample: JSON.stringify(data)?.substring(0, 300)
+      })
+      
       // Novo formato: { boundary: wkt, points: array, heatmapField: string }
       if (data.boundary && data.points) {
-        console.log('📍 Rendering combined boundary + points')
+        console.log('📍 Rendering combined boundary + points:', data.points.length, 'points')
         const bounds = L.latLngBounds()
         
         // Renderizar boundary

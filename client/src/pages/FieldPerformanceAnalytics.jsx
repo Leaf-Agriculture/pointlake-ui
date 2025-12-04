@@ -394,6 +394,14 @@ function FieldPerformanceAnalytics() {
     const currentBoundary = boundary || boundaryData
     const currentPoints = points || filteredPoints
     
+    console.log('🔄 updateMapDisplay:', {
+      hasBoundary: !!currentBoundary?.geometry,
+      pointsCount: currentPoints?.length || 0,
+      showBoundaryLayer,
+      showPointsLayer,
+      heatmapField
+    })
+    
     // Se temos pontos e layer de pontos está ativa, mostrar pontos
     if (showPointsLayer && currentPoints && currentPoints.length > 0) {
       // Preparar pontos com campo de heatmap selecionado
@@ -403,20 +411,27 @@ function FieldPerformanceAnalytics() {
         heatmapValue: heatmapField !== 'default' ? p[heatmapField] : null
       }))
       
+      console.log('📍 Points prepared for map:', pointsWithHeatmapValue.length, 'first point:', JSON.stringify(pointsWithHeatmapValue[0])?.substring(0, 200))
+      
       // Combinar boundary + pontos se ambas layers estão ativas
       if (showBoundaryLayer && currentBoundary?.geometry) {
-        setMapData({
+        const mapDataToSet = {
           boundary: currentBoundary.geometry,
           points: pointsWithHeatmapValue,
           heatmapField: heatmapField
-        })
+        }
+        console.log('🗺️ Setting combined mapData with boundary + points')
+        setMapData(mapDataToSet)
       } else {
+        console.log('🗺️ Setting points-only mapData (array)')
         setMapData(pointsWithHeatmapValue)
       }
     } else if (showBoundaryLayer && currentBoundary?.geometry) {
       // Apenas boundary
+      console.log('🗺️ Setting boundary-only mapData')
       setMapData({ geometry: currentBoundary.geometry })
     } else {
+      console.log('🗺️ Setting mapData to null')
       setMapData(null)
     }
   }

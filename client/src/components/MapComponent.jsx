@@ -400,27 +400,39 @@ function MapComponent({ data, mapRef: externalMapRef }) {
           bounds.extend(polygon.getBounds())
         }
         
-        // Renderizar pontos como heatmap
+        // Renderizar pontos como heatmap ou markers
         if (data.points.length > 0) {
-          console.log('🔥 Creating heatmap layer for', data.points.length, 'points with field:', data.heatmapField || 'default')
-          const heatmapLayer = createAdvancedHeatmap(data.points, mapInstance.current, data.heatmapField || 'default')
-          console.log('🔥 Heatmap layer result:', heatmapLayer)
-          if (heatmapLayer) {
-            mapInstance.current.addLayer(heatmapLayer)
-            markersRef.current.push(heatmapLayer)
-            console.log('✅ Heatmap layer added to map')
+          console.log('🔥 Creating visualization for', data.points.length, 'points with field:', data.heatmapField || 'default')
+          
+          // Primeiro decodificar todos os pontos para obter coordenadas
+          const decodedPoints = data.points.map(item => {
+            let coords = null
+            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+              coords = decodeBinaryGeometry(item.geometry)
+            } else if (item.latitude && item.longitude) {
+              coords = [parseFloat(item.latitude), parseFloat(item.longitude)]
+            } else if (item.lat && item.lng) {
+              coords = [parseFloat(item.lat), parseFloat(item.lng)]
+            }
+            return coords ? { ...item, decodedCoords: coords } : null
+          }).filter(Boolean)
+          
+          console.log('📍 Decoded', decodedPoints.length, 'points with valid coords out of', data.points.length)
+          
+          if (decodedPoints.length > 0) {
+            // Tentar criar heatmap
+            const heatmapLayer = createAdvancedHeatmap(data.points, mapInstance.current, data.heatmapField || 'default')
+            console.log('🔥 Heatmap layer result:', heatmapLayer)
             
-            // Estender bounds com pontos
-            data.points.forEach(item => {
-              let coords = null
-              if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
-                coords = decodeBinaryGeometry(item.geometry)
-              } else if (item.latitude && item.longitude) {
-                coords = [item.latitude, item.longitude]
-              } else if (item.lat && item.lng) {
-                coords = [item.lat, item.lng]
-              }
-              if (coords) bounds.extend(coords)
+            if (heatmapLayer) {
+              mapInstance.current.addLayer(heatmapLayer)
+              markersRef.current.push(heatmapLayer)
+              console.log('✅ Heatmap/CircleMarkers layer added to map')
+            }
+            
+            // Estender bounds com pontos decodificados
+            decodedPoints.forEach(item => {
+              bounds.extend(item.decodedCoords)
             })
           }
         }
@@ -464,7 +476,7 @@ function MapComponent({ data, mapRef: externalMapRef }) {
       } else if (Array.isArray(data)) {
         // Otimização para grandes datasets
         const pointCount = data.length;
-        console.log(`Renderizando ${pointCount} pontos no mapa`);
+        console.log(`📊 Renderizando ${pointCount} pontos no mapa (formato array)`);
         
         // Limpar marcadores anteriores
         markersRef.current.forEach(marker => {
@@ -474,36 +486,44 @@ function MapComponent({ data, mapRef: externalMapRef }) {
         });
         markersRef.current = [];
         
-        // Sempre usar heatmap avançado para qualquer número de pontos
-        console.log('🔥 Usando heatmap avançado para visualização');
+        // Decodificar todos os pontos primeiro
+        const decodedPoints = data.map(item => {
+          let coords = null;
+          if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+            coords = decodeBinaryGeometry(item.geometry);
+          } else if (item.latitude && item.longitude) {
+            coords = [parseFloat(item.latitude), parseFloat(item.longitude)];
+          } else if (item.lat && item.lng) {
+            coords = [parseFloat(item.lat), parseFloat(item.lng)];
+          }
+          return coords ? { ...item, decodedCoords: coords } : null;
+        }).filter(Boolean);
         
-        // Verificar se os pontos têm campo de heatmap específico
-        const heatmapField = data[0]?.heatmapField || 'default'
-        const heatmapLayer = createAdvancedHeatmap(data, mapInstance.current, heatmapField);
-        if (heatmapLayer) {
-          mapInstance.current.addLayer(heatmapLayer);
-          markersRef.current.push(heatmapLayer);
-          console.log(`✅ Heatmap avançado criado com ${pointCount} pontos`);
+        console.log(`📍 Decoded ${decodedPoints.length} of ${pointCount} points`);
+        
+        if (decodedPoints.length > 0) {
+          // Verificar se os pontos têm campo de heatmap específico
+          const heatmapField = data[0]?.heatmapField || 'default';
+          console.log('🔥 Criando visualização com heatmapField:', heatmapField);
+          
+          const heatmapLayer = createAdvancedHeatmap(data, mapInstance.current, heatmapField);
+          if (heatmapLayer) {
+            mapInstance.current.addLayer(heatmapLayer);
+            markersRef.current.push(heatmapLayer);
+            console.log(`✅ Visualização criada com ${decodedPoints.length} pontos`);
+          }
           
           // Ajustar zoom para mostrar a área dos dados
           const bounds = L.latLngBounds();
-          data.forEach(item => {
-            let coords = null;
-            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
-              coords = decodeBinaryGeometry(item.geometry);
-            } else if (item.latitude && item.longitude) {
-              coords = [item.latitude, item.longitude];
-            } else if (item.lat && item.lng) {
-              coords = [item.lat, item.lng];
-            }
-            if (coords) {
-              bounds.extend(coords);
-            }
+          decodedPoints.forEach(item => {
+            bounds.extend(item.decodedCoords);
           });
           
           if (!bounds.isEmpty()) {
-            mapInstance.current.fitBounds(bounds.pad(0.05)); // Reduzir padding para foco mais próximo
+            mapInstance.current.fitBounds(bounds.pad(0.05));
           }
+        } else {
+          console.warn('⚠️ Nenhum ponto com coordenadas válidas encontrado');
         }
         
         // Manter clusters como fallback para datasets muito grandes

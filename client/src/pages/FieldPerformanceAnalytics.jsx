@@ -117,6 +117,15 @@ function FieldPerformanceAnalytics() {
   const [fieldZones, setFieldZones] = useState([])
   const [loadingZones, setLoadingZones] = useState(false)
   
+  // Estados para modo de comparação lado a lado
+  const [compareMode, setCompareMode] = useState(false)
+  const [leftLayerId, setLeftLayerId] = useState(null)
+  const [rightLayerId, setRightLayerId] = useState(null)
+  const [leftMapData, setLeftMapData] = useState(null)
+  const [rightMapData, setRightMapData] = useState(null)
+  const leftMapRef = useRef(null)
+  const rightMapRef = useRef(null)
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -466,6 +475,38 @@ function FieldPerformanceAnalytics() {
   useEffect(() => {
     updateMapDisplay(boundaryData, filteredPoints)
   }, [showBoundaryLayer, activeLayers, boundaryData])
+
+  // Preparar dados para modo de comparação
+  const prepareCompareMapData = (layerId) => {
+    if (!filteredPoints || filteredPoints.length === 0) return null
+    
+    const pointsWithHeatmapValue = filteredPoints.map(p => ({
+      ...p,
+      heatmapField: layerId,
+      heatmapValue: p[layerId]
+    }))
+    
+    if (showBoundaryLayer && boundaryData?.geometry) {
+      return {
+        boundary: boundaryData.geometry,
+        points: pointsWithHeatmapValue,
+        heatmapField: layerId
+      }
+    }
+    return pointsWithHeatmapValue
+  }
+
+  // Atualizar mapas de comparação quando layers mudarem
+  useEffect(() => {
+    if (compareMode) {
+      if (leftLayerId) {
+        setLeftMapData(prepareCompareMapData(leftLayerId))
+      }
+      if (rightLayerId) {
+        setRightMapData(prepareCompareMapData(rightLayerId))
+      }
+    }
+  }, [compareMode, leftLayerId, rightLayerId, filteredPoints, boundaryData, showBoundaryLayer])
 
   // Função para criar análise do projeto
   const handleCreateAnalysis = async () => {
@@ -919,18 +960,32 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
-      const response = await axios.get(
-        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'accept': 'application/json'
-          },
-          params: {
-            fieldId: fieldId
+      // Tentar endpoint por field primeiro
+      let response
+      try {
+        response = await axios.get(
+          `${baseUrl}/services/fields/api/fields/${fieldId}/zones`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'accept': 'application/json'
+            }
           }
-        }
-      )
+        )
+      } catch (e) {
+        // Fallback: tentar endpoint por user com fieldId como param
+        console.log('Trying fallback endpoint for zones...')
+        response = await axios.get(
+          `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'accept': 'application/json'
+            },
+            params: { fieldId }
+          }
+        )
+      }
       
       console.log('🗺️ Zones loaded:', response.data)
       setFieldZones(Array.isArray(response.data) ? response.data : [])
@@ -993,17 +1048,39 @@ function FieldPerformanceAnalytics() {
       
       console.log('Creating zone:', zoneData)
       
-      const response = await axios.post(
-        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
-        zoneData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'accept': 'application/json'
+      // Tentar endpoint por field primeiro
+      let response
+      try {
+        response = await axios.post(
+          `${baseUrl}/services/fields/api/fields/${selectedField.id}/zones`,
+          zoneData,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'accept': 'application/json'
+            }
           }
+        )
+      } catch (e) {
+        if (e.response?.status === 404) {
+          // Fallback: tentar endpoint por user
+          console.log('Trying fallback endpoint for create zone...')
+          response = await axios.post(
+            `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones`,
+            zoneData,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'accept': 'application/json'
+              }
+            }
+          )
+        } else {
+          throw e
         }
-      )
+      }
       
       console.log('Zone created:', response.data)
       setSuccessMessage(`Zone "${newZoneName}" created successfully!`)
@@ -1037,15 +1114,32 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
-      await axios.delete(
-        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones/${zoneId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'accept': 'application/json'
+      // Tentar endpoint por field primeiro, depois fallback
+      try {
+        await axios.delete(
+          `${baseUrl}/services/fields/api/zones/${zoneId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'accept': 'application/json'
+            }
           }
+        )
+      } catch (e) {
+        if (e.response?.status === 404) {
+          await axios.delete(
+            `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/zones/${zoneId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'accept': 'application/json'
+              }
+            }
+          )
+        } else {
+          throw e
         }
-      )
+      }
       
       setSuccessMessage('Zone deleted successfully!')
       setTimeout(() => setSuccessMessage(null), 3000)
@@ -1639,15 +1733,94 @@ function FieldPerformanceAnalytics() {
 
           {/* Mapa e Resultados de Análise */}
           <div className="flex-1 flex">
-            {/* Mapa */}
-            <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all`}>
-              <MapComponent 
-                data={mapData} 
-                mapRef={mapRef}
-                isDrawingMode={isDrawingZone}
-                drawnCoords={drawnZoneCoords}
-                onCoordsChange={setDrawnZoneCoords}
-              />
+            {/* Modo de Comparação ou Mapa Normal */}
+            {compareMode && analysisPoints.length > 0 ? (
+              /* Modo Comparação - 2 mapas lado a lado */
+              <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all flex flex-col`}>
+                {/* Header do modo comparação */}
+                <div className="bg-zinc-900 border-b border-zinc-700 px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-zinc-300">Compare Mode</span>
+                  <button
+                    onClick={() => setCompareMode(false)}
+                    className="px-2 py-1 text-xs bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
+                  >
+                    Exit Compare
+                  </button>
+                </div>
+                
+                {/* Container dos 2 mapas */}
+                <div className="flex-1 flex">
+                  {/* Mapa Esquerdo */}
+                  <div className="w-1/2 relative border-r border-zinc-700">
+                    <MapComponent 
+                      data={leftMapData} 
+                      mapRef={leftMapRef}
+                    />
+                    {/* Seletor de layer */}
+                    <div className="absolute top-2 left-2 z-20">
+                      <select
+                        value={leftLayerId || ''}
+                        onChange={(e) => setLeftLayerId(e.target.value || null)}
+                        className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
+                      >
+                        <option value="">Select Layer</option>
+                        {availableDataLayers.map(layer => {
+                          const hasData = filteredPoints.some(p => p[layer.id] != null)
+                          if (!hasData) return null
+                          return (
+                            <option key={layer.id} value={layer.id}>{layer.name}</option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                    {leftLayerId && (
+                      <div className="absolute bottom-2 left-2 z-20 bg-zinc-900/95 rounded px-2 py-1">
+                        <span className="text-xs text-zinc-300 font-medium">{availableDataLayers.find(l => l.id === leftLayerId)?.name}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Mapa Direito */}
+                  <div className="w-1/2 relative">
+                    <MapComponent 
+                      data={rightMapData} 
+                      mapRef={rightMapRef}
+                    />
+                    {/* Seletor de layer */}
+                    <div className="absolute top-2 left-2 z-20">
+                      <select
+                        value={rightLayerId || ''}
+                        onChange={(e) => setRightLayerId(e.target.value || null)}
+                        className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
+                      >
+                        <option value="">Select Layer</option>
+                        {availableDataLayers.map(layer => {
+                          const hasData = filteredPoints.some(p => p[layer.id] != null)
+                          if (!hasData) return null
+                          return (
+                            <option key={layer.id} value={layer.id}>{layer.name}</option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                    {rightLayerId && (
+                      <div className="absolute bottom-2 left-2 z-20 bg-zinc-900/95 rounded px-2 py-1">
+                        <span className="text-xs text-zinc-300 font-medium">{availableDataLayers.find(l => l.id === rightLayerId)?.name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Mapa Normal */
+              <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all`}>
+                <MapComponent 
+                  data={mapData} 
+                  mapRef={mapRef}
+                  isDrawingMode={isDrawingZone}
+                  drawnCoords={drawnZoneCoords}
+                  onCoordsChange={setDrawnZoneCoords}
+                />
               
               {/* Painel de Controle de Layers */}
               {(boundaryData || analysisPoints.length > 0) && (
@@ -1803,6 +1976,22 @@ function FieldPerformanceAnalytics() {
                           </div>
                         </>
                       )}
+                      
+                      {/* Botão Compare Mode */}
+                      {analysisPoints.length > 0 && (
+                        <>
+                          <div className="border-t border-zinc-700 my-1"></div>
+                          <button
+                            onClick={() => setCompareMode(true)}
+                            className="w-full px-2 py-1.5 text-xs bg-purple-950 text-purple-300 rounded hover:bg-purple-900 border border-purple-800 flex items-center justify-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                            </svg>
+                            Compare Layers
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1832,6 +2021,7 @@ function FieldPerformanceAnalytics() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Painel de Resultados da Análise */}
             {showAnalysisResults && analysisData && (

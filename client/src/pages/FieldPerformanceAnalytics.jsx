@@ -354,6 +354,8 @@ function FieldPerformanceAnalytics() {
       }
 
       console.log('Creating field with geometry:', fieldData)
+      console.log('Using token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN')
+      console.log('Leaf User ID:', selectedLeafUserId)
 
       const createResponse = await axios.post(
         `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields`,
@@ -386,6 +388,12 @@ function FieldPerformanceAnalytics() {
       console.error('Error creating field:', err)
       console.error('Response:', err.response?.data)
       
+      // Tratar erro 401 especificamente
+      if (err.response?.status === 401) {
+        setError('Session expired. Please logout and login again.')
+        return
+      }
+      
       // Extrair mensagem de erro mais detalhada
       let errorMsg = 'Error creating field'
       if (err.response?.data) {
@@ -398,6 +406,8 @@ function FieldPerformanceAnalytics() {
           errorMsg = data.error
         } else if (data.title) {
           errorMsg = data.title
+        } else if (data.detail) {
+          errorMsg = data.detail
         }
       } else if (err.message) {
         errorMsg = err.message

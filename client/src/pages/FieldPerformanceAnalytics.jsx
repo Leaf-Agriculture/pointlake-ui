@@ -250,18 +250,67 @@ function FieldPerformanceAnalytics() {
       setAnalysisData(response.data)
       setShowAnalysisResults(true)
       
-      // Se tiver pontos, mostrar no mapa
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        setMapData(response.data)
-        setSuccessMessage(`Analysis completed! ${response.data.length} points loaded.`)
+      // Extrair pontos da resposta (pode vir em diferentes formatos)
+      let pointsData = []
+      if (Array.isArray(response.data)) {
+        pointsData = response.data
       } else if (response.data?.points && Array.isArray(response.data.points)) {
-        setMapData(response.data.points)
-        setSuccessMessage(`Analysis completed! ${response.data.points.length} points loaded.`)
-      } else {
-        setSuccessMessage('Analysis completed!')
+        pointsData = response.data.points
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        pointsData = response.data.data
       }
       
-      setTimeout(() => setSuccessMessage(null), 3000)
+      console.log(`📊 Found ${pointsData.length} points in response`)
+      
+      // Transformar pontos para o formato esperado pelo MapComponent
+      if (pointsData.length > 0) {
+        const transformedPoints = pointsData.map((point, index) => {
+          // Verificar se já tem coordenadas diretas
+          let lat = point.latitude || point.lat
+          let lng = point.longitude || point.lng || point.lon
+          
+          // Se não tem coordenadas mas tem geometry, usar geometry
+          if ((!lat || !lng) && point.geometry) {
+            // geometry pode ser WKB binário - passar para o MapComponent processar
+            return {
+              ...point,
+              geometry: point.geometry,
+              id: point.id || index
+            }
+          }
+          
+          // Se tem coordenadas válidas
+          if (lat && lng) {
+            return {
+              ...point,
+              latitude: parseFloat(lat),
+              longitude: parseFloat(lng),
+              lat: parseFloat(lat),
+              lng: parseFloat(lng),
+              id: point.id || index
+            }
+          }
+          
+          // Ponto sem coordenadas válidas - retornar como está
+          return {
+            ...point,
+            id: point.id || index
+          }
+        }).filter(p => p.geometry || (p.latitude && p.longitude))
+        
+        console.log(`📊 ${transformedPoints.length} valid points transformed for map`)
+        
+        if (transformedPoints.length > 0) {
+          setMapData(transformedPoints)
+          setSuccessMessage(`Analysis completed! ${transformedPoints.length} points loaded on map.`)
+        } else {
+          setSuccessMessage(`Analysis completed! ${pointsData.length} points found but no valid coordinates.`)
+        }
+      } else {
+        setSuccessMessage('Analysis completed! No points found for this period.')
+      }
+      
+      setTimeout(() => setSuccessMessage(null), 5000)
       
     } catch (err) {
       console.error('Error creating analysis:', err)

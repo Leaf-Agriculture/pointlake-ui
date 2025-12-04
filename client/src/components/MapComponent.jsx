@@ -226,19 +226,43 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     return colors[index]
   }
   
-  // Tamanho do marcador baseado na quantidade de pontos
-  const markerRadius = pointCount > 5000 ? 3 : pointCount > 1000 ? 4 : pointCount > 100 ? 6 : 8
+  // Tamanho do marcador baseado na quantidade de pontos - maior para efeito mais suave
+  const markerRadius = pointCount > 5000 ? 8 : pointCount > 1000 ? 12 : pointCount > 100 ? 16 : 20
   
   heatmapData.forEach(([lat, lng, intensity]) => {
     const color = getColorForIntensity(intensity)
     
-    const circle = L.circleMarker([lat, lng], {
+    // Criar círculo com gradiente suave (usando múltiplas camadas com opacidade)
+    // Camada externa mais suave
+    const outerCircle = L.circleMarker([lat, lng], {
+      radius: markerRadius * 1.5,
+      fillColor: color,
+      color: 'transparent',
+      weight: 0,
+      opacity: 0,
+      fillOpacity: 0.15
+    })
+    layerGroup.addLayer(outerCircle)
+    
+    // Camada média
+    const midCircle = L.circleMarker([lat, lng], {
       radius: markerRadius,
       fillColor: color,
-      color: '#333',
-      weight: 0.5,
-      opacity: 1,
-      fillOpacity: 0.85
+      color: 'transparent',
+      weight: 0,
+      opacity: 0,
+      fillOpacity: 0.35
+    })
+    layerGroup.addLayer(midCircle)
+    
+    // Camada interna mais intensa
+    const circle = L.circleMarker([lat, lng], {
+      radius: markerRadius * 0.5,
+      fillColor: color,
+      color: 'transparent',
+      weight: 0,
+      opacity: 0,
+      fillOpacity: 0.7
     })
     
     // Popup com valor

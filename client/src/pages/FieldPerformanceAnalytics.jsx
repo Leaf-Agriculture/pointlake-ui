@@ -1690,6 +1690,7 @@ function FieldPerformanceAnalytics() {
                             const values = filteredPoints.map(p => p[layer.id]).filter(v => v != null)
                             const min = values.length > 0 ? Math.min(...values) : 0
                             const max = values.length > 0 ? Math.max(...values) : 0
+                            const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
                             
                             return (
                               <label 
@@ -1707,8 +1708,19 @@ function FieldPerformanceAnalytics() {
                                 <div className="flex-1 min-w-0">
                                   <div className="text-xs text-zinc-300">{layer.name}</div>
                                   {isActive && (
-                                    <div className="text-xs text-zinc-500 truncate">
-                                      {min.toFixed(1)} → {max.toFixed(1)} {layer.unit}
+                                    <div className="grid grid-cols-3 gap-1 text-xs mt-1">
+                                      <div className="text-center">
+                                        <div className="text-zinc-500">Min</div>
+                                        <div className="text-blue-400 font-medium">{min.toFixed(1)}</div>
+                                      </div>
+                                      <div className="text-center">
+                                        <div className="text-zinc-500">Avg</div>
+                                        <div className="text-yellow-400 font-medium">{avg.toFixed(1)}</div>
+                                      </div>
+                                      <div className="text-center">
+                                        <div className="text-zinc-500">Max</div>
+                                        <div className="text-red-400 font-medium">{max.toFixed(1)}</div>
+                                      </div>
                                     </div>
                                   )}
                                 </div>

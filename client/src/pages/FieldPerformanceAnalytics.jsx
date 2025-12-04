@@ -321,6 +321,16 @@ function FieldPerformanceAnalytics() {
           }
         }
         
+        // IMPORTANTE: A API Leaf Fields espera MultiPolygon, não Polygon
+        // Converter Polygon para MultiPolygon automaticamente
+        if (parsedGeometry.type === 'Polygon') {
+          console.log('Converting Polygon to MultiPolygon for API compatibility')
+          parsedGeometry = {
+            type: 'MultiPolygon',
+            coordinates: [parsedGeometry.coordinates]
+          }
+        }
+        
       } catch (e) {
         setError('Invalid GeoJSON format: ' + e.message)
         return
@@ -335,16 +345,19 @@ function FieldPerformanceAnalytics() {
       const baseUrl = getLeafApiBaseUrl(env)
       
       // Criar field com geometry incluído
+      // NOTA: A API Leaf Fields requer MultiPolygon, não Polygon
       const fieldData = {
         name: newFieldName.trim(),
         geometry: parsedGeometry || {
-          type: 'Polygon',
+          type: 'MultiPolygon',
           coordinates: [[
-            [-93.48, 41.77],
-            [-93.48, 41.76],
-            [-93.47, 41.76],
-            [-93.47, 41.77],
-            [-93.48, 41.77]
+            [
+              [-93.48, 41.77],
+              [-93.48, 41.76],
+              [-93.47, 41.76],
+              [-93.47, 41.77],
+              [-93.48, 41.77]
+            ]
           ]]
         }
       }

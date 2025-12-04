@@ -1844,48 +1844,103 @@ function FieldPerformanceAnalytics() {
                     </div>
                   )}
 
-                  {/* Data Table */}
-                  <div className="bg-zinc-800 rounded-lg overflow-hidden">
-                    <h4 className="text-xs font-semibold text-zinc-400 uppercase p-3 border-b border-zinc-700">
-                      Data Points ({filteredPoints.length})
+                  {/* Summary Stats */}
+                  <div className="bg-zinc-800 rounded-lg p-3">
+                    <h4 className="text-xs font-semibold text-zinc-400 uppercase mb-3">
+                      Statistics ({filteredPoints.length} points on map)
                     </h4>
-                    <div className="max-h-96 overflow-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-zinc-900 sticky top-0">
-                          <tr>
-                            <th className="text-left p-2 text-zinc-400">#</th>
-                            <th className="text-left p-2 text-zinc-400">Timestamp</th>
-                            <th className="text-left p-2 text-zinc-400">Operation</th>
-                            <th className="text-left p-2 text-zinc-400">Crop</th>
-                            <th className="text-right p-2 text-zinc-400">Speed</th>
-                            <th className="text-right p-2 text-zinc-400">Rate</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredPoints.slice(0, 100).map((point, idx) => (
-                            <tr key={idx} className="border-t border-zinc-700 hover:bg-zinc-700/50">
-                              <td className="p-2 text-zinc-500">{idx + 1}</td>
-                              <td className="p-2 text-zinc-300">
-                                {point.timestamp ? new Date(point.timestamp).toLocaleString() : '-'}
-                              </td>
-                              <td className="p-2 text-zinc-300">{point.operationType || '-'}</td>
-                              <td className="p-2 text-zinc-300">{point.crop || '-'}</td>
-                              <td className="p-2 text-zinc-300 text-right">
-                                {point.speed ? point.speed.toFixed(1) : '-'}
-                              </td>
-                              <td className="p-2 text-zinc-300 text-right">
-                                {point.appliedRate ? point.appliedRate.toFixed(1) : '-'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {filteredPoints.length > 100 && (
-                        <div className="p-2 text-center text-zinc-500 text-xs border-t border-zinc-700">
-                          Showing first 100 of {filteredPoints.length} filtered points
-                        </div>
-                      )}
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      {/* Speed Stats */}
+                      {(() => {
+                        const values = filteredPoints.map(p => p.speed).filter(v => v != null)
+                        if (values.length === 0) return null
+                        return (
+                          <div className="bg-zinc-700/50 rounded p-2">
+                            <div className="text-zinc-400 mb-1">Speed (km/h)</div>
+                            <div className="text-zinc-200">
+                              <span className="text-emerald-400">{Math.min(...values).toFixed(1)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-amber-400">{(values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-red-400">{Math.max(...values).toFixed(1)}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      
+                      {/* Elevation Stats */}
+                      {(() => {
+                        const values = filteredPoints.map(p => p.elevation).filter(v => v != null)
+                        if (values.length === 0) return null
+                        return (
+                          <div className="bg-zinc-700/50 rounded p-2">
+                            <div className="text-zinc-400 mb-1">Elevation (m)</div>
+                            <div className="text-zinc-200">
+                              <span className="text-emerald-400">{Math.min(...values).toFixed(0)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-amber-400">{(values.reduce((a, b) => a + b, 0) / values.length).toFixed(0)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-red-400">{Math.max(...values).toFixed(0)}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      
+                      {/* Applied Rate Stats */}
+                      {(() => {
+                        const values = filteredPoints.map(p => p.appliedRate).filter(v => v != null)
+                        if (values.length === 0) return null
+                        return (
+                          <div className="bg-zinc-700/50 rounded p-2">
+                            <div className="text-zinc-400 mb-1">Applied Rate</div>
+                            <div className="text-zinc-200">
+                              <span className="text-emerald-400">{Math.min(...values).toFixed(1)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-amber-400">{(values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-red-400">{Math.max(...values).toFixed(1)}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      
+                      {/* Area Stats */}
+                      {(() => {
+                        const values = filteredPoints.map(p => p.area).filter(v => v != null)
+                        if (values.length === 0) return null
+                        return (
+                          <div className="bg-zinc-700/50 rounded p-2">
+                            <div className="text-zinc-400 mb-1">Area (ha)</div>
+                            <div className="text-zinc-200">
+                              <span className="text-emerald-400">{Math.min(...values).toFixed(4)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-amber-400">{(values.reduce((a, b) => a + b, 0) / values.length).toFixed(4)}</span>
+                              <span className="text-zinc-500 mx-1">→</span>
+                              <span className="text-red-400">{Math.max(...values).toFixed(4)}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
+                    
+                    {/* Operation Type Distribution */}
+                    {availableFilters.operationType.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-zinc-700">
+                        <div className="text-zinc-400 text-xs mb-2">Operation Types</div>
+                        <div className="flex flex-wrap gap-2">
+                          {availableFilters.operationType.map(type => {
+                            const count = filteredPoints.filter(p => p.operationType === type).length
+                            const pct = ((count / filteredPoints.length) * 100).toFixed(0)
+                            return (
+                              <div key={type} className="bg-zinc-700/50 rounded px-2 py-1 text-xs">
+                                <span className="text-zinc-300">{type}</span>
+                                <span className="text-zinc-500 ml-1">{pct}%</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

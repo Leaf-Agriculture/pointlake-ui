@@ -124,25 +124,30 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   const maxValue = Math.max(...values)
   const range = maxValue - minValue
   
-  console.log(`📊 Value range for "${heatmapField}": min=${minValue.toFixed(2)}, max=${maxValue.toFixed(2)}, range=${range.toFixed(2)}`)
+  console.log(`📊 Value range for "${heatmapField}": min=${minValue.toFixed(4)}, max=${maxValue.toFixed(4)}, range=${range.toFixed(4)}`)
   
-  // Terceiro passo: normalizar valores para 0.1-1.0 range
+  // Terceiro passo: normalizar valores para 0.0-1.0 range usando distribuição linear
   const heatmapData = rawPoints.map(point => {
     let normalizedIntensity
     if (range > 0) {
-      // Normalizar para 0.1-1.0 (evitar 0 que não aparece)
-      normalizedIntensity = 0.1 + ((point.rawValue - minValue) / range) * 0.9
+      // Normalizar para 0.0-1.0 com distribuição linear completa
+      normalizedIntensity = (point.rawValue - minValue) / range
     } else {
-      // Todos os valores são iguais
+      // Todos os valores são iguais - usar 0.5
       normalizedIntensity = 0.5
     }
+    // Garantir que está no range [0, 1]
+    normalizedIntensity = Math.max(0, Math.min(1, normalizedIntensity))
     return [point.coords[0], point.coords[1], normalizedIntensity]
   })
   
-  // Log distribuição de intensidades
+  // Log distribuição de intensidades para debug
   const intensities = heatmapData.map(p => p[2])
-  const avgIntensity = intensities.reduce((a, b) => a + b, 0) / intensities.length
-  console.log(`🎨 Intensity distribution: min=${Math.min(...intensities).toFixed(2)}, avg=${avgIntensity.toFixed(2)}, max=${Math.max(...intensities).toFixed(2)}`)
+  const sortedIntensities = [...intensities].sort((a, b) => a - b)
+  const p10 = sortedIntensities[Math.floor(sortedIntensities.length * 0.1)]
+  const p50 = sortedIntensities[Math.floor(sortedIntensities.length * 0.5)]
+  const p90 = sortedIntensities[Math.floor(sortedIntensities.length * 0.9)]
+  console.log(`🎨 Intensity percentiles: p10=${p10?.toFixed(2)}, p50=${p50?.toFixed(2)}, p90=${p90?.toFixed(2)}`)
   
   if (heatmapData.length === 0) {
     console.log('❌ No valid heatmap data - returning null')
@@ -154,23 +159,33 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   // Configurações avançadas do heatmap - adaptativas para qualquer número de pontos
   const pointCount = rawPoints.length
   const heatmapOptions = {
-    radius: pointCount > 10000 ? 15 : pointCount > 5000 ? 20 : pointCount > 1000 ? 25 : pointCount > 100 ? 30 : 40,
-    blur: pointCount > 10000 ? 10 : pointCount > 5000 ? 15 : pointCount > 1000 ? 18 : pointCount > 100 ? 22 : 25,
+    radius: pointCount > 10000 ? 12 : pointCount > 5000 ? 15 : pointCount > 1000 ? 20 : pointCount > 100 ? 25 : 35,
+    blur: pointCount > 10000 ? 8 : pointCount > 5000 ? 10 : pointCount > 1000 ? 12 : pointCount > 100 ? 15 : 18,
     maxZoom: 18,
     max: 1.0, // Valor máximo normalizado
-    minOpacity: 0.3,
+    minOpacity: 0.5,
+    // Rampa de 20 níveis de cores para máximo contraste (azul escuro → vermelho escuro)
     gradient: {
-      0.0: '#313695',  // Azul escuro (valores baixos)
-      0.1: '#4575b4',  // Azul
-      0.2: '#74add1',  // Azul claro
-      0.3: '#abd9e9',  // Ciano claro
-      0.4: '#e0f3f8',  // Quase branco
-      0.5: '#ffffbf',  // Amarelo claro (médio)
-      0.6: '#fee090',  // Amarelo
-      0.7: '#fdae61',  // Laranja claro
-      0.8: '#f46d43',  // Laranja
-      0.9: '#d73027',  // Vermelho
-      1.0: '#a50026'   // Vermelho escuro (valores altos)
+      0.00: '#08306b',  // Azul muito escuro
+      0.05: '#08519c',  // Azul escuro
+      0.10: '#2171b5',  // Azul
+      0.15: '#4292c6',  // Azul médio
+      0.20: '#6baed6',  // Azul claro
+      0.25: '#9ecae1',  // Azul bem claro
+      0.30: '#c6dbef',  // Azul quase branco
+      0.35: '#deebf7',  // Branco azulado
+      0.40: '#fff5eb',  // Branco amarelado
+      0.45: '#fee6ce',  // Creme
+      0.50: '#fdd0a2',  // Laranja claro
+      0.55: '#fdae6b',  // Laranja
+      0.60: '#fd8d3c',  // Laranja forte
+      0.65: '#f16913',  // Laranja escuro
+      0.70: '#d94801',  // Laranja avermelhado
+      0.75: '#bd0026',  // Vermelho
+      0.80: '#a50f15',  // Vermelho médio
+      0.85: '#800026',  // Vermelho escuro
+      0.90: '#67000d',  // Vermelho muito escuro
+      1.00: '#4a0008'   // Marrom avermelhado (máximo)
     }
   }
   
@@ -190,22 +205,20 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     console.warn('⚠️ L.heatLayer não disponível, usando circleMarkers como fallback')
   }
   
-  // Fallback: usar circleMarkers coloridos com gradiente similar ao heatmap
+  // Fallback: usar circleMarkers coloridos com gradiente de 20 níveis
   console.log('🔵 Usando circleMarkers como fallback para visualização')
   const layerGroup = L.layerGroup()
   
-  // Função para interpolar cor baseada na intensidade (0-1)
+  // Função para interpolar cor baseada na intensidade (0-1) com 20 níveis
   const getColor = (intensity) => {
-    // Gradiente de azul escuro -> amarelo -> vermelho escuro
-    if (intensity < 0.25) {
-      return '#4575b4' // Azul
-    } else if (intensity < 0.5) {
-      return '#abd9e9' // Ciano
-    } else if (intensity < 0.75) {
-      return '#fee090' // Amarelo
-    } else {
-      return '#d73027' // Vermelho
-    }
+    const colors = [
+      '#08306b', '#08519c', '#2171b5', '#4292c6', '#6baed6',
+      '#9ecae1', '#c6dbef', '#deebf7', '#fff5eb', '#fee6ce',
+      '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801',
+      '#bd0026', '#a50f15', '#800026', '#67000d', '#4a0008'
+    ]
+    const index = Math.min(Math.floor(intensity * 20), 19)
+    return colors[index]
   }
   
   heatmapData.forEach(([lat, lng, intensity]) => {

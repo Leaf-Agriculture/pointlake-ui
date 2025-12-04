@@ -98,13 +98,13 @@ function FieldPerformanceAnalytics() {
   
   // Campos numéricos disponíveis como layers
   const availableDataLayers = [
-    { id: 'elevation', name: 'Elevation', icon: '⛰️', unit: 'm' },
-    { id: 'speed', name: 'Speed', icon: '🚜', unit: 'km/h' },
-    { id: 'appliedRate', name: 'Applied Rate', icon: '💧', unit: '' },
-    { id: 'area', name: 'Area', icon: '📐', unit: 'ha' },
-    { id: 'yieldVolume', name: 'Yield', icon: '🌾', unit: '' },
-    { id: 'harvestMoisture', name: 'Moisture', icon: '💦', unit: '%' },
-    { id: 'seedRate', name: 'Seed Rate', icon: '🌱', unit: '' }
+    { id: 'elevation', name: 'Elevation', unit: 'm' },
+    { id: 'speed', name: 'Speed', unit: 'km/h' },
+    { id: 'appliedRate', name: 'Applied Rate', unit: '' },
+    { id: 'area', name: 'Area', unit: 'ha' },
+    { id: 'yieldVolume', name: 'Yield', unit: '' },
+    { id: 'harvestMoisture', name: 'Moisture', unit: '%' },
+    { id: 'seedRate', name: 'Seed Rate', unit: '' }
   ]
   
   // Redirecionar se não autenticado
@@ -1505,7 +1505,6 @@ function FieldPerformanceAnalytics() {
                             onChange={(e) => setShowBoundaryLayer(e.target.checked)}
                             className="rounded bg-zinc-700 border-zinc-600 text-blue-500 w-4 h-4"
                           />
-                          <span className="text-sm">🗺️</span>
                           <span className="text-xs text-zinc-300">Field Boundary</span>
                         </label>
                       )}
@@ -1536,7 +1535,6 @@ function FieldPerformanceAnalytics() {
                                   onChange={() => toggleDataLayer(layer.id)}
                                   className="rounded bg-zinc-700 border-zinc-600 text-blue-500 w-4 h-4"
                                 />
-                                <span className="text-sm">{layer.icon}</span>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-xs text-zinc-300">{layer.name}</div>
                                   {isActive && (

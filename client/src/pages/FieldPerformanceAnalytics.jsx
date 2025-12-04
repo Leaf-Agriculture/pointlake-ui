@@ -5,7 +5,6 @@ import { useLeafUser } from '../context/LeafUserContext'
 import MapComponent from '../components/MapComponent'
 import axios from 'axios'
 import { getLeafApiBaseUrl } from '../config/api'
-import L from 'leaflet'
 
 function FieldPerformanceAnalytics() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
@@ -59,45 +58,32 @@ function FieldPerformanceAnalytics() {
     }
   }, [])
 
-  // Função para focar o mapa em uma área específica
-  const focusMapOnBounds = (geometry) => {
-    if (!mapRef.current) return
-    
+  // Função para converter GeoJSON para WKT POLYGON
+  const geoJsonToWkt = (geometry) => {
     try {
-      let bounds = null
+      let geoJson = geometry
       
-      // Se for GeoJSON object
-      if (geometry.type === 'Polygon' && geometry.coordinates) {
-        const coords = geometry.coordinates[0].map(c => [c[1], c[0]]) // [lat, lng]
-        bounds = L.latLngBounds(coords)
-      }
-      // Se for string WKT POLYGON
-      else if (typeof geometry === 'string' && geometry.includes('POLYGON')) {
-        const coordMatch = geometry.match(/POLYGON\s*\(\(([^)]+)\)\)/)
-        if (coordMatch) {
-          const coords = coordMatch[1].split(',').map(coord => {
-            const [lng, lat] = coord.trim().split(' ').map(Number)
-            return [lat, lng]
-          })
-          bounds = L.latLngBounds(coords)
-        }
-      }
-      // Se for string GeoJSON
-      else if (typeof geometry === 'string') {
-        try {
-          const geoJson = JSON.parse(geometry)
-          if (geoJson.type === 'Polygon' && geoJson.coordinates) {
-            const coords = geoJson.coordinates[0].map(c => [c[1], c[0]])
-            bounds = L.latLngBounds(coords)
-          }
-        } catch {}
+      // Se for string, fazer parse
+      if (typeof geometry === 'string') {
+        geoJson = JSON.parse(geometry)
       }
       
-      if (bounds && bounds.isValid()) {
-        mapRef.current.fitBounds(bounds.pad(0.1))
+      if (geoJson.type === 'Polygon' && geoJson.coordinates && geoJson.coordinates[0]) {
+        // Converter coordenadas [lng, lat] para "lng lat" format
+        const coords = geoJson.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ')
+        return `POLYGON((${coords}))`
       }
-    } catch (err) {
-      console.error('Error focusing map:', err)
+      
+      if (geoJson.type === 'MultiPolygon' && geoJson.coordinates && geoJson.coordinates[0]) {
+        // Usar apenas o primeiro polígono do MultiPolygon
+        const coords = geoJson.coordinates[0][0].map(c => `${c[0]} ${c[1]}`).join(', ')
+        return `POLYGON((${coords}))`
+      }
+      
+      return null
+    } catch (e) {
+      console.error('Error converting GeoJSON to WKT:', e)
+      return null
     }
   }
 
@@ -137,12 +123,13 @@ function FieldPerformanceAnalytics() {
     }
   }
 
-  // Função para carregar boundary de um field e focar no mapa
+  // Função para carregar boundary de um field
   const loadFieldBoundary = async (field) => {
     if (!token || !field?.id) return
 
     setLoadingBoundary(true)
     setError(null)
+    setMapData(null) // Limpar mapa primeiro
     
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -161,43 +148,45 @@ function FieldPerformanceAnalytics() {
       console.log('🗺️ Boundary loaded:', response.data)
       setFieldBoundary(response.data)
       
-      // Preparar dados para o MapComponent e focar no mapa
+      // Converter geometry para WKT e passar para o MapComponent
       if (response.data?.geometry) {
-        let geometry = response.data.geometry
-        if (typeof geometry === 'string') {
-          try {
-            const geoJson = JSON.parse(geometry)
-            if (geoJson.type === 'Polygon' && geoJson.coordinates) {
-              const coords = geoJson.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ')
-              setMapData({ geometry: `POLYGON((${coords}))` })
-              // Focar no mapa
-              setTimeout(() => focusMapOnBounds(geoJson), 100)
-            }
-          } catch {
-            setMapData({ geometry })
-            setTimeout(() => focusMapOnBounds(geometry), 100)
-          }
-        } else if (geometry.type === 'Polygon') {
-          const coords = geometry.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ')
-          setMapData({ geometry: `POLYGON((${coords}))` })
-          // Focar no mapa
-          setTimeout(() => focusMapOnBounds(geometry), 100)
+        const wkt = geoJsonToWkt(response.data.geometry)
+        if (wkt) {
+          console.log('🗺️ WKT geometry:', wkt.substring(0, 100) + '...')
+          // Dar tempo para limpar o mapa antes de adicionar novo dado
+          setTimeout(() => {
+            setMapData({ geometry: wkt })
+          }, 50)
+        } else {
+          console.error('Could not convert geometry to WKT')
+          setError('Could not display boundary geometry')
         }
       }
       
     } catch (err) {
       console.error('Error loading boundary:', err)
       
-      // Tentar usar geometry do próprio field
+      // Tentar usar geometry do próprio field como fallback
       if (field.geometry) {
-        console.log('Using field geometry as fallback')
-        if (typeof field.geometry === 'string' && field.geometry.includes('POLYGON')) {
-          setMapData({ geometry: field.geometry })
-          setTimeout(() => focusMapOnBounds(field.geometry), 100)
-        } else if (field.geometry.type === 'Polygon') {
-          const coords = field.geometry.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ')
-          setMapData({ geometry: `POLYGON((${coords}))` })
-          setTimeout(() => focusMapOnBounds(field.geometry), 100)
+        console.log('Using field geometry as fallback:', typeof field.geometry)
+        
+        if (typeof field.geometry === 'string') {
+          if (field.geometry.includes('POLYGON')) {
+            // Já é WKT
+            setMapData({ geometry: field.geometry })
+          } else {
+            // Tentar como GeoJSON string
+            const wkt = geoJsonToWkt(field.geometry)
+            if (wkt) {
+              setMapData({ geometry: wkt })
+            }
+          }
+        } else if (field.geometry.type) {
+          // É um objeto GeoJSON
+          const wkt = geoJsonToWkt(field.geometry)
+          if (wkt) {
+            setMapData({ geometry: wkt })
+          }
         }
       } else {
         setError('This field has no active boundary')
@@ -223,8 +212,12 @@ function FieldPerformanceAnalytics() {
           setError('Invalid GeoJSON: must be a Polygon or MultiPolygon')
           return
         }
-      } catch {
-        setError('Invalid GeoJSON format')
+        if (!parsedGeometry.coordinates || !Array.isArray(parsedGeometry.coordinates)) {
+          setError('Invalid GeoJSON: missing coordinates')
+          return
+        }
+      } catch (e) {
+        setError('Invalid GeoJSON format: ' + e.message)
         return
       }
     }
@@ -245,6 +238,8 @@ function FieldPerformanceAnalytics() {
         fieldData.farmId = newFarmId.trim()
       }
 
+      console.log('Creating field:', fieldData)
+
       const createResponse = await axios.post(
         `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields`,
         fieldData,
@@ -263,6 +258,9 @@ function FieldPerformanceAnalytics() {
       // Se tiver boundary, criar também
       if (parsedGeometry && newFieldId) {
         try {
+          console.log('Creating boundary for field:', newFieldId)
+          console.log('Boundary geometry:', JSON.stringify(parsedGeometry).substring(0, 200))
+          
           await axios.put(
             `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${newFieldId}/boundary`,
             {
@@ -279,11 +277,16 @@ function FieldPerformanceAnalytics() {
           console.log('✅ Boundary created for field')
         } catch (boundaryErr) {
           console.error('Error creating boundary:', boundaryErr)
-          setError('Field created but boundary failed: ' + (boundaryErr.response?.data?.message || boundaryErr.message))
+          console.error('Response:', boundaryErr.response?.data)
+          setError('Field created but boundary failed: ' + (boundaryErr.response?.data?.message || boundaryErr.response?.data?.error || boundaryErr.message))
+          // Ainda recarregar a lista mesmo com erro no boundary
+          await loadFields()
+          setShowCreateModal(false)
+          return
         }
       }
 
-      // Sucesso
+      // Sucesso total
       setSuccessMessage('Field created successfully!')
       setTimeout(() => setSuccessMessage(null), 3000)
       
@@ -298,7 +301,8 @@ function FieldPerformanceAnalytics() {
       
     } catch (err) {
       console.error('Error creating field:', err)
-      setError(err.response?.data?.message || err.message || 'Error creating field')
+      console.error('Response:', err.response?.data)
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error creating field')
     } finally {
       setCreatingField(false)
     }
@@ -745,11 +749,12 @@ function FieldPerformanceAnalytics() {
                   value={newBoundaryGeoJson}
                   onChange={(e) => setNewBoundaryGeoJson(e.target.value)}
                   placeholder={geoJsonExample}
-                  rows={8}
+                  rows={10}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                 />
                 <p className="text-xs text-zinc-500 mt-1">
-                  Paste a valid GeoJSON Polygon or MultiPolygon geometry. Coordinates in [longitude, latitude] format.
+                  Paste a valid GeoJSON Polygon geometry. Coordinates must be in [longitude, latitude] format.
+                  The polygon must be closed (first and last coordinates must be the same).
                 </p>
               </div>
             </div>
@@ -778,12 +783,12 @@ function FieldPerformanceAnalytics() {
 
       {/* Error Toast */}
       {error && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-950 text-red-200 px-4 py-2 rounded-lg border border-red-800 flex items-center gap-2 z-50">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-red-950 text-red-200 px-4 py-2 rounded-lg border border-red-800 flex items-center gap-2 z-50 max-w-lg">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-sm">{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 text-red-400 hover:text-red-300">
+          <button onClick={() => setError(null)} className="ml-2 text-red-400 hover:text-red-300 flex-shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

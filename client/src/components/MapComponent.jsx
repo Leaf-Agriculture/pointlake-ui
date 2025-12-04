@@ -51,25 +51,11 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     })
   }
   
-  // Calcular min/max do campo para normalização
-  let fieldMin = Infinity
-  let fieldMax = -Infinity
-  if (heatmapField !== 'default') {
-    data.forEach(item => {
-      const value = item[heatmapField]
-      if (value != null && !isNaN(value)) {
-        if (value < fieldMin) fieldMin = value
-        if (value > fieldMax) fieldMax = value
-      }
-    })
-    console.log(`📊 Field "${heatmapField}" range: ${fieldMin} - ${fieldMax}`)
-  }
-  
-  // Preparar dados para o heatmap
+  // Primeiro passo: extrair coordenadas e valores brutos
   let decodedCount = 0
   let failedCount = 0
   
-  const heatmapData = data.map((item, index) => {
+  const rawPoints = data.map((item, index) => {
     let coords = null
     
     // Verificar se tem geometria binária
@@ -89,53 +75,74 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     }
     // Verificar coordenadas tradicionais
     else if (item.latitude && item.longitude) {
-      coords = [item.latitude, item.longitude]
+      coords = [parseFloat(item.latitude), parseFloat(item.longitude)]
       decodedCount++
     } else if (item.lat && item.lng) {
-      coords = [item.lat, item.lng]
+      coords = [parseFloat(item.lat), parseFloat(item.lng)]
       decodedCount++
     }
     
-    if (coords) {
-      // Calcular intensidade baseada no campo selecionado
-      let intensity = 1.0
-      
-      if (heatmapField !== 'default' && item[heatmapField] != null) {
-        // Normalizar valor do campo para 0-3 range
-        const value = item[heatmapField]
-        if (fieldMax > fieldMin) {
-          intensity = ((value - fieldMin) / (fieldMax - fieldMin)) * 2.5 + 0.5
-        } else {
-          intensity = 1.5
-        }
+    if (!coords) return null
+    
+    // Extrair valor bruto para normalização posterior
+    let rawValue = 0.5 // valor padrão
+    
+    if (heatmapField !== 'default' && item[heatmapField] != null) {
+      rawValue = parseFloat(item[heatmapField])
+    } else {
+      // Default: usar appliedRate ou elevation ou speed como valor
+      if (item.appliedRate != null) {
+        rawValue = parseFloat(item.appliedRate)
+      } else if (item.elevation != null) {
+        rawValue = parseFloat(item.elevation)
+      } else if (item.speed != null) {
+        rawValue = parseFloat(item.speed)
+      } else if (item.yieldVolume != null) {
+        rawValue = parseFloat(item.yieldVolume)
       } else {
-        // Default: baseado no tipo de operação
-        if (item.operationType === 'CropProtection') {
-          intensity = 1.2
-        } else if (item.operationType === 'Planting') {
-          intensity = 1.5
-        } else if (item.operationType === 'Harvesting') {
-          intensity = 1.8
-        }
-        
-        // Fator baseado na taxa aplicada
-        if (item.appliedRate && item.appliedRate > 0) {
-          intensity *= Math.min(1 + (item.appliedRate / 100), 2.0)
-        }
-        
-        // Fator baseado na área
-        if (item.area && item.area > 0) {
-          intensity *= Math.min(1 + (item.area * 100), 1.5)
-        }
+        // Baseado no tipo de operação
+        if (item.operationType === 'CropProtection') rawValue = 0.3
+        else if (item.operationType === 'Planting') rawValue = 0.5
+        else if (item.operationType === 'Harvesting') rawValue = 0.7
+        else rawValue = 0.5
       }
-      
-      return [coords[0], coords[1], Math.min(intensity, 3.0)]
     }
     
-    return null
+    return { coords, rawValue: isNaN(rawValue) ? 0.5 : rawValue }
   }).filter(Boolean)
   
-  console.log(`📊 Heatmap stats: ${decodedCount} decoded, ${failedCount} failed, ${heatmapData.length} valid for heatmap`)
+  console.log(`📊 Heatmap stats: ${decodedCount} decoded, ${failedCount} failed, ${rawPoints.length} valid points`)
+  
+  if (rawPoints.length === 0) {
+    console.log('❌ No valid heatmap data - returning null')
+    return null
+  }
+  
+  // Segundo passo: calcular min/max para normalização
+  const values = rawPoints.map(p => p.rawValue)
+  const minValue = Math.min(...values)
+  const maxValue = Math.max(...values)
+  const range = maxValue - minValue
+  
+  console.log(`📊 Value range for "${heatmapField}": min=${minValue.toFixed(2)}, max=${maxValue.toFixed(2)}, range=${range.toFixed(2)}`)
+  
+  // Terceiro passo: normalizar valores para 0.1-1.0 range
+  const heatmapData = rawPoints.map(point => {
+    let normalizedIntensity
+    if (range > 0) {
+      // Normalizar para 0.1-1.0 (evitar 0 que não aparece)
+      normalizedIntensity = 0.1 + ((point.rawValue - minValue) / range) * 0.9
+    } else {
+      // Todos os valores são iguais
+      normalizedIntensity = 0.5
+    }
+    return [point.coords[0], point.coords[1], normalizedIntensity]
+  })
+  
+  // Log distribuição de intensidades
+  const intensities = heatmapData.map(p => p[2])
+  const avgIntensity = intensities.reduce((a, b) => a + b, 0) / intensities.length
+  console.log(`🎨 Intensity distribution: min=${Math.min(...intensities).toFixed(2)}, avg=${avgIntensity.toFixed(2)}, max=${Math.max(...intensities).toFixed(2)}`)
   
   if (heatmapData.length === 0) {
     console.log('❌ No valid heatmap data - returning null')
@@ -145,23 +152,29 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   console.log(`✅ Heatmap data prepared: ${heatmapData.length} valid points`)
   
   // Configurações avançadas do heatmap - adaptativas para qualquer número de pontos
+  const pointCount = rawPoints.length
   const heatmapOptions = {
-    radius: data.length > 10000 ? 20 : data.length > 5000 ? 25 : data.length > 1000 ? 30 : data.length > 100 ? 35 : 50,
-    blur: data.length > 10000 ? 15 : data.length > 5000 ? 20 : data.length > 1000 ? 25 : data.length > 100 ? 30 : 35,
+    radius: pointCount > 10000 ? 15 : pointCount > 5000 ? 20 : pointCount > 1000 ? 25 : pointCount > 100 ? 30 : 40,
+    blur: pointCount > 10000 ? 10 : pointCount > 5000 ? 15 : pointCount > 1000 ? 18 : pointCount > 100 ? 22 : 25,
     maxZoom: 18,
-    max: 3.0,
-    minOpacity: 0.4, // Opacidade mínima aumentada para visibilidade
+    max: 1.0, // Valor máximo normalizado
+    minOpacity: 0.3,
     gradient: {
-      0.0: '#0000ff',  // Azul para baixa intensidade
-      0.2: '#00ffff',  // Ciano
-      0.4: '#00ff00',  // Verde
-      0.6: '#ffff00',  // Amarelo
-      0.8: '#ff8000',  // Laranja
-      1.0: '#ff0000'   // Vermelho para alta intensidade
+      0.0: '#313695',  // Azul escuro (valores baixos)
+      0.1: '#4575b4',  // Azul
+      0.2: '#74add1',  // Azul claro
+      0.3: '#abd9e9',  // Ciano claro
+      0.4: '#e0f3f8',  // Quase branco
+      0.5: '#ffffbf',  // Amarelo claro (médio)
+      0.6: '#fee090',  // Amarelo
+      0.7: '#fdae61',  // Laranja claro
+      0.8: '#f46d43',  // Laranja
+      0.9: '#d73027',  // Vermelho
+      1.0: '#a50026'   // Vermelho escuro (valores altos)
     }
   }
   
-  console.log(`🎨 Heatmap options: radius=${heatmapOptions.radius}, blur=${heatmapOptions.blur}, points=${heatmapData.length}`)
+  console.log(`🎨 Heatmap options: radius=${heatmapOptions.radius}, blur=${heatmapOptions.blur}, points=${pointCount}`)
   
   // Verificar se L.heatLayer está disponível
   if (L.heatLayer) {
@@ -177,23 +190,34 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     console.warn('⚠️ L.heatLayer não disponível, usando circleMarkers como fallback')
   }
   
-  // Fallback: usar circleMarkers coloridos
+  // Fallback: usar circleMarkers coloridos com gradiente similar ao heatmap
   console.log('🔵 Usando circleMarkers como fallback para visualização')
   const layerGroup = L.layerGroup()
   
+  // Função para interpolar cor baseada na intensidade (0-1)
+  const getColor = (intensity) => {
+    // Gradiente de azul escuro -> amarelo -> vermelho escuro
+    if (intensity < 0.25) {
+      return '#4575b4' // Azul
+    } else if (intensity < 0.5) {
+      return '#abd9e9' // Ciano
+    } else if (intensity < 0.75) {
+      return '#fee090' // Amarelo
+    } else {
+      return '#d73027' // Vermelho
+    }
+  }
+  
   heatmapData.forEach(([lat, lng, intensity]) => {
-    // Cor baseada na intensidade (0-3 -> azul para vermelho)
-    const normalizedIntensity = Math.min(intensity / 3, 1)
-    const hue = (1 - normalizedIntensity) * 240 // 240 = azul, 0 = vermelho
-    const color = `hsl(${hue}, 100%, 50%)`
+    const color = getColor(intensity)
     
     const circle = L.circleMarker([lat, lng], {
-      radius: 6,
+      radius: pointCount > 1000 ? 4 : pointCount > 100 ? 6 : 8,
       fillColor: color,
       color: color,
       weight: 1,
-      opacity: 0.8,
-      fillOpacity: 0.6
+      opacity: 0.9,
+      fillOpacity: 0.7
     })
     layerGroup.addLayer(circle)
   })

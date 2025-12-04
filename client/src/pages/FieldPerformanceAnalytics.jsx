@@ -292,6 +292,35 @@ function FieldPerformanceAnalytics() {
           setError('Invalid GeoJSON: missing coordinates')
           return
         }
+        
+        // Validação mais rigorosa do formato das coordenadas
+        if (parsedGeometry.type === 'Polygon') {
+          // Polygon deve ter coordinates como array de rings, onde cada ring é array de [lng, lat]
+          const ring = parsedGeometry.coordinates[0]
+          if (!Array.isArray(ring)) {
+            setError('Invalid GeoJSON Polygon: coordinates must be an array of rings. Did you forget the outer brackets [[...]]?')
+            return
+          }
+          // Cada posição no ring deve ser um array [lng, lat]
+          if (!Array.isArray(ring[0]) || ring[0].length < 2) {
+            // Tentar corrigir automaticamente: adicionar o nível de array faltante
+            console.log('Auto-fixing GeoJSON: wrapping coordinates in extra array')
+            parsedGeometry.coordinates = [parsedGeometry.coordinates]
+          }
+        }
+        
+        // Verificar se o polígono está fechado (primeiro = último ponto)
+        if (parsedGeometry.type === 'Polygon') {
+          const ring = parsedGeometry.coordinates[0]
+          const first = ring[0]
+          const last = ring[ring.length - 1]
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            // Fechar o polígono automaticamente
+            console.log('Auto-fixing GeoJSON: closing polygon')
+            ring.push([...first])
+          }
+        }
+        
       } catch (e) {
         setError('Invalid GeoJSON format: ' + e.message)
         return

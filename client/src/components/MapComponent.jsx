@@ -164,12 +164,42 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   console.log(`🎨 Heatmap options: radius=${heatmapOptions.radius}, blur=${heatmapOptions.blur}, points=${heatmapData.length}`)
   
   // Verificar se L.heatLayer está disponível
-  if (!L.heatLayer) {
-    console.error('leaflet.heat plugin não está carregado. L.heatLayer não está disponível.')
-    return null
+  if (L.heatLayer) {
+    console.log('✅ L.heatLayer disponível, criando heatmap...')
+    try {
+      const layer = L.heatLayer(heatmapData, heatmapOptions)
+      console.log('✅ Heatmap layer criado:', layer)
+      return layer
+    } catch (err) {
+      console.error('❌ Erro ao criar heatLayer:', err)
+    }
+  } else {
+    console.warn('⚠️ L.heatLayer não disponível, usando circleMarkers como fallback')
   }
   
-  return L.heatLayer(heatmapData, heatmapOptions)
+  // Fallback: usar circleMarkers coloridos
+  console.log('🔵 Usando circleMarkers como fallback para visualização')
+  const layerGroup = L.layerGroup()
+  
+  heatmapData.forEach(([lat, lng, intensity]) => {
+    // Cor baseada na intensidade (0-3 -> azul para vermelho)
+    const normalizedIntensity = Math.min(intensity / 3, 1)
+    const hue = (1 - normalizedIntensity) * 240 // 240 = azul, 0 = vermelho
+    const color = `hsl(${hue}, 100%, 50%)`
+    
+    const circle = L.circleMarker([lat, lng], {
+      radius: 6,
+      fillColor: color,
+      color: color,
+      weight: 1,
+      opacity: 0.8,
+      fillOpacity: 0.6
+    })
+    layerGroup.addLayer(circle)
+  })
+  
+  console.log(`✅ CircleMarker fallback criado com ${heatmapData.length} markers`)
+  return layerGroup
 }
 
 // Função para decodificar geometria binária (base64)
@@ -372,10 +402,13 @@ function MapComponent({ data, mapRef: externalMapRef }) {
         
         // Renderizar pontos como heatmap
         if (data.points.length > 0) {
+          console.log('🔥 Creating heatmap layer for', data.points.length, 'points with field:', data.heatmapField || 'default')
           const heatmapLayer = createAdvancedHeatmap(data.points, mapInstance.current, data.heatmapField || 'default')
+          console.log('🔥 Heatmap layer result:', heatmapLayer)
           if (heatmapLayer) {
             mapInstance.current.addLayer(heatmapLayer)
             markersRef.current.push(heatmapLayer)
+            console.log('✅ Heatmap layer added to map')
             
             // Estender bounds com pontos
             data.points.forEach(item => {

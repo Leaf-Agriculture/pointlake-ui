@@ -304,10 +304,12 @@ function FieldPerformanceAnalytics() {
 
   // Calcular área do field
   const getFieldArea = (field) => {
-    if (field.area) {
-      const hectares = field.area
-      const acres = hectares * 2.47105
-      return `${hectares.toFixed(2)} ha / ${acres.toFixed(2)} ac`
+    if (field && field.area != null) {
+      const hectares = parseFloat(field.area)
+      if (!isNaN(hectares) && hectares > 0) {
+        const acres = hectares * 2.47105
+        return `${hectares.toFixed(2)} ha / ${acres.toFixed(2)} ac`
+      }
     }
     return '-'
   }

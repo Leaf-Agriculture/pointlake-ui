@@ -35,21 +35,49 @@ const parsePolygonWKT = (wktString) => {
 const createAdvancedHeatmap = (data, mapInstance) => {
   if (!data || !Array.isArray(data) || data.length === 0) return null
   
-  console.log(`Creating advanced heatmap with ${data.length} points`)
+  console.log(`🔥 Creating advanced heatmap with ${data.length} points`)
+  
+  // Log primeiro ponto para debug
+  if (data[0]) {
+    console.log('🔍 First point sample:', {
+      hasGeometry: !!data[0].geometry,
+      geometryType: typeof data[0].geometry,
+      geometryLength: data[0].geometry?.length,
+      hasLatitude: !!data[0].latitude,
+      hasLat: !!data[0].lat,
+      point: JSON.stringify(data[0]).substring(0, 200)
+    })
+  }
   
   // Preparar dados para o heatmap
+  let decodedCount = 0
+  let failedCount = 0
+  
   const heatmapData = data.map((item, index) => {
     let coords = null
     
     // Verificar se tem geometria binária
     if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
       coords = decodeBinaryGeometry(item.geometry)
+      if (coords) {
+        decodedCount++
+        if (index < 3) {
+          console.log(`📍 Point ${index} decoded: [${coords[0]}, ${coords[1]}]`)
+        }
+      } else {
+        failedCount++
+        if (failedCount <= 3) {
+          console.log(`❌ Failed to decode point ${index}, geometry: ${item.geometry?.substring(0, 50)}...`)
+        }
+      }
     }
     // Verificar coordenadas tradicionais
     else if (item.latitude && item.longitude) {
       coords = [item.latitude, item.longitude]
+      decodedCount++
     } else if (item.lat && item.lng) {
       coords = [item.lat, item.lng]
+      decodedCount++
     }
     
     if (coords) {
@@ -81,9 +109,14 @@ const createAdvancedHeatmap = (data, mapInstance) => {
     return null
   }).filter(Boolean)
   
-  if (heatmapData.length === 0) return null
+  console.log(`📊 Heatmap stats: ${decodedCount} decoded, ${failedCount} failed, ${heatmapData.length} valid for heatmap`)
   
-  console.log(`Heatmap data prepared: ${heatmapData.length} valid points`)
+  if (heatmapData.length === 0) {
+    console.log('❌ No valid heatmap data - returning null')
+    return null
+  }
+  
+  console.log(`✅ Heatmap data prepared: ${heatmapData.length} valid points`)
   
   // Configurações avançadas do heatmap - adaptativas para qualquer número de pontos
   const heatmapOptions = {

@@ -81,6 +81,25 @@ function FieldPerformanceAnalytics() {
   const [newSeasonActivityTypes, setNewSeasonActivityTypes] = useState([])
   const [selectedSeason, setSelectedSeason] = useState(null)
   
+  // Estados para Layers (visualização)
+  const [showBoundaryLayer, setShowBoundaryLayer] = useState(true)
+  const [showPointsLayer, setShowPointsLayer] = useState(true)
+  const [heatmapField, setHeatmapField] = useState('default') // 'default', 'elevation', 'speed', 'appliedRate', 'area', 'yieldVolume'
+  const [pinnedLayers, setPinnedLayers] = useState([]) // layers fixadas
+  const [boundaryData, setBoundaryData] = useState(null) // dados do boundary separados
+  
+  // Campos numéricos disponíveis para heatmap
+  const numericHeatmapFields = [
+    { id: 'default', name: 'Default (Operation Type)', color: 'blue' },
+    { id: 'elevation', name: 'Elevation', color: 'amber', unit: 'm' },
+    { id: 'speed', name: 'Speed', color: 'emerald', unit: 'km/h' },
+    { id: 'appliedRate', name: 'Applied Rate', color: 'purple', unit: '' },
+    { id: 'area', name: 'Area', color: 'cyan', unit: 'ha' },
+    { id: 'yieldVolume', name: 'Yield Volume', color: 'orange', unit: '' },
+    { id: 'harvestMoisture', name: 'Harvest Moisture', color: 'sky', unit: '%' },
+    { id: 'seedRate', name: 'Seed Rate', color: 'lime', unit: '' }
+  ]
+  
   // Redirecionar se não autenticado
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -164,10 +183,8 @@ function FieldPerformanceAnalytics() {
     console.log(`🔍 Filtered ${analysisPoints.length} -> ${filtered.length} points`)
     setFilteredPoints(filtered)
     
-    // Atualizar mapa com pontos filtrados
-    if (filtered.length > 0) {
-      setMapData(filtered)
-    }
+    // Atualizar mapa com pontos filtrados usando o sistema de layers
+    updateMapDisplay(boundaryData, filtered)
   }, [analysisPoints, selectedFilters, numericFilters])
 
   // Extrair filtros disponíveis dos pontos
@@ -306,7 +323,6 @@ function FieldPerformanceAnalytics() {
 
     setLoadingBoundary(true)
     setError(null)
-    setMapData(null) // Limpar mapa primeiro
     
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -325,15 +341,16 @@ function FieldPerformanceAnalytics() {
       console.log('🗺️ Boundary loaded:', response.data)
       setFieldBoundary(response.data)
       
-      // Converter geometry para WKT e passar para o MapComponent
+      // Converter geometry para WKT e salvar separadamente
       if (response.data?.geometry) {
         const wkt = geoJsonToWkt(response.data.geometry)
         if (wkt) {
           console.log('🗺️ WKT geometry:', wkt.substring(0, 100) + '...')
-          // Dar tempo para limpar o mapa antes de adicionar novo dado
-          setTimeout(() => {
-            setMapData({ geometry: wkt })
-          }, 50)
+          setBoundaryData({ geometry: wkt })
+          // Mostrar boundary inicialmente se layer estiver ativa
+          if (showBoundaryLayer) {
+            updateMapDisplay({ geometry: wkt }, null)
+          }
         } else {
           console.error('Could not convert geometry to WKT')
           setError('Could not display boundary geometry')
@@ -346,23 +363,22 @@ function FieldPerformanceAnalytics() {
       // Tentar usar geometry do próprio field como fallback
       if (field.geometry) {
         console.log('Using field geometry as fallback:', typeof field.geometry)
+        let wkt = null
         
         if (typeof field.geometry === 'string') {
           if (field.geometry.includes('POLYGON')) {
-            // Já é WKT
-            setMapData({ geometry: field.geometry })
+            wkt = field.geometry
           } else {
-            // Tentar como GeoJSON string
-            const wkt = geoJsonToWkt(field.geometry)
-            if (wkt) {
-              setMapData({ geometry: wkt })
-            }
+            wkt = geoJsonToWkt(field.geometry)
           }
         } else if (field.geometry.type) {
-          // É um objeto GeoJSON
-          const wkt = geoJsonToWkt(field.geometry)
-          if (wkt) {
-            setMapData({ geometry: wkt })
+          wkt = geoJsonToWkt(field.geometry)
+        }
+        
+        if (wkt) {
+          setBoundaryData({ geometry: wkt })
+          if (showBoundaryLayer) {
+            updateMapDisplay({ geometry: wkt }, null)
           }
         }
       } else {
@@ -372,6 +388,43 @@ function FieldPerformanceAnalytics() {
       setLoadingBoundary(false)
     }
   }
+
+  // Função para atualizar o display do mapa com layers combinadas
+  const updateMapDisplay = (boundary, points) => {
+    const currentBoundary = boundary || boundaryData
+    const currentPoints = points || filteredPoints
+    
+    // Se temos pontos e layer de pontos está ativa, mostrar pontos
+    if (showPointsLayer && currentPoints && currentPoints.length > 0) {
+      // Preparar pontos com campo de heatmap selecionado
+      const pointsWithHeatmapValue = currentPoints.map(p => ({
+        ...p,
+        heatmapField: heatmapField,
+        heatmapValue: heatmapField !== 'default' ? p[heatmapField] : null
+      }))
+      
+      // Combinar boundary + pontos se ambas layers estão ativas
+      if (showBoundaryLayer && currentBoundary?.geometry) {
+        setMapData({
+          boundary: currentBoundary.geometry,
+          points: pointsWithHeatmapValue,
+          heatmapField: heatmapField
+        })
+      } else {
+        setMapData(pointsWithHeatmapValue)
+      }
+    } else if (showBoundaryLayer && currentBoundary?.geometry) {
+      // Apenas boundary
+      setMapData({ geometry: currentBoundary.geometry })
+    } else {
+      setMapData(null)
+    }
+  }
+
+  // Atualizar mapa quando layers mudarem
+  useEffect(() => {
+    updateMapDisplay(boundaryData, filteredPoints)
+  }, [showBoundaryLayer, showPointsLayer, heatmapField, boundaryData])
 
   // Função para criar análise do projeto
   const handleCreateAnalysis = async () => {
@@ -1395,6 +1448,90 @@ function FieldPerformanceAnalytics() {
             {/* Mapa */}
             <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all`}>
               <MapComponent data={mapData} mapRef={mapRef} />
+              
+              {/* Painel de Controle de Layers */}
+              {(boundaryData || analysisPoints.length > 0) && (
+                <div className="absolute top-2 right-2 z-20">
+                  <div className="bg-zinc-900/95 backdrop-blur rounded-lg border border-zinc-700 shadow-lg">
+                    {/* Header */}
+                    <div className="px-3 py-2 border-b border-zinc-700 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                      </svg>
+                      <span className="text-xs font-medium text-zinc-300">Layers</span>
+                    </div>
+                    
+                    <div className="p-2 space-y-2 max-w-xs">
+                      {/* Boundary Layer */}
+                      {boundaryData && (
+                        <label className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showBoundaryLayer}
+                            onChange={(e) => setShowBoundaryLayer(e.target.checked)}
+                            className="rounded bg-zinc-700 border-zinc-600 text-blue-500"
+                          />
+                          <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                          </svg>
+                          <span className="text-xs text-zinc-300">Field Boundary</span>
+                        </label>
+                      )}
+                      
+                      {/* Points Layer */}
+                      {analysisPoints.length > 0 && (
+                        <>
+                          <label className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-800 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showPointsLayer}
+                              onChange={(e) => setShowPointsLayer(e.target.checked)}
+                              className="rounded bg-zinc-700 border-zinc-600 text-emerald-500"
+                            />
+                            <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="text-xs text-zinc-300">Points ({filteredPoints.length})</span>
+                          </label>
+                          
+                          {/* Heatmap Field Selector */}
+                          {showPointsLayer && (
+                            <div className="px-2 pt-1 border-t border-zinc-700">
+                              <div className="text-xs text-zinc-500 mb-1">Heatmap by:</div>
+                              <select
+                                value={heatmapField}
+                                onChange={(e) => setHeatmapField(e.target.value)}
+                                className="w-full px-2 py-1 text-xs bg-zinc-800 border border-zinc-600 rounded text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              >
+                                {numericHeatmapFields.map(field => (
+                                  <option key={field.id} value={field.id}>
+                                    {field.name}
+                                  </option>
+                                ))}
+                              </select>
+                              
+                              {/* Stats do campo selecionado */}
+                              {heatmapField !== 'default' && (
+                                <div className="mt-1 text-xs text-zinc-500">
+                                  {(() => {
+                                    const values = filteredPoints.map(p => p[heatmapField]).filter(v => v != null)
+                                    if (values.length === 0) return 'No data'
+                                    const min = Math.min(...values)
+                                    const max = Math.max(...values)
+                                    const avg = values.reduce((a, b) => a + b, 0) / values.length
+                                    return `Min: ${min.toFixed(1)} | Avg: ${avg.toFixed(1)} | Max: ${max.toFixed(1)}`
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Loading Overlay */}
               {(loadingBoundary || loadingAnalysis) && (

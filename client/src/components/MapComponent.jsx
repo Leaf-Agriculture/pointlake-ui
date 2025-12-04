@@ -32,10 +32,10 @@ const parsePolygonWKT = (wktString) => {
 }
 
 // Função para criar heatmap com interpolação avançada
-const createAdvancedHeatmap = (data, mapInstance) => {
+const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   if (!data || !Array.isArray(data) || data.length === 0) return null
   
-  console.log(`🔥 Creating advanced heatmap with ${data.length} points`)
+  console.log(`🔥 Creating advanced heatmap with ${data.length} points, field: ${heatmapField}`)
   
   // Log primeiro ponto para debug
   if (data[0]) {
@@ -45,8 +45,24 @@ const createAdvancedHeatmap = (data, mapInstance) => {
       geometryLength: data[0].geometry?.length,
       hasLatitude: !!data[0].latitude,
       hasLat: !!data[0].lat,
+      heatmapField: heatmapField,
+      heatmapValue: data[0][heatmapField],
       point: JSON.stringify(data[0]).substring(0, 200)
     })
+  }
+  
+  // Calcular min/max do campo para normalização
+  let fieldMin = Infinity
+  let fieldMax = -Infinity
+  if (heatmapField !== 'default') {
+    data.forEach(item => {
+      const value = item[heatmapField]
+      if (value != null && !isNaN(value)) {
+        if (value < fieldMin) fieldMin = value
+        if (value > fieldMax) fieldMax = value
+      }
+    })
+    console.log(`📊 Field "${heatmapField}" range: ${fieldMin} - ${fieldMax}`)
   }
   
   // Preparar dados para o heatmap
@@ -81,26 +97,36 @@ const createAdvancedHeatmap = (data, mapInstance) => {
     }
     
     if (coords) {
-      // Calcular intensidade baseada em diferentes fatores
+      // Calcular intensidade baseada no campo selecionado
       let intensity = 1.0
       
-      // Fator baseado no tipo de operação
-      if (item.operationType === 'CropProtection') {
-        intensity = 1.2
-      } else if (item.operationType === 'Planting') {
-        intensity = 1.5
-      } else if (item.operationType === 'Harvesting') {
-        intensity = 1.8
-      }
-      
-      // Fator baseado na taxa aplicada
-      if (item.appliedRate && item.appliedRate > 0) {
-        intensity *= Math.min(1 + (item.appliedRate / 100), 2.0)
-      }
-      
-      // Fator baseado na área
-      if (item.area && item.area > 0) {
-        intensity *= Math.min(1 + (item.area * 100), 1.5)
+      if (heatmapField !== 'default' && item[heatmapField] != null) {
+        // Normalizar valor do campo para 0-3 range
+        const value = item[heatmapField]
+        if (fieldMax > fieldMin) {
+          intensity = ((value - fieldMin) / (fieldMax - fieldMin)) * 2.5 + 0.5
+        } else {
+          intensity = 1.5
+        }
+      } else {
+        // Default: baseado no tipo de operação
+        if (item.operationType === 'CropProtection') {
+          intensity = 1.2
+        } else if (item.operationType === 'Planting') {
+          intensity = 1.5
+        } else if (item.operationType === 'Harvesting') {
+          intensity = 1.8
+        }
+        
+        // Fator baseado na taxa aplicada
+        if (item.appliedRate && item.appliedRate > 0) {
+          intensity *= Math.min(1 + (item.appliedRate / 100), 2.0)
+        }
+        
+        // Fator baseado na área
+        if (item.area && item.area > 0) {
+          intensity *= Math.min(1 + (item.area * 100), 1.5)
+        }
       }
       
       return [coords[0], coords[1], Math.min(intensity, 3.0)]
@@ -312,8 +338,55 @@ function MapComponent({ data, mapRef: externalMapRef }) {
     if (!data) return
 
     try {
-      // Verificar se há geometria POLYGON nos dados
-      if (data.geometry && typeof data.geometry === 'string' && data.geometry.includes('POLYGON')) {
+      // Novo formato: { boundary: wkt, points: array, heatmapField: string }
+      if (data.boundary && data.points) {
+        console.log('📍 Rendering combined boundary + points')
+        const bounds = L.latLngBounds()
+        
+        // Renderizar boundary
+        const boundaryCoords = parsePolygonWKT(data.boundary)
+        if (boundaryCoords) {
+          const polygon = L.polygon(boundaryCoords, {
+            color: '#3388ff',
+            fillColor: '#3388ff',
+            fillOpacity: 0.1,
+            weight: 2,
+            dashArray: '5, 5'
+          }).addTo(mapInstance.current)
+          polygon.bindPopup('Field Boundary')
+          markersRef.current.push(polygon)
+          bounds.extend(polygon.getBounds())
+        }
+        
+        // Renderizar pontos como heatmap
+        if (data.points.length > 0) {
+          const heatmapLayer = createAdvancedHeatmap(data.points, mapInstance.current, data.heatmapField || 'default')
+          if (heatmapLayer) {
+            mapInstance.current.addLayer(heatmapLayer)
+            markersRef.current.push(heatmapLayer)
+            
+            // Estender bounds com pontos
+            data.points.forEach(item => {
+              let coords = null
+              if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+                coords = decodeBinaryGeometry(item.geometry)
+              } else if (item.latitude && item.longitude) {
+                coords = [item.latitude, item.longitude]
+              } else if (item.lat && item.lng) {
+                coords = [item.lat, item.lng]
+              }
+              if (coords) bounds.extend(coords)
+            })
+          }
+        }
+        
+        // Ajustar zoom para mostrar tudo
+        if (!bounds.isEmpty()) {
+          mapInstance.current.fitBounds(bounds.pad(0.05))
+        }
+      }
+      // Verificar se há geometria POLYGON nos dados (formato antigo)
+      else if (data.geometry && typeof data.geometry === 'string' && data.geometry.includes('POLYGON')) {
         const coords = parsePolygonWKT(data.geometry)
         if (coords) {
           // Criar polígono no mapa
@@ -359,7 +432,9 @@ function MapComponent({ data, mapRef: externalMapRef }) {
         // Sempre usar heatmap avançado para qualquer número de pontos
         console.log('🔥 Usando heatmap avançado para visualização');
         
-        const heatmapLayer = createAdvancedHeatmap(data, mapInstance.current);
+        // Verificar se os pontos têm campo de heatmap específico
+        const heatmapField = data[0]?.heatmapField || 'default'
+        const heatmapLayer = createAdvancedHeatmap(data, mapInstance.current, heatmapField);
         if (heatmapLayer) {
           mapInstance.current.addLayer(heatmapLayer);
           markersRef.current.push(heatmapLayer);

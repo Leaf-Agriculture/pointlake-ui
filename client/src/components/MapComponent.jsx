@@ -118,36 +118,51 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
     return null
   }
   
-  // Segundo passo: calcular min/max para normalização
+  // Segundo passo: calcular percentis para normalização robusta (evita outliers)
   const values = rawPoints.map(p => p.rawValue)
-  const minValue = Math.min(...values)
-  const maxValue = Math.max(...values)
+  const sortedValues = [...values].sort((a, b) => a - b)
+  
+  // Usar percentis 2% e 98% para ignorar outliers extremos
+  const p2Index = Math.floor(sortedValues.length * 0.02)
+  const p98Index = Math.min(Math.floor(sortedValues.length * 0.98), sortedValues.length - 1)
+  const minValue = sortedValues[p2Index]
+  const maxValue = sortedValues[p98Index]
   const range = maxValue - minValue
   
-  console.log(`📊 Value range for "${heatmapField}": min=${minValue.toFixed(4)}, max=${maxValue.toFixed(4)}, range=${range.toFixed(4)}`)
+  // Stats completos para debug
+  const absMin = sortedValues[0]
+  const absMax = sortedValues[sortedValues.length - 1]
+  const median = sortedValues[Math.floor(sortedValues.length / 2)]
   
-  // Terceiro passo: normalizar valores para 0.0-1.0 range usando distribuição linear
+  console.log(`📊 Raw data stats for "${heatmapField}":`)
+  console.log(`   Absolute: min=${absMin?.toFixed(4)}, max=${absMax?.toFixed(4)}`)
+  console.log(`   Percentile (p2-p98): min=${minValue?.toFixed(4)}, max=${maxValue?.toFixed(4)}, range=${range?.toFixed(4)}`)
+  console.log(`   Median: ${median?.toFixed(4)}`)
+  
+  // Terceiro passo: normalizar valores para 0.0-1.0 range usando percentis
   const heatmapData = rawPoints.map(point => {
     let normalizedIntensity
-    if (range > 0) {
-      // Normalizar para 0.0-1.0 com distribuição linear completa
+    if (range > 0.0001) { // Precisa ter alguma variação significativa
+      // Normalizar usando percentis - valores fora do range são clampados
       normalizedIntensity = (point.rawValue - minValue) / range
     } else {
-      // Todos os valores são iguais - usar 0.5
-      normalizedIntensity = 0.5
+      // Sem variação significativa - usar índice baseado na posição
+      // Isso cria um gradiente artificial baseado na ordem dos pontos
+      const idx = rawPoints.indexOf(point)
+      normalizedIntensity = idx / rawPoints.length
     }
-    // Garantir que está no range [0, 1]
+    // Clampar para [0, 1]
     normalizedIntensity = Math.max(0, Math.min(1, normalizedIntensity))
     return [point.coords[0], point.coords[1], normalizedIntensity]
   })
   
-  // Log distribuição de intensidades para debug
+  // Log distribuição final de intensidades
   const intensities = heatmapData.map(p => p[2])
   const sortedIntensities = [...intensities].sort((a, b) => a - b)
-  const p10 = sortedIntensities[Math.floor(sortedIntensities.length * 0.1)]
-  const p50 = sortedIntensities[Math.floor(sortedIntensities.length * 0.5)]
-  const p90 = sortedIntensities[Math.floor(sortedIntensities.length * 0.9)]
-  console.log(`🎨 Intensity percentiles: p10=${p10?.toFixed(2)}, p50=${p50?.toFixed(2)}, p90=${p90?.toFixed(2)}`)
+  const ip10 = sortedIntensities[Math.floor(sortedIntensities.length * 0.1)]
+  const ip50 = sortedIntensities[Math.floor(sortedIntensities.length * 0.5)]
+  const ip90 = sortedIntensities[Math.floor(sortedIntensities.length * 0.9)]
+  console.log(`🎨 Final intensity distribution: p10=${ip10?.toFixed(3)}, p50=${ip50?.toFixed(3)}, p90=${ip90?.toFixed(3)}`)
   
   if (heatmapData.length === 0) {
     console.log('❌ No valid heatmap data - returning null')
@@ -156,86 +171,68 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   
   console.log(`✅ Heatmap data prepared: ${heatmapData.length} valid points`)
   
-  // Configurações avançadas do heatmap - adaptativas para qualquer número de pontos
+  // Configurações do heatmap - NÃO usar heatLayer, usar circleMarkers direto para controle total
   const pointCount = rawPoints.length
-  const heatmapOptions = {
-    radius: pointCount > 10000 ? 12 : pointCount > 5000 ? 15 : pointCount > 1000 ? 20 : pointCount > 100 ? 25 : 35,
-    blur: pointCount > 10000 ? 8 : pointCount > 5000 ? 10 : pointCount > 1000 ? 12 : pointCount > 100 ? 15 : 18,
-    maxZoom: 18,
-    max: 1.0, // Valor máximo normalizado
-    minOpacity: 0.5,
-    // Rampa de 20 níveis de cores para máximo contraste (azul escuro → vermelho escuro)
-    gradient: {
-      0.00: '#08306b',  // Azul muito escuro
-      0.05: '#08519c',  // Azul escuro
-      0.10: '#2171b5',  // Azul
-      0.15: '#4292c6',  // Azul médio
-      0.20: '#6baed6',  // Azul claro
-      0.25: '#9ecae1',  // Azul bem claro
-      0.30: '#c6dbef',  // Azul quase branco
-      0.35: '#deebf7',  // Branco azulado
-      0.40: '#fff5eb',  // Branco amarelado
-      0.45: '#fee6ce',  // Creme
-      0.50: '#fdd0a2',  // Laranja claro
-      0.55: '#fdae6b',  // Laranja
-      0.60: '#fd8d3c',  // Laranja forte
-      0.65: '#f16913',  // Laranja escuro
-      0.70: '#d94801',  // Laranja avermelhado
-      0.75: '#bd0026',  // Vermelho
-      0.80: '#a50f15',  // Vermelho médio
-      0.85: '#800026',  // Vermelho escuro
-      0.90: '#67000d',  // Vermelho muito escuro
-      1.00: '#4a0008'   // Marrom avermelhado (máximo)
-    }
-  }
   
-  console.log(`🎨 Heatmap options: radius=${heatmapOptions.radius}, blur=${heatmapOptions.blur}, points=${pointCount}`)
+  // Usar CircleMarkers diretamente para ter controle total sobre as cores
+  console.log(`🎨 Creating visualization with ${pointCount} points, using direct CircleMarkers for maximum contrast`)
   
-  // Verificar se L.heatLayer está disponível
-  if (L.heatLayer) {
-    console.log('✅ L.heatLayer disponível, criando heatmap...')
-    try {
-      const layer = L.heatLayer(heatmapData, heatmapOptions)
-      console.log('✅ Heatmap layer criado:', layer)
-      return layer
-    } catch (err) {
-      console.error('❌ Erro ao criar heatLayer:', err)
-    }
-  } else {
-    console.warn('⚠️ L.heatLayer não disponível, usando circleMarkers como fallback')
-  }
-  
-  // Fallback: usar circleMarkers coloridos com gradiente de 20 níveis
-  console.log('🔵 Usando circleMarkers como fallback para visualização')
   const layerGroup = L.layerGroup()
   
-  // Função para interpolar cor baseada na intensidade (0-1) com 20 níveis
-  const getColor = (intensity) => {
+  // Função para obter cor baseada na intensidade (0-1) com 20 níveis distintos
+  const getColorForIntensity = (intensity) => {
+    // 20 cores distintas de azul escuro a vermelho escuro
     const colors = [
-      '#08306b', '#08519c', '#2171b5', '#4292c6', '#6baed6',
-      '#9ecae1', '#c6dbef', '#deebf7', '#fff5eb', '#fee6ce',
-      '#fdd0a2', '#fdae6b', '#fd8d3c', '#f16913', '#d94801',
-      '#bd0026', '#a50f15', '#800026', '#67000d', '#4a0008'
+      '#08306b', // 0.00-0.05 Azul muito escuro
+      '#08519c', // 0.05-0.10 Azul escuro
+      '#2171b5', // 0.10-0.15 Azul
+      '#4292c6', // 0.15-0.20 Azul médio
+      '#6baed6', // 0.20-0.25 Azul claro
+      '#9ecae1', // 0.25-0.30 Azul bem claro
+      '#c6dbef', // 0.30-0.35 Azul quase branco
+      '#e0f3db', // 0.35-0.40 Verde claro
+      '#a8ddb5', // 0.40-0.45 Verde
+      '#7bccc4', // 0.45-0.50 Verde água
+      '#4eb3d3', // 0.50-0.55 Ciano
+      '#fee090', // 0.55-0.60 Amarelo claro
+      '#fdae6b', // 0.60-0.65 Laranja claro
+      '#fd8d3c', // 0.65-0.70 Laranja
+      '#f16913', // 0.70-0.75 Laranja escuro
+      '#d94801', // 0.75-0.80 Laranja avermelhado
+      '#bd0026', // 0.80-0.85 Vermelho
+      '#a50f15', // 0.85-0.90 Vermelho médio
+      '#800026', // 0.90-0.95 Vermelho escuro
+      '#67000d'  // 0.95-1.00 Vermelho muito escuro
     ]
     const index = Math.min(Math.floor(intensity * 20), 19)
     return colors[index]
   }
   
+  // Tamanho do marcador baseado na quantidade de pontos
+  const markerRadius = pointCount > 5000 ? 3 : pointCount > 1000 ? 4 : pointCount > 100 ? 6 : 8
+  
   heatmapData.forEach(([lat, lng, intensity]) => {
-    const color = getColor(intensity)
+    const color = getColorForIntensity(intensity)
     
     const circle = L.circleMarker([lat, lng], {
-      radius: pointCount > 1000 ? 4 : pointCount > 100 ? 6 : 8,
+      radius: markerRadius,
       fillColor: color,
-      color: color,
-      weight: 1,
-      opacity: 0.9,
-      fillOpacity: 0.7
+      color: '#333',
+      weight: 0.5,
+      opacity: 1,
+      fillOpacity: 0.85
     })
+    
+    // Popup com valor
+    const originalPoint = rawPoints.find(p => p.coords[0] === lat && p.coords[1] === lng)
+    if (originalPoint) {
+      circle.bindPopup(`Value: ${originalPoint.rawValue.toFixed(2)}<br>Intensity: ${(intensity * 100).toFixed(0)}%`)
+    }
+    
     layerGroup.addLayer(circle)
   })
   
-  console.log(`✅ CircleMarker fallback criado com ${heatmapData.length} markers`)
+  console.log(`✅ CircleMarker layer created with ${heatmapData.length} markers, radius=${markerRadius}`)
   return layerGroup
 }
 

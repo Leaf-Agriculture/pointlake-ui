@@ -968,7 +968,10 @@ function FieldPerformanceAnalytics() {
       )
 
       console.log('📊 Analysis data received:', response.data)
-      setAnalysisData(response.data)
+
+      // Processar dados para criar timeline
+      const processedData = processAnalyticsData(response.data)
+      setAnalysisData(processedData)
       setShowAnalysisResults(true)
       
       // Extrair pontos da resposta (pode vir em diferentes formatos)

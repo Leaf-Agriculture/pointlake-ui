@@ -36,6 +36,7 @@ function FieldPerformanceAnalytics() {
   // Estados para análise simplificada
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [analysisData, setAnalysisData] = useState(null)
+  const [analysisSampleRate, setAnalysisSampleRate] = useState(10)
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
 
   // Estados para comparações salvas

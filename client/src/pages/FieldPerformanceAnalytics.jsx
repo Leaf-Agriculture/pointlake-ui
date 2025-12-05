@@ -598,7 +598,11 @@ function FieldPerformanceAnalytics() {
 
   // Função para carregar boundary de um field
   const loadFieldBoundary = async (field) => {
-    if (!token || !field?.id) return
+    console.log('🗺️ loadFieldBoundary called for field:', field.name, field.id)
+    if (!token || !field?.id) {
+      console.log('🗺️ loadFieldBoundary aborted - missing token or field id')
+      return
+    }
 
     setLoadingBoundary(true)
     setError(null)
@@ -688,10 +692,18 @@ function FieldPerformanceAnalytics() {
 
     console.log('🌱 Starting soil data load with geometry type:', fieldGeometry.type || 'unknown')
     setLoadingSoil(true)
-    
+
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
+
+      console.log('🌱 API Configuration for soil data:', {
+        environment: env,
+        baseUrl: baseUrl,
+        tokenPresent: !!token,
+        tokenLength: token.length,
+        queryUrl: `${baseUrl}/services/pointlake/api/v2/query`
+      })
       
       // Extrair coordenadas do polígono
       let coords = null
@@ -747,9 +759,44 @@ function FieldPerformanceAnalytics() {
       let fieldWktFilter = ''
       if (fieldGeometry) {
         const fieldWkt = geoJsonToWkt(fieldGeometry)
+        console.log('🌱 WKT conversion:', {
+          inputGeometryType: fieldGeometry.type,
+          wktResult: fieldWkt ? fieldWkt.substring(0, 100) + '...' : 'null',
+          wktLength: fieldWkt?.length || 0
+        })
         if (fieldWkt) {
           fieldWktFilter = ` AND ST_Contains(ST_GeomFromText('${fieldWkt}'), ST_Point(${point.lng}, ${point.lat}))`
+          console.log('🌱 Field filter applied:', fieldWktFilter.substring(0, 150) + '...')
+        } else {
+          console.log('⚠️ No WKT filter applied - geoJsonToWkt returned null')
         }
+      } else {
+        console.log('⚠️ No field geometry for WKT filter')
+      }
+
+      // Primeiro testar uma query simples para verificar se a API está funcionando
+      console.log('🌱 Testing basic soil query first...')
+      try {
+        const testQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois LIMIT 1`
+        const testResponse = await axios.get(
+          `${baseUrl}/services/pointlake/api/v2/query`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'accept': 'application/json'
+            },
+            params: {
+              sql: testQuery
+            }
+          }
+        )
+        console.log('✅ Basic soil query test successful:', testResponse.data?.length || 0, 'results')
+      } catch (testErr) {
+        console.error('❌ Basic soil query test failed:', {
+          error: testErr.message,
+          status: testErr.response?.status,
+          data: testErr.response?.data
+        })
       }
 
       const queryPromises = gridPoints.map(async (point, index) => {
@@ -1708,6 +1755,7 @@ function FieldPerformanceAnalytics() {
 
   // Selecionar field
   const handleSelectField = (field) => {
+    console.log('🏗️ handleSelectField called with:', field.name)
     console.log('🏗️ Selecting field:', field.name, '- will load soil data automatically')
     setSelectedField(field)
     setAnalysisData(null)

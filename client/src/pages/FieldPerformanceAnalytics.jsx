@@ -312,6 +312,38 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Função para obter o polygon WKT para filtrar analytics
+  // Prioriza zone visível, senão usa boundary do field
+  const getAnalyticsPolygon = () => {
+    // Verificar se há alguma zone visível
+    const visibleZoneIds = Object.entries(visibleZones)
+      .filter(([_, isVisible]) => isVisible)
+      .map(([zoneId]) => zoneId)
+    
+    if (visibleZoneIds.length > 0) {
+      // Usar a primeira zone visível
+      const zone = fieldZones.find(z => z.id === visibleZoneIds[0])
+      if (zone?.geometry) {
+        console.log('📍 Using zone geometry for analytics filter:', zone.name)
+        // Zone geometry pode ser GeoJSON ou WKT
+        if (typeof zone.geometry === 'string' && zone.geometry.includes('POLYGON')) {
+          return zone.geometry
+        }
+        // Tentar converter de GeoJSON
+        const wkt = geoJsonToWkt(zone.geometry)
+        if (wkt) return wkt
+      }
+    }
+    
+    // Fallback: usar boundary do field
+    if (boundaryData?.geometry) {
+      console.log('📍 Using field boundary for analytics filter')
+      return boundaryData.geometry
+    }
+    
+    return null
+  }
+
   // Função para carregar campos
   const loadFields = async () => {
     if (!token || !selectedLeafUserId) return
@@ -552,14 +584,30 @@ function FieldPerformanceAnalytics() {
       
       // Formatar datas para ISO
       const startDateISO = `${analysisStartDate}T00:00:00.000Z`
-      const endDateISO = `${analysisEndDate}T00:00:00.000Z`
+      const endDateISO = `${analysisEndDate}T23:59:59.000Z`
+      
+      // Obter polygon para filtrar (zone visível ou field boundary)
+      const polygon = getAnalyticsPolygon()
       
       console.log('📊 Creating analysis with params:', {
         userId: selectedLeafUserId,
         sampleRate: analysisSampleRate,
         startDate: startDateISO,
-        endDate: endDateISO
+        endDate: endDateISO,
+        polygon: polygon ? polygon.substring(0, 50) + '...' : null
       })
+
+      // Preparar parâmetros
+      const params = {
+        samplerate: analysisSampleRate,
+        startDate: startDateISO,
+        endDate: endDateISO
+      }
+      
+      // Adicionar polygon se disponível
+      if (polygon) {
+        params.polygon = polygon
+      }
 
       const response = await axios.get(
         `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
@@ -568,11 +616,7 @@ function FieldPerformanceAnalytics() {
             'Authorization': `Bearer ${token}`,
             'accept': 'application/json'
           },
-          params: {
-            samplerate: analysisSampleRate,
-            startDate: startDateISO,
-            endDate: endDateISO
-          }
+          params
         }
       )
 
@@ -1158,15 +1202,31 @@ function FieldPerformanceAnalytics() {
       
       // Formatar datas para ISO
       const startDateISO = `${startDate}T00:00:00.000Z`
-      const endDateISO = `${endDate}T00:00:00.000Z`
+      const endDateISO = `${endDate}T23:59:59.000Z`
+      
+      // Obter polygon para filtrar (zone visível ou field boundary)
+      const polygon = getAnalyticsPolygon()
       
       console.log('📊 Running season analysis:', {
         seasonName: season.name,
         userId: selectedLeafUserId,
         sampleRate: analysisSampleRate,
         startDate: startDateISO,
-        endDate: endDateISO
+        endDate: endDateISO,
+        polygon: polygon ? polygon.substring(0, 50) + '...' : null
       })
+
+      // Preparar parâmetros
+      const params = {
+        samplerate: analysisSampleRate,
+        startDate: startDateISO,
+        endDate: endDateISO
+      }
+      
+      // Adicionar polygon se disponível
+      if (polygon) {
+        params.polygon = polygon
+      }
 
       const response = await axios.get(
         `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
@@ -1175,11 +1235,7 @@ function FieldPerformanceAnalytics() {
             'Authorization': `Bearer ${token}`,
             'accept': 'application/json'
           },
-          params: {
-            samplerate: analysisSampleRate,
-            startDate: startDateISO,
-            endDate: endDateISO
-          }
+          params
         }
       )
 

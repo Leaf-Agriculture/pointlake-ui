@@ -2060,6 +2060,41 @@ function FieldPerformanceAnalytics() {
                         </label>
                       )}
                       
+                      {/* Visible Zones - mostrar zones que estão ativas */}
+                      {fieldZones.length > 0 && Object.values(visibleZones).some(v => v) && (
+                        <>
+                          <div className="border-t border-zinc-700 my-1"></div>
+                          <div className="text-xs text-zinc-500 px-2 py-1">Zones</div>
+                          {fieldZones.filter(zone => visibleZones[zone.id]).map(zone => (
+                            <label 
+                              key={zone.id} 
+                              className="flex items-center gap-2 px-2 py-1.5 rounded bg-purple-950/50 border border-purple-800/50 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={true}
+                                onChange={() => {
+                                  setVisibleZones(prev => ({
+                                    ...prev,
+                                    [zone.id]: false
+                                  }))
+                                }}
+                                className="rounded bg-purple-700 border-purple-600 text-purple-500 w-4 h-4"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs text-purple-300 truncate">{zone.name}</div>
+                                {zone.note && (
+                                  <div className="text-[10px] text-purple-400/60 truncate">{zone.note}</div>
+                                )}
+                              </div>
+                              <svg className="w-3 h-3 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                              </svg>
+                            </label>
+                          ))}
+                        </>
+                      )}
+                      
                       {/* Data Layers - cada campo numérico é uma layer separada */}
                       {analysisPoints.length > 0 && (
                         <>

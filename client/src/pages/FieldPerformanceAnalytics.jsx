@@ -1641,221 +1641,7 @@ function FieldPerformanceAnalytics() {
     }
   }
 
-  // Rodar análise para uma zone específica
-  const handleRunZoneAnalysis = async (zone) => {
-    if (!token || !selectedLeafUserId || !zone) return
 
-    // Definir a zone como visível para filtrar
-    setVisibleZones(prev => ({
-      ...prev,
-      [zone.id]: true
-    }))
-
-    setLoadingAnalysis(true)
-    setError(null)
-
-    // Resetar drill-down da timeline para nova análise
-    resetTimelineDrill()
-
-    try {
-      const env = getEnvironment ? getEnvironment() : 'prod'
-      const baseUrl = getLeafApiBaseUrl(env)
-
-      // Formatar datas para ISO
-      const startDateISO = `${analysisStartDate}T00:00:00.000Z`
-      const endDateISO = `${analysisEndDate}T23:59:59.000Z`
-
-      // Obter polygon para filtrar (forçar uso da geometria desta zona específica)
-      const polygon = getAnalyticsPolygon(zone)
-
-      console.log('📊 Running zone analysis:', {
-        zoneName: zone.name,
-        userId: selectedLeafUserId,
-        sampleRate: analysisSampleRate,
-        startDate: startDateISO,
-        endDate: endDateISO,
-        polygon: polygon ? polygon.substring(0, 50) + '...' : null
-      })
-
-      // Preparar parâmetros
-      const params = {
-        samplerate: analysisSampleRate,
-        startDate: startDateISO,
-        endDate: endDateISO
-      }
-
-      // Adicionar polygon se disponível
-      if (polygon) {
-        params.polygon = polygon
-      }
-
-      const response = await axios.get(
-        `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'accept': 'application/json'
-          },
-          params
-        }
-      )
-
-      console.log('✅ Zone analysis completed:', response.data)
-
-      // Processar dados
-      const processedData = processAnalyticsData(response.data)
-      setAnalysisData(processedData)
-
-      // Mostrar resultados
-      setShowAnalysisResults(true)
-      setSuccessMessage(`Analysis completed for zone: ${zone.name}`)
-
-    } catch (err) {
-      console.error('Error running zone analysis:', err)
-      setError(err.response?.data?.message || 'Error running zone analysis')
-    } finally {
-      setLoadingAnalysis(false)
-    }
-  }
-
-  // Rodar análise para uma season específica
-  const handleRunSeasonAnalysis = async (season) => {
-    if (!token || !selectedLeafUserId || !season) return
-
-    // Selecionar a season
-    setSelectedSeason(season)
-    
-    // Extrair datas da season
-    const startDate = season.startDate?.split('T')[0] || '2020-01-01'
-    const endDate = season.endDate?.split('T')[0] || '2025-12-01'
-    
-    // Atualizar estados de data
-    setAnalysisStartDate(startDate)
-    setAnalysisEndDate(endDate)
-
-    setLoadingAnalysis(true)
-    setError(null)
-
-    // Resetar drill-down da timeline para nova análise
-    resetTimelineDrill()
-    
-    try {
-      const env = getEnvironment ? getEnvironment() : 'prod'
-      const baseUrl = getLeafApiBaseUrl(env)
-      
-      // Formatar datas para ISO
-      const startDateISO = `${startDate}T00:00:00.000Z`
-      const endDateISO = `${endDate}T23:59:59.000Z`
-      
-      // Obter polygon para filtrar (zone visível ou field boundary)
-      const polygon = getAnalyticsPolygon()
-      
-      console.log('📊 Running season analysis:', {
-        seasonName: season.name,
-        userId: selectedLeafUserId,
-        sampleRate: analysisSampleRate,
-        startDate: startDateISO,
-        endDate: endDateISO,
-        polygon: polygon ? polygon.substring(0, 50) + '...' : null
-      })
-
-      // Preparar parâmetros
-      const params = {
-        samplerate: analysisSampleRate,
-        startDate: startDateISO,
-        endDate: endDateISO
-      }
-      
-      // Adicionar polygon se disponível
-      if (polygon) {
-        params.polygon = polygon
-      }
-
-      const response = await axios.get(
-        `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'accept': 'application/json'
-          },
-          params
-        }
-      )
-
-      console.log('📊 Season analysis data received:', response.data)
-      setAnalysisData(response.data)
-      setShowAnalysisResults(true)
-      
-      // Extrair pontos da resposta
-      let pointsData = []
-      if (Array.isArray(response.data)) {
-        pointsData = response.data
-      } else if (response.data?.points && Array.isArray(response.data.points)) {
-        pointsData = response.data.points
-      } else if (response.data?.data && Array.isArray(response.data.data)) {
-        pointsData = response.data.data
-      }
-      
-      console.log(`📊 Found ${pointsData.length} points for season "${season.name}"`)
-      
-      // Transformar pontos
-      if (pointsData.length > 0) {
-        const transformedPoints = pointsData.map((point, index) => {
-          let lat = point.latitude || point.lat
-          let lng = point.longitude || point.lng || point.lon
-          
-          if ((!lat || !lng) && point.geometry) {
-            return {
-              ...point,
-              geometry: point.geometry,
-              id: point.id || index
-            }
-          }
-          
-          if (lat && lng) {
-            return {
-              ...point,
-              latitude: parseFloat(lat),
-              longitude: parseFloat(lng),
-              lat: parseFloat(lat),
-              lng: parseFloat(lng),
-              id: point.id || index
-            }
-          }
-          
-          return {
-            ...point,
-            id: point.id || index
-          }
-        }).filter(p => p.geometry || (p.latitude && p.longitude))
-        
-        if (transformedPoints.length > 0) {
-          setAnalysisPoints(transformedPoints)
-          setFilteredPoints(transformedPoints)
-          extractAvailableFilters(transformedPoints)
-          setMapData(transformedPoints)
-          setShowFilters(true)
-          setSuccessMessage(`Season "${season.name}" analysis: ${transformedPoints.length} points loaded.`)
-        } else {
-          setAnalysisPoints([])
-          setFilteredPoints([])
-          setSuccessMessage(`Season "${season.name}": ${pointsData.length} points found but no valid coordinates.`)
-        }
-      } else {
-        setAnalysisPoints([])
-        setFilteredPoints([])
-        setSuccessMessage(`Season "${season.name}": No points found for this period.`)
-      }
-      
-      setTimeout(() => setSuccessMessage(null), 5000)
-      
-    } catch (err) {
-      console.error('Error running season analysis:', err)
-      setError(err.response?.data?.message || err.message || 'Error running analysis')
-    } finally {
-      setLoadingAnalysis(false)
-    }
-  }
 
   // Selecionar field
   const handleSelectField = (field) => {
@@ -2236,41 +2022,18 @@ function FieldPerformanceAnalytics() {
                                     </svg>
                                     <span className={`truncate ${isVisible ? 'text-purple-300' : 'text-zinc-300'}`}>{zone.name}</span>
                                   </div>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleRunZoneAnalysis(zone)
-                                      }}
-                                      disabled={loadingAnalysis}
-                                      className={`p-1 rounded transition ${
-                                        isVisible
-                                          ? 'text-purple-300 hover:text-purple-200 hover:bg-purple-900/50'
-                                          : 'text-zinc-400 hover:text-purple-400 opacity-0 group-hover:opacity-100'
-                                      }`}
-                                      title="Run Analysis"
-                                    >
-                                      {loadingAnalysis ? (
-                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400"></div>
-                                      ) : (
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                      )}
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleDeleteZone(zone.id)
-                                      }}
-                                      className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                                    >
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteZone(zone.id)
+                                    }}
+                                    className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                    title="Delete zone"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
                                 </div>
                               )
                             })}
@@ -2327,41 +2090,18 @@ function FieldPerformanceAnalytics() {
                                         </span>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleRunSeasonAnalysis(season)
-                                        }}
-                                        disabled={loadingAnalysis}
-                                        className={`p-1 rounded transition ${
-                                          isSelected
-                                            ? 'text-blue-300 hover:text-blue-200 hover:bg-blue-900/50'
-                                            : 'text-zinc-400 hover:text-blue-400 opacity-0 group-hover:opacity-100'
-                                        }`}
-                                        title="Run Analysis"
-                                      >
-                                        {loadingAnalysis && selectedSeason?.id === season.id ? (
-                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-400"></div>
-                                        ) : (
-                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                          </svg>
-                                        )}
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleDeleteSeason(season.id)
-                                        }}
-                                        className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                                      >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                      </button>
-                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteSeason(season.id)
+                                      }}
+                                      className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                      title="Delete season"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
                                   </div>
                                 )
                               })}

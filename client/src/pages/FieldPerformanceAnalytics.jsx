@@ -37,6 +37,8 @@ function FieldPerformanceAnalytics() {
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [analysisData, setAnalysisData] = useState(null)
   const [analysisSampleRate, setAnalysisSampleRate] = useState(10)
+  const [analysisStartDate, setAnalysisStartDate] = useState('2020-01-01')
+  const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
 
   // Estados para comparações salvas
@@ -922,8 +924,15 @@ function FieldPerformanceAnalytics() {
       const baseUrl = getLeafApiBaseUrl(env)
 
       // Usar datas da season
-      const startDateISO = `${season.startDate}T00:00:00.000Z`
-      const endDateISO = `${season.endDate}T23:59:59.000Z`
+      const startDate = season.startDate?.split('T')[0] || '2020-01-01'
+      const endDate = season.endDate?.split('T')[0] || '2025-12-01'
+
+      // Atualizar estados de data para display
+      setAnalysisStartDate(startDate)
+      setAnalysisEndDate(endDate)
+
+      const startDateISO = `${startDate}T00:00:00.000Z`
+      const endDateISO = `${endDate}T23:59:59.000Z`
 
       // Obter polygon (zone específica ou visão geral do field)
       const polygon = selectedZone ? getAnalyticsPolygon(selectedZone) : null

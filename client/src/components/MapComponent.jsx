@@ -116,8 +116,8 @@ const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   if (rawPoints.length === 0) {
     console.log('❌ No valid heatmap data - returning null')
     return null
-  }
-  
+      }
+      
   // Segundo passo: calcular média e desvio padrão para remover outliers
   const values = rawPoints.map(p => p.rawValue)
   const n = values.length
@@ -977,14 +977,14 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         
         // Decodificar todos os pontos primeiro
         const decodedPoints = data.map(item => {
-          let coords = null;
-          if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
-            coords = decodeBinaryGeometry(item.geometry);
-          } else if (item.latitude && item.longitude) {
+            let coords = null;
+            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+              coords = decodeBinaryGeometry(item.geometry);
+            } else if (item.latitude && item.longitude) {
             coords = [parseFloat(item.latitude), parseFloat(item.longitude)];
-          } else if (item.lat && item.lng) {
+            } else if (item.lat && item.lng) {
             coords = [parseFloat(item.lat), parseFloat(item.lng)];
-          }
+            }
           return coords ? { ...item, decodedCoords: coords } : null;
         }).filter(Boolean);
         

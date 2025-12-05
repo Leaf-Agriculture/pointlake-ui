@@ -319,6 +319,76 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Processar dados do analytics e criar timeline
+  const processAnalyticsData = (data) => {
+    // Extrair pontos da resposta (pode vir em diferentes formatos)
+    let pointsData = []
+    if (Array.isArray(data)) {
+      pointsData = data
+    } else if (data?.points && Array.isArray(data.points)) {
+      pointsData = data.points
+    } else if (data?.data && Array.isArray(data.data)) {
+      pointsData = data.data
+    }
+
+    // Criar timeline baseada nas datas dos pontos
+    const timelineData = createTimelineFromPoints(pointsData)
+
+    return {
+      raw: data,
+      points: pointsData,
+      timeline: timelineData
+    }
+  }
+
+  // Criar dados da timeline a partir dos pontos
+  const createTimelineFromPoints = (points) => {
+    if (!points || points.length === 0) return []
+
+    // Extrair todas as datas dos pontos
+    const dates = points.map(point => {
+      // Tentar diferentes formatos de data
+      let date = null
+      if (point.timestamp) {
+        date = new Date(point.timestamp)
+      } else if (point.date) {
+        date = new Date(point.date)
+      } else if (point.createdAt) {
+        date = new Date(point.createdAt)
+      } else if (point.time) {
+        date = new Date(point.time)
+      }
+
+      return date && !isNaN(date.getTime()) ? date : null
+    }).filter(date => date !== null)
+
+    if (dates.length === 0) return []
+
+    // Ordenar datas
+    dates.sort((a, b) => a - b)
+
+    // Criar buckets por dia
+    const dayBuckets = {}
+    dates.forEach(date => {
+      const dayKey = date.toISOString().split('T')[0] // YYYY-MM-DD
+      if (!dayBuckets[dayKey]) {
+        dayBuckets[dayKey] = {
+          date: dayKey,
+          count: 0,
+          fullDate: new Date(dayKey)
+        }
+      }
+      dayBuckets[dayKey].count++
+    })
+
+    // Converter para array e ordenar
+    const timelinePoints = Object.values(dayBuckets).sort((a, b) =>
+      new Date(a.date) - new Date(b.date)
+    )
+
+    return timelinePoints
+  }
+
   // Função para obter o polygon WKT para filtrar analytics
   // Prioriza zone visível, senão usa boundary do field
   const getAnalyticsPolygon = () => {
@@ -2776,6 +2846,92 @@ function FieldPerformanceAnalytics() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Timeline - Data Availability */}
+                  {analysisData?.timeline && analysisData.timeline.length > 0 && (
+                    <div className="bg-zinc-800 rounded-lg p-3 mb-3">
+                      <h4 className="text-xs font-semibold text-zinc-400 uppercase mb-3 flex items-center gap-2">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Data Timeline
+                        <span className="text-xs text-zinc-500">({analysisData.timeline.length} days)</span>
+                      </h4>
+
+                      <div className="relative">
+                        {/* Timeline container with horizontal scroll */}
+                        <div className="overflow-x-auto pb-2">
+                          <div className="flex gap-1 min-w-max" style={{ width: 'max-content' }}>
+                            {analysisData.timeline.map((day, index) => {
+                              const isToday = day.date === new Date().toISOString().split('T')[0]
+                              const intensity = Math.min(day.count / 10, 1) // Normalize intensity (max 10 points per day)
+
+                              return (
+                                <div
+                                  key={day.date}
+                                  className="flex flex-col items-center gap-1 min-w-[40px]"
+                                  title={`${day.date}: ${day.count} points`}
+                                >
+                                  {/* Day bar */}
+                                  <div
+                                    className={`w-8 h-12 rounded-sm cursor-pointer transition-all hover:scale-110 ${
+                                      isToday ? 'ring-2 ring-blue-400' : ''
+                                    }`}
+                                    style={{
+                                      backgroundColor: `rgba(59, 130, 246, ${0.3 + intensity * 0.7})`,
+                                      border: isToday ? '2px solid rgb(59 130 246)' : '1px solid rgb(75 85 99)'
+                                    }}
+                                    onClick={() => {
+                                      // Optional: filter points by this date when clicked
+                                      console.log('Clicked day:', day.date, 'Points:', day.count)
+                                    }}
+                                  >
+                                    {/* Point count indicator */}
+                                    {day.count > 0 && (
+                                      <div className="w-full h-full flex items-end justify-center pb-1">
+                                        <div
+                                          className="w-1 bg-white rounded-full opacity-80"
+                                          style={{ height: `${Math.max(2, (day.count / Math.max(...analysisData.timeline.map(d => d.count))) * 8)}px` }}
+                                        ></div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Date label */}
+                                  <div className="text-[10px] text-zinc-500 transform -rotate-45 origin-top whitespace-nowrap">
+                                    {new Date(day.date).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric'
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Timeline axis */}
+                        <div className="mt-2 pt-2 border-t border-zinc-700">
+                          <div className="flex justify-between text-xs text-zinc-500">
+                            <span>{analysisData.timeline.length > 0 ? new Date(analysisData.timeline[0].date).toLocaleDateString() : ''}</span>
+                            <span>{analysisData.timeline.length > 0 ? new Date(analysisData.timeline[analysisData.timeline.length - 1].date).toLocaleDateString() : ''}</span>
+                          </div>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="mt-2 flex items-center justify-center gap-4 text-xs text-zinc-500">
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 bg-blue-500/30 border border-zinc-600 rounded-sm"></div>
+                            <span>Data available</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 bg-zinc-700 border border-zinc-600 rounded-sm"></div>
+                            <span>No data</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Filters Panel */}
                   {showFilters && (

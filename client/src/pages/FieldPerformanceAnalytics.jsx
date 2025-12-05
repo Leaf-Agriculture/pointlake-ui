@@ -494,11 +494,11 @@ function FieldPerformanceAnalytics() {
       const minLat = Math.min(...lats)
       const maxLat = Math.max(...lats)
       
-      // Criar grid de pontos dentro do bounding box (5x5 grid = 25 pontos)
-      const gridSize = 5
+      // Criar grid de pontos dentro do bounding box (mais denso para melhor cobertura)
+      const gridSize = 8 // 8x8 = 64 pontos para melhor cobertura
       const lngStep = (maxLng - minLng) / (gridSize + 1)
       const latStep = (maxLat - minLat) / (gridSize + 1)
-      
+
       const gridPoints = []
       for (let i = 1; i <= gridSize; i++) {
         for (let j = 1; j <= gridSize; j++) {
@@ -508,39 +508,57 @@ function FieldPerformanceAnalytics() {
           })
         }
       }
-      
-      // Adicionar o centróide também
-      const centroidLng = (minLng + maxLng) / 2
-      const centroidLat = (minLat + maxLat) / 2
-      gridPoints.push({ lng: centroidLng, lat: centroidLat })
-      
-      console.log('🌱 Fetching soil data with', gridPoints.length, 'grid points in single query')
-      
-      // Construir uma única query com múltiplos OR para todos os pontos
-      const pointConditions = gridPoints
-        .map(p => `ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${p.lng}, ${p.lat}))`)
-        .join(' OR ')
-      
-      const sqlQuery = `SELECT DISTINCT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ${pointConditions}`
-      
-      console.log('🌱 SQL Query length:', sqlQuery.length, 'chars')
-      
-      const response = await axios.get(
-        `${baseUrl}/services/pointlake/api/v2/query`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'accept': 'application/json'
-          },
-          params: {
-            sql: sqlQuery
-          }
+
+      // Adicionar pontos extras nos cantos e centro
+      gridPoints.push({ lng: minLng, lat: minLat }) // canto inferior esquerdo
+      gridPoints.push({ lng: maxLng, lat: minLat }) // canto inferior direito
+      gridPoints.push({ lng: minLng, lat: maxLat }) // canto superior esquerdo
+      gridPoints.push({ lng: maxLng, lat: maxLat }) // canto superior direito
+      gridPoints.push({ lng: (minLng + maxLng) / 2, lat: (minLat + maxLat) / 2 }) // centro
+
+      console.log('🌱 Fetching soil data for', gridPoints.length, 'grid points (parallel queries)')
+
+      // Fazer consultas paralelas para cada ponto (mais confiável)
+      const uniqueSoilData = new Map()
+
+      const queryPromises = gridPoints.map(async (point, index) => {
+        try {
+          // Para cada ponto, buscar o polígono de solo mais próximo
+          const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${point.lng}, ${point.lat}))`
+
+          const response = await axios.get(
+            `${baseUrl}/services/pointlake/api/v2/query`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'accept': 'application/json'
+              },
+              params: {
+                sql: sqlQuery
+              }
+            }
+          )
+
+          return response.data || []
+        } catch (err) {
+          console.warn(`Point ${index + 1}/${gridPoints.length} failed:`, err.message)
+          return []
         }
-      )
-      
-      const soilArray = response.data || []
-      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons')
-      
+      })
+
+      // Aguardar todas as consultas
+      const results = await Promise.all(queryPromises)
+
+      // Consolidar resultados únicos por mukey
+      results.flat().forEach(soil => {
+        if (soil.mukey && !uniqueSoilData.has(soil.mukey)) {
+          uniqueSoilData.set(soil.mukey, soil)
+        }
+      })
+
+      const soilArray = Array.from(uniqueSoilData.values())
+      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons from', gridPoints.length, 'grid points')
+
       setSoilData(soilArray)
       // Mostrar layer automaticamente se tiver dados
       if (soilArray.length > 0) {
@@ -1047,7 +1065,7 @@ function FieldPerformanceAnalytics() {
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
-      
+
       const response = await axios.get(
         `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/seasons`,
         {
@@ -1063,8 +1081,11 @@ function FieldPerformanceAnalytics() {
 
       console.log('📅 Seasons loaded:', response.data)
       const seasonsData = Array.isArray(response.data) ? response.data : (response.data?.content || [])
-      setSeasons(seasonsData)
-      
+
+      // Filtro adicional no frontend para garantir que só seasons do field correto sejam mostradas
+      const filteredSeasons = seasonsData.filter(season => season.fieldId === fieldId)
+      setSeasons(filteredSeasons)
+
     } catch (err) {
       console.error('Error loading seasons:', err)
       setSeasons([])
@@ -1497,6 +1518,9 @@ function FieldPerformanceAnalytics() {
     setSelectedSeason(null)
     setIsDrawingZone(false)
     setDrawnZoneCoords([])
+    // Limpar seasons e zones antes de carregar novas
+    setSeasons([])
+    setFieldZones([])
     loadFieldBoundary(field)
     loadFieldSeasons(field.id)
     loadFieldZones(field.id)

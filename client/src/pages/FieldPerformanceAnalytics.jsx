@@ -625,7 +625,7 @@ function FieldPerformanceAnalytics() {
         const wkt = geoJsonToWkt(response.data.geometry)
         if (wkt) {
           console.log('🗺️ WKT geometry:', wkt.substring(0, 100) + '...')
-          setBoundaryData({ geometry: wkt })
+          setBoundaryData({ geometry: wkt, originalGeometry: response.data.geometry })
           // Mostrar boundary inicialmente se layer estiver ativa
           if (showBoundaryLayer) {
             updateMapDisplay({ geometry: wkt }, null)
@@ -672,8 +672,12 @@ function FieldPerformanceAnalytics() {
 
   // Função para buscar dados de solo (SSURGO) baseado na geometria do field
   const loadSoilData = async (fieldGeometry) => {
-    if (!token || !fieldGeometry) return
-    
+    if (!token || !fieldGeometry) {
+      console.log('⚠️ loadSoilData: Missing token or geometry')
+      return
+    }
+
+    console.log('🌱 Starting soil data load with geometry:', typeof fieldGeometry, fieldGeometry?.type || 'unknown type')
     setLoadingSoil(true)
     
     try {
@@ -775,7 +779,7 @@ function FieldPerformanceAnalytics() {
       })
 
       const soilArray = Array.from(uniqueSoilData.values())
-      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons from', gridPoints.length, 'grid points')
+      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons from', gridPoints.length, 'grid points within boundary')
 
       setSoilData(soilArray)
       // Mostrar layer automaticamente se tiver dados
@@ -922,6 +926,35 @@ function FieldPerformanceAnalytics() {
         endDate: endDateISO,
         polygon: polygon ? 'Geometry filter applied' : 'No geometry filter'
       })
+
+      // Carregar dados de solo para a geometria selecionada (field ou zone)
+      let geometryForSoil = null
+
+      if (selectedZone) {
+        // Zone geometry - converter WKT para GeoJSON se necessário
+        if (typeof selectedZone.geometry === 'string') {
+          // Tentar parse como GeoJSON primeiro
+          try {
+            geometryForSoil = JSON.parse(selectedZone.geometry)
+          } catch {
+            // Se não conseguir parsear, assumir que já é WKT válido
+            geometryForSoil = selectedZone.geometry
+          }
+        } else {
+          // Já é GeoJSON
+          geometryForSoil = selectedZone.geometry
+        }
+      } else if (boundaryData?.originalGeometry) {
+        // Field boundary - usar geometria original em GeoJSON
+        geometryForSoil = boundaryData.originalGeometry
+      }
+
+      if (geometryForSoil) {
+        console.log('🌱 Loading soil data for:', selectedZone ? `Zone ${selectedZone.name}` : 'Field Overview')
+        loadSoilData(geometryForSoil)
+      } else {
+        console.log('⚠️ No geometry available for soil data loading')
+      }
 
       const params = {
         samplerate: 10, // Sample rate fixo
@@ -2364,8 +2397,15 @@ function FieldPerformanceAnalytics() {
                               </div>
                             )}
                           </div>
-                          {loadingSoil && (
-                            <div className="w-3 h-3 border border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                          {loadingSoil ? (
+                            <div className="flex items-center gap-1 text-xs text-amber-400">
+                              <div className="w-3 h-3 border border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                              <span>Loading soil data...</span>
+                            </div>
+                          ) : soilData.length > 0 && (
+                            <div className="text-[10px] text-amber-400/70 mt-0.5">
+                              {soilData.length} polygons • SSURGO
+                            </div>
                           )}
                         </label>
                       )}
@@ -2746,6 +2786,19 @@ function FieldPerformanceAnalytics() {
                       <div>
                         <span className="text-zinc-500">Period:</span>
                         <span className="text-zinc-100 ml-2">{analysisStartDate} - {analysisEndDate}</span>
+                      </div>
+                      <div className="col-span-2 mt-2 pt-2 border-t border-zinc-700">
+                        <div className="flex items-center gap-2">
+                          <span className="text-zinc-500">Soil Data:</span>
+                          {loadingSoil ? (
+                            <div className="flex items-center gap-2 text-amber-400">
+                              <div className="w-3 h-3 border border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                              <span className="text-xs">Loading...</span>
+                            </div>
+                          ) : (
+                            <span className="text-zinc-100">{soilData.length} polygons loaded</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

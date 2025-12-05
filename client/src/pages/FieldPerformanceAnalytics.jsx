@@ -986,6 +986,59 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Deletar field
+  const handleDeleteField = async (fieldId) => {
+    if (!token || !selectedLeafUserId || !fieldId) return
+    
+    if (!confirm('Are you sure you want to delete this field? This action cannot be undone.')) return
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      console.log('🗑️ Deleting field:', fieldId)
+      await axios.delete(
+        `${baseUrl}/services/fields/api/users/${selectedLeafUserId}/fields/${fieldId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          }
+        }
+      )
+      
+      setSuccessMessage('Field deleted successfully!')
+      setTimeout(() => setSuccessMessage(null), 3000)
+      
+      // Se o field deletado estava selecionado, limpar seleção
+      if (selectedField?.id === fieldId) {
+        setSelectedField(null)
+        setFieldBoundary(null)
+        setBoundaryData(null)
+        setMapData(null)
+        setAnalysisData(null)
+        setShowAnalysisResults(false)
+        setSeasons([])
+        setSelectedSeason(null)
+        setFieldZones([])
+        setSoilData([])
+      }
+      
+      // Se o field deletado estava fixado como projeto, limpar
+      if (pinnedProject?.field?.id === fieldId) {
+        setPinnedProject(null)
+        sessionStorage.removeItem('pinnedFieldProject')
+      }
+      
+      // Recarregar lista de fields
+      await loadFields()
+      
+    } catch (err) {
+      console.error('Error deleting field:', err)
+      setError(err.response?.data?.message || err.response?.data?.detail || 'Error deleting field')
+    }
+  }
+
   // Carregar seasons do field
   const loadFieldSeasons = async (fieldId) => {
     if (!token || !selectedLeafUserId || !fieldId) return
@@ -1973,6 +2026,15 @@ function FieldPerformanceAnalytics() {
                       {pinnedProject?.field?.id === selectedField.id ? '📌 Pinned' : '📍 Pin as Project'}
                     </button>
                   )}
+                  <button
+                    onClick={() => handleDeleteField(selectedField.id)}
+                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded transition"
+                    title="Delete Field"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => {
                       setSelectedField(null)

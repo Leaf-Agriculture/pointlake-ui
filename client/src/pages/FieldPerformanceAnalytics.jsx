@@ -41,6 +41,10 @@ function FieldPerformanceAnalytics() {
   const [analysisStartDate, setAnalysisStartDate] = useState('2020-01-01')
   const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
+
+  // Estados para drill-down da timeline
+  const [timelineLevel, setTimelineLevel] = useState('month') // 'month', 'week', 'day'
+  const [timelineDrillPath, setTimelineDrillPath] = useState([]) // [{level: 'month', key: '2024-01'}, ...]
   
   // Estados para filtros de pontos
   const [analysisPoints, setAnalysisPoints] = useState([]) // Pontos originais
@@ -331,8 +335,8 @@ function FieldPerformanceAnalytics() {
       pointsData = data.data
     }
 
-    // Criar timeline baseada nas datas dos pontos
-    const timelineData = createTimelineFromPoints(pointsData)
+    // Criar timeline baseada nas datas dos pontos com nível atual
+    const timelineData = createTimelineFromPoints(pointsData, timelineLevel, timelineDrillPath)
 
     return {
       raw: data,
@@ -341,8 +345,8 @@ function FieldPerformanceAnalytics() {
     }
   }
 
-  // Criar dados da timeline a partir dos pontos
-  const createTimelineFromPoints = (points) => {
+  // Criar dados da timeline a partir dos pontos com suporte a drill-down
+  const createTimelineFromPoints = (points, level = 'month', drillPath = []) => {
     if (!points || points.length === 0) return []
 
     // Extrair todas as datas dos pontos
@@ -367,26 +371,144 @@ function FieldPerformanceAnalytics() {
     // Ordenar datas
     dates.sort((a, b) => a - b)
 
-    // Criar buckets por dia
-    const dayBuckets = {}
-    dates.forEach(date => {
-      const dayKey = date.toISOString().split('T')[0] // YYYY-MM-DD
-      if (!dayBuckets[dayKey]) {
-        dayBuckets[dayKey] = {
-          date: dayKey,
+    let buckets = {}
+    let keyFormat, displayFormat
+
+    // Filtrar datas baseado no drill path
+    let filteredDates = dates
+    if (drillPath.length > 0) {
+      filteredDates = dates.filter(date => {
+        for (const drill of drillPath) {
+          if (drill.level === 'month') {
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+            if (monthKey !== drill.key) return false
+          } else if (drill.level === 'week') {
+            const weekKey = getWeekKey(date)
+            if (weekKey !== drill.key) return false
+          }
+        }
+        return true
+      })
+    }
+
+    // Agrupar baseado no nível atual
+    switch (level) {
+      case 'month':
+        keyFormat = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        displayFormat = (key) => {
+          const [year, month] = key.split('-')
+          return new Date(year, month - 1).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+        }
+        break
+
+      case 'week':
+        keyFormat = getWeekKey
+        displayFormat = (key) => {
+          const [year, week] = key.split('-W')
+          return `Week ${week}, ${year}`
+        }
+        break
+
+      case 'day':
+        keyFormat = (date) => date.toISOString().split('T')[0]
+        displayFormat = (key) => new Date(key).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        break
+
+      default:
+        return []
+    }
+
+    // Criar buckets
+    filteredDates.forEach(date => {
+      const key = keyFormat(date)
+      if (!buckets[key]) {
+        buckets[key] = {
+          key: key,
+          display: displayFormat(key),
           count: 0,
-          fullDate: new Date(dayKey)
+          fullDate: level === 'day' ? new Date(key) : date,
+          level: level
         }
       }
-      dayBuckets[dayKey].count++
+      buckets[key].count++
     })
 
     // Converter para array e ordenar
-    const timelinePoints = Object.values(dayBuckets).sort((a, b) =>
-      new Date(a.date) - new Date(b.date)
-    )
+    const timelinePoints = Object.values(buckets).sort((a, b) => {
+      if (level === 'month' || level === 'day') {
+        return new Date(a.key) - new Date(b.key)
+      } else {
+        // Para semanas, ordenar por ano e semana
+        const [aYear, aWeek] = a.key.split('-W').map(Number)
+        const [bYear, bWeek] = b.key.split('-W').map(Number)
+        return aYear !== bYear ? aYear - bYear : aWeek - bWeek
+      }
+    })
 
     return timelinePoints
+  }
+
+  // Função auxiliar para obter chave da semana (YYYY-WW)
+  const getWeekKey = (date) => {
+    const year = date.getFullYear()
+    const startOfYear = new Date(year, 0, 1)
+    const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000))
+    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7)
+    return `${year}-W${String(weekNumber).padStart(2, '0')}`
+  }
+
+  // Funções para drill-down da timeline
+  const handleTimelineDrillDown = (item) => {
+    const newDrillPath = [...timelineDrillPath, { level: timelineLevel, key: item.key }]
+
+    let nextLevel
+    switch (timelineLevel) {
+      case 'month':
+        nextLevel = 'week'
+        break
+      case 'week':
+        nextLevel = 'day'
+        break
+      case 'day':
+        // Já no nível mais detalhado
+        return
+      default:
+        return
+    }
+
+    setTimelineLevel(nextLevel)
+    setTimelineDrillPath(newDrillPath)
+
+    // Recalcular timeline com novo nível
+    if (analysisData) {
+      const newTimelineData = createTimelineFromPoints(analysisData.points, nextLevel, newDrillPath)
+      setAnalysisData(prev => ({
+        ...prev,
+        timeline: newTimelineData
+      }))
+    }
+  }
+
+  const handleTimelineDrillUp = (targetLevel) => {
+    const levelIndex = ['month', 'week', 'day'].indexOf(targetLevel)
+    const newDrillPath = timelineDrillPath.slice(0, levelIndex)
+
+    setTimelineLevel(targetLevel)
+    setTimelineDrillPath(newDrillPath)
+
+    // Recalcular timeline com novo nível
+    if (analysisData) {
+      const newTimelineData = createTimelineFromPoints(analysisData.points, targetLevel, newDrillPath)
+      setAnalysisData(prev => ({
+        ...prev,
+        timeline: newTimelineData
+      }))
+    }
+  }
+
+  const resetTimelineDrill = () => {
+    setTimelineLevel('month')
+    setTimelineDrillPath([])
   }
 
   // Função para obter o polygon WKT para filtrar analytics
@@ -769,6 +891,9 @@ function FieldPerformanceAnalytics() {
     setLoadingAnalysis(true)
     setError(null)
     setShowAnalysisModal(false)
+
+    // Resetar drill-down da timeline para nova análise
+    resetTimelineDrill()
     
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -1457,6 +1582,9 @@ function FieldPerformanceAnalytics() {
     setLoadingAnalysis(true)
     setError(null)
 
+    // Resetar drill-down da timeline para nova análise
+    resetTimelineDrill()
+
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
@@ -1544,6 +1672,9 @@ function FieldPerformanceAnalytics() {
 
     setLoadingAnalysis(true)
     setError(null)
+
+    // Resetar drill-down da timeline para nova análise
+    resetTimelineDrill()
     
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
@@ -2850,31 +2981,77 @@ function FieldPerformanceAnalytics() {
                   {/* Timeline - Data Availability */}
                   {analysisData?.timeline && analysisData.timeline.length > 0 && (
                     <div className="bg-zinc-800 rounded-lg p-3 mb-3">
-                      <h4 className="text-xs font-semibold text-zinc-400 uppercase mb-3 flex items-center gap-2">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Data Timeline
-                        <span className="text-xs text-zinc-500">({analysisData.timeline.length} days)</span>
-                      </h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-semibold text-zinc-400 uppercase flex items-center gap-2">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Data Timeline
+                          <span className="text-xs text-zinc-500">
+                            ({analysisData.timeline.length} {timelineLevel === 'month' ? 'months' : timelineLevel === 'week' ? 'weeks' : 'days'})
+                          </span>
+                        </h4>
+
+                        {/* Breadcrumb navigation */}
+                        {timelineDrillPath.length > 0 && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <button
+                              onClick={resetTimelineDrill}
+                              className="text-blue-400 hover:text-blue-300 underline"
+                            >
+                              All
+                            </button>
+                            {timelineDrillPath.map((drill, index) => (
+                              <React.Fragment key={index}>
+                                <span className="text-zinc-500">›</span>
+                                {index < timelineDrillPath.length - 1 ? (
+                                  <button
+                                    onClick={() => handleTimelineDrillUp(drill.level)}
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                  >
+                                    {drill.level === 'month' ?
+                                      new Date(drill.key).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }) :
+                                      drill.level === 'week' ?
+                                      `W${drill.key.split('-W')[1]}` :
+                                      drill.key
+                                    }
+                                  </button>
+                                ) : (
+                                  <span className="text-zinc-300">
+                                    {drill.level === 'month' ?
+                                      new Date(drill.key).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }) :
+                                      drill.level === 'week' ?
+                                      `W${drill.key.split('-W')[1]}` :
+                                      drill.key
+                                    }
+                                  </span>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       <div className="relative">
                         {/* Timeline container with horizontal scroll */}
                         <div className="overflow-x-auto pb-2">
                           <div className="flex gap-1 min-w-max" style={{ width: 'max-content' }}>
-                            {analysisData.timeline.map((day, index) => {
-                              const isToday = day.date === new Date().toISOString().split('T')[0]
-                              const intensity = Math.min(day.count / 10, 1) // Normalize intensity (max 10 points per day)
+                            {analysisData.timeline.map((item, index) => {
+                              const isToday = timelineLevel === 'day' && item.key === new Date().toISOString().split('T')[0]
+                              const intensity = Math.min(item.count / (timelineLevel === 'month' ? 100 : timelineLevel === 'week' ? 50 : 10), 1)
+                              const canDrillDown = timelineLevel !== 'day'
 
                               return (
                                 <div
-                                  key={day.date}
+                                  key={item.key}
                                   className="flex flex-col items-center gap-1 min-w-[40px]"
-                                  title={`${day.date}: ${day.count} points`}
+                                  title={`${item.display}: ${item.count} points${canDrillDown ? ' (click to drill down)' : ''}`}
                                 >
-                                  {/* Day bar */}
+                                  {/* Timeline bar */}
                                   <div
-                                    className={`w-8 h-12 rounded-sm cursor-pointer transition-all hover:scale-110 ${
+                                    className={`w-8 h-12 rounded-sm transition-all ${
+                                      canDrillDown ? 'cursor-pointer hover:scale-110 hover:shadow-lg' : 'cursor-default'
+                                    } ${
                                       isToday ? 'ring-2 ring-blue-400' : ''
                                     }`}
                                     style={{
@@ -2882,8 +3059,9 @@ function FieldPerformanceAnalytics() {
                                       border: isToday ? '2px solid rgb(59 130 246)' : '1px solid rgb(75 85 99)'
                                     }}
                                     onClick={() => {
-                                      // Optional: filter points by this date when clicked
-                                      console.log('Clicked day:', day.date, 'Points:', day.count)
+                                      if (canDrillDown) {
+                                        handleTimelineDrillDown(item)
+                                      }
                                     }}
                                   >
                                     {/* Point count indicator */}
@@ -2899,10 +3077,7 @@ function FieldPerformanceAnalytics() {
 
                                   {/* Date label */}
                                   <div className="text-[10px] text-zinc-500 transform -rotate-45 origin-top whitespace-nowrap">
-                                    {new Date(day.date).toLocaleDateString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric'
-                                    })}
+                                    {item.display}
                                   </div>
                                 </div>
                               )
@@ -2913,8 +3088,8 @@ function FieldPerformanceAnalytics() {
                         {/* Timeline axis */}
                         <div className="mt-2 pt-2 border-t border-zinc-700">
                           <div className="flex justify-between text-xs text-zinc-500">
-                            <span>{analysisData.timeline.length > 0 ? new Date(analysisData.timeline[0].date).toLocaleDateString() : ''}</span>
-                            <span>{analysisData.timeline.length > 0 ? new Date(analysisData.timeline[analysisData.timeline.length - 1].date).toLocaleDateString() : ''}</span>
+                            <span>{analysisData.timeline.length > 0 ? analysisData.timeline[0].display : ''}</span>
+                            <span>{analysisData.timeline.length > 0 ? analysisData.timeline[analysisData.timeline.length - 1].display : ''}</span>
                           </div>
                         </div>
 

@@ -453,21 +453,47 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
     if (isDrawingMode) {
       console.log('🎨 Drawing mode enabled')
       
+      // Criar pane de desenho com z-index alto se não existir
+      if (!mapInstance.current.getPane('drawingPane')) {
+        mapInstance.current.createPane('drawingPane')
+        mapInstance.current.getPane('drawingPane').style.zIndex = 650
+      }
+      
       // Mudar cursor
       mapInstance.current.getContainer().style.cursor = 'crosshair'
       
-      // Desenhar pontos existentes
+      // Desabilitar pointer-events nas camadas de overlay e marker durante o desenho
+      const overlayPane = mapInstance.current.getPane('overlayPane')
+      const markerPane = mapInstance.current.getPane('markerPane')
+      const shadowPane = mapInstance.current.getPane('shadowPane')
+      
+      if (overlayPane) overlayPane.style.pointerEvents = 'none'
+      if (markerPane) markerPane.style.pointerEvents = 'none'
+      if (shadowPane) shadowPane.style.pointerEvents = 'none'
+      
+      // Desabilitar interações em outras camadas durante o desenho
+      markersRef.current.forEach(layer => {
+        if (layer.off) {
+          layer.off('click')
+        }
+        if (layer.closePopup) {
+          layer.closePopup()
+        }
+      })
+      
+      // Desenhar pontos existentes com pane de alta prioridade
       if (drawnCoords.length > 0) {
         drawnCoords.forEach((coord, idx) => {
           const marker = L.circleMarker([coord[0], coord[1]], {
-            radius: 6,
+            radius: 8,
             fillColor: '#10b981',
             color: '#fff',
-            weight: 2,
+            weight: 3,
             opacity: 1,
-            fillOpacity: 0.8
+            fillOpacity: 0.9,
+            pane: 'drawingPane'
           }).addTo(mapInstance.current)
-          marker.bindTooltip(`Point ${idx + 1}`, { permanent: false })
+          marker.bindTooltip(`Point ${idx + 1}`, { permanent: true, direction: 'top', offset: [0, -10] })
           drawingMarkersRef.current.push(marker)
         })
         
@@ -479,9 +505,10 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
           }
           const polyline = L.polyline(lineCoords, {
             color: '#10b981',
-            weight: 2,
-            opacity: 0.8,
-            dashArray: '5, 5'
+            weight: 3,
+            opacity: 1,
+            dashArray: '8, 8',
+            pane: 'drawingPane'
           }).addTo(mapInstance.current)
           drawingLayerRef.current = polyline
         }
@@ -491,29 +518,65 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
           const polygon = L.polygon(drawnCoords, {
             color: '#10b981',
             fillColor: '#10b981',
-            fillOpacity: 0.2,
-            weight: 2
+            fillOpacity: 0.3,
+            weight: 3,
+            pane: 'drawingPane'
           }).addTo(mapInstance.current)
           drawingMarkersRef.current.push(polygon)
         }
       }
       
-      // Handler de clique
+      // Handler de clique - captura em qualquer lugar do mapa
       const handleMapClick = (e) => {
+        // Ignorar cliques em controles do mapa
+        if (e.originalEvent && e.originalEvent.target) {
+          const target = e.originalEvent.target
+          if (target.closest('.leaflet-control')) {
+            return
+          }
+        }
+        
         const { lat, lng } = e.latlng
-        console.log('🎯 Map clicked:', lat, lng)
+        console.log('🎯 Map clicked for drawing:', lat, lng)
         if (onCoordsChange) {
           onCoordsChange([...drawnCoords, [lat, lng]])
         }
       }
       
+      // Usar evento com alta prioridade
       mapInstance.current.on('click', handleMapClick)
+      
+      // Adicionar overlay invisível para capturar todos os cliques
+      const bounds = mapInstance.current.getBounds()
+      const overlay = L.rectangle(bounds.pad(1), {
+        fillOpacity: 0,
+        stroke: false,
+        interactive: false,
+        pane: 'overlayPane'
+      }).addTo(mapInstance.current)
       
       return () => {
         mapInstance.current.off('click', handleMapClick)
         mapInstance.current.getContainer().style.cursor = ''
+        if (overlay) {
+          mapInstance.current.removeLayer(overlay)
+        }
+        // Restaurar pointer-events
+        const overlayPane = mapInstance.current.getPane('overlayPane')
+        const markerPane = mapInstance.current.getPane('markerPane')
+        const shadowPane = mapInstance.current.getPane('shadowPane')
+        if (overlayPane) overlayPane.style.pointerEvents = ''
+        if (markerPane) markerPane.style.pointerEvents = ''
+        if (shadowPane) shadowPane.style.pointerEvents = ''
       }
     } else {
+      // Restaurar pointer-events quando sair do modo de desenho
+      const overlayPane = mapInstance.current.getPane('overlayPane')
+      const markerPane = mapInstance.current.getPane('markerPane')
+      const shadowPane = mapInstance.current.getPane('shadowPane')
+      if (overlayPane) overlayPane.style.pointerEvents = ''
+      if (markerPane) markerPane.style.pointerEvents = ''
+      if (shadowPane) shadowPane.style.pointerEvents = ''
       mapInstance.current.getContainer().style.cursor = ''
     }
   }, [isDrawingMode, drawnCoords, onCoordsChange])

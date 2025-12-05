@@ -2079,6 +2079,49 @@ function FieldPerformanceAnalytics() {
                 </div>
               )}
               
+              {/* Drawing Mode Overlay */}
+              {isDrawingZone && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                  <div className="bg-emerald-900/95 backdrop-blur rounded-lg px-4 py-3 border border-emerald-600 shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center animate-pulse">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-emerald-100 font-medium text-sm">Drawing Zone</div>
+                        <div className="text-emerald-300/80 text-xs">Click on the map to add points ({drawnZoneCoords.length} points)</div>
+                      </div>
+                    </div>
+                    {drawnZoneCoords.length >= 3 && (
+                      <div className="mt-2 pt-2 border-t border-emerald-700 flex gap-2 pointer-events-auto">
+                        <button
+                          onClick={() => setShowZoneModal(true)}
+                          className="flex-1 px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-500 transition font-medium"
+                        >
+                          Save Zone
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsDrawingZone(false)
+                            setDrawnZoneCoords([])
+                          }}
+                          className="px-3 py-1.5 text-xs bg-zinc-700 text-zinc-200 rounded hover:bg-zinc-600 transition"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {drawnZoneCoords.length > 0 && drawnZoneCoords.length < 3 && (
+                      <div className="mt-2 text-xs text-emerald-400/70">
+                        Need {3 - drawnZoneCoords.length} more point{3 - drawnZoneCoords.length > 1 ? 's' : ''} to create zone
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Loading Overlay */}
               {(loadingBoundary || loadingAnalysis) && (
                 <div className="absolute inset-0 bg-zinc-950/50 flex items-center justify-center z-10">

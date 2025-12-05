@@ -43,6 +43,9 @@ function FieldPerformanceAnalytics() {
   const [showComparisonModal, setShowComparisonModal] = useState(false)
   const [comparisonName, setComparisonName] = useState('')
 
+  // Estados para seleção centralizada
+  const [selectedZoneForAnalysis, setSelectedZoneForAnalysis] = useState(null) // Zona selecionada para análise
+
   // Estados para drill-down da timeline
   const [timelineLevel, setTimelineLevel] = useState('yearmonth') // 'yearmonth', 'week', 'day'
   const [timelineDrillPath, setTimelineDrillPath] = useState([]) // [{level: 'yearmonth', key: '2024-01'}, ...]
@@ -1025,7 +1028,12 @@ function FieldPerformanceAnalytics() {
         setSuccessMessage('Analysis completed! No points found for this period.')
       }
 
-      setTimeout(() => setSuccessMessage(null), 5000)
+      setTimeout(() => setSuccessMessage(null), 3000)
+
+      // Mostrar modal de salvar comparação após análise bem-sucedida
+      setTimeout(() => {
+        setShowComparisonModal(true)
+      }, 1000)
 
     } catch (err) {
       console.error('Error running analysis:', err)
@@ -1033,16 +1041,6 @@ function FieldPerformanceAnalytics() {
     } finally {
       setLoadingAnalysis(false)
     }
-  }
-
-  // Salvar análise atual para comparação
-  const handleSaveForComparison = () => {
-    if (!analysisData || !selectedSeason) {
-      setError('No analysis data to save')
-      return
-    }
-
-    setShowComparisonModal(true)
   }
 
   // Confirmar salvamento para comparação
@@ -2423,6 +2421,92 @@ function FieldPerformanceAnalytics() {
 
         {/* Área Central - Mapa e Resultados */}
         <div className="flex-1 flex flex-col">
+          {/* Controles de Análise */}
+          {selectedField && seasons.length > 0 && (
+            <div className="bg-zinc-900 border-b border-zinc-800 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-100 mb-2">Run Analysis</h3>
+                    <div className="flex items-center gap-3">
+                      {/* Seleção de Season */}
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Season</label>
+                        <select
+                          value={selectedSeason?.id || ''}
+                          onChange={(e) => {
+                            const seasonId = e.target.value
+                            const season = seasons.find(s => s.id === seasonId)
+                            setSelectedSeason(season)
+                          }}
+                          className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[150px]"
+                        >
+                          <option value="">Select Season</option>
+                          {seasons.map(season => (
+                            <option key={season.id} value={season.id}>
+                              {season.name || 'Unnamed'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Seleção de Zone (opcional) */}
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Zone (optional)</label>
+                        <select
+                          value={selectedZoneForAnalysis?.id || ''}
+                          onChange={(e) => {
+                            const zoneId = e.target.value
+                            const zone = zoneId ? fieldZones.find(z => z.id === zoneId) : null
+                            setSelectedZoneForAnalysis(zone)
+                          }}
+                          className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500 min-w-[150px]"
+                        >
+                          <option value="">Field Overview</option>
+                          {fieldZones.map(zone => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Botão Run Analysis */}
+                      <div className="flex items-end">
+                        <button
+                          onClick={() => {
+                            if (!selectedSeason) {
+                              setError('Please select a season first')
+                              return
+                            }
+                            handleRunAnalysis(selectedSeason, selectedZoneForAnalysis)
+                          }}
+                          disabled={loadingAnalysis || !selectedSeason}
+                          className="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+                        >
+                          {loadingAnalysis ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              <span>Running...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Run Analysis</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Info do Field Selecionado */}
           {selectedField && (
             <div className="bg-zinc-900 border-b border-zinc-800 p-3">
@@ -3030,16 +3114,6 @@ function FieldPerformanceAnalytics() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                           </svg>
                           Filters
-                        </button>
-                        <button
-                          onClick={handleSaveForComparison}
-                          className="px-2 py-1 text-xs rounded flex items-center gap-1 bg-orange-600 text-white hover:bg-orange-500 transition"
-                          title="Save for comparison"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                          </svg>
-                          Save
                         </button>
                         <button
                           onClick={() => setAnalysisPanelCollapsed(true)}
@@ -3904,7 +3978,7 @@ function FieldPerformanceAnalytics() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-zinc-900 rounded-lg border border-zinc-800 w-full max-w-md mx-4">
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-zinc-100">Save for Comparison</h3>
+              <h3 className="text-lg font-semibold text-zinc-100">💾 Save Analysis for Comparison</h3>
               <button
                 onClick={() => setShowComparisonModal(false)}
                 className="text-zinc-400 hover:text-zinc-200"
@@ -3941,17 +4015,23 @@ function FieldPerformanceAnalytics() {
 
             <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
               <button
-                onClick={() => setShowComparisonModal(false)}
+                onClick={() => {
+                  setShowComparisonModal(false)
+                  setComparisonName('')
+                }}
                 className="px-4 py-2 text-sm font-medium bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition border border-zinc-700"
               >
-                Cancel
+                Don't Save
               </button>
               <button
                 onClick={handleConfirmSaveComparison}
                 disabled={!comparisonName.trim()}
-                className="px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded hover:bg-orange-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded hover:bg-orange-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Save Comparison
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                Save for Comparison
               </button>
             </div>
           </div>

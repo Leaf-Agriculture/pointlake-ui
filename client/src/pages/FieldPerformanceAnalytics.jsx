@@ -43,8 +43,8 @@ function FieldPerformanceAnalytics() {
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
 
   // Estados para drill-down da timeline
-  const [timelineLevel, setTimelineLevel] = useState('month') // 'month', 'week', 'day'
-  const [timelineDrillPath, setTimelineDrillPath] = useState([]) // [{level: 'month', key: '2024-01'}, ...]
+  const [timelineLevel, setTimelineLevel] = useState('year') // 'year', 'month', 'week', 'day'
+  const [timelineDrillPath, setTimelineDrillPath] = useState([]) // [{level: 'year', key: '2024'}, ...]
   
   // Estados para filtros de pontos
   const [analysisPoints, setAnalysisPoints] = useState([]) // Pontos originais
@@ -379,7 +379,9 @@ function FieldPerformanceAnalytics() {
     if (drillPath.length > 0) {
       filteredDates = dates.filter(date => {
         for (const drill of drillPath) {
-          if (drill.level === 'month') {
+          if (drill.level === 'year') {
+            if (date.getFullYear().toString() !== drill.key) return false
+          } else if (drill.level === 'month') {
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
             if (monthKey !== drill.key) return false
           } else if (drill.level === 'week') {
@@ -393,6 +395,11 @@ function FieldPerformanceAnalytics() {
 
     // Agrupar baseado no nível atual
     switch (level) {
+      case 'year':
+        keyFormat = (date) => date.getFullYear().toString()
+        displayFormat = (key) => key
+        break
+
       case 'month':
         keyFormat = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         displayFormat = (key) => {
@@ -435,7 +442,9 @@ function FieldPerformanceAnalytics() {
 
     // Converter para array e ordenar
     const timelinePoints = Object.values(buckets).sort((a, b) => {
-      if (level === 'month' || level === 'day') {
+      if (level === 'year') {
+        return parseInt(a.key) - parseInt(b.key)
+      } else if (level === 'month' || level === 'day') {
         return new Date(a.key) - new Date(b.key)
       } else {
         // Para semanas, ordenar por ano e semana
@@ -463,6 +472,9 @@ function FieldPerformanceAnalytics() {
 
     let nextLevel
     switch (timelineLevel) {
+      case 'year':
+        nextLevel = 'month'
+        break
       case 'month':
         nextLevel = 'week'
         break
@@ -490,7 +502,7 @@ function FieldPerformanceAnalytics() {
   }
 
   const handleTimelineDrillUp = (targetLevel) => {
-    const levelIndex = ['month', 'week', 'day'].indexOf(targetLevel)
+    const levelIndex = ['year', 'month', 'week', 'day'].indexOf(targetLevel)
     const newDrillPath = timelineDrillPath.slice(0, levelIndex)
 
     setTimelineLevel(targetLevel)
@@ -507,7 +519,7 @@ function FieldPerformanceAnalytics() {
   }
 
   const resetTimelineDrill = () => {
-    setTimelineLevel('month')
+    setTimelineLevel('year')
     setTimelineDrillPath([])
   }
 
@@ -3005,9 +3017,9 @@ function FieldPerformanceAnalytics() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           Data Timeline
-                          <span className="text-xs text-zinc-500">
-                            ({analysisData.timeline.length} {timelineLevel === 'month' ? 'months' : timelineLevel === 'week' ? 'weeks' : 'days'})
-                          </span>
+                        <span className="text-xs text-zinc-500">
+                          ({analysisData.timeline.length} {timelineLevel === 'year' ? 'years' : timelineLevel === 'month' ? 'months' : timelineLevel === 'week' ? 'weeks' : 'days'})
+                        </span>
                         </h4>
 
                         {/* Breadcrumb navigation */}
@@ -3023,11 +3035,13 @@ function FieldPerformanceAnalytics() {
                               <React.Fragment key={index}>
                                 <span className="text-zinc-500">›</span>
                                 {index < timelineDrillPath.length - 1 ? (
-                                  <button
-                                    onClick={() => handleTimelineDrillUp(drill.level)}
-                                    className="text-blue-400 hover:text-blue-300 underline"
-                                  >
-                                    {drill.level === 'month' ?
+                                    <button
+                                      onClick={() => handleTimelineDrillUp(drill.level)}
+                                      className="text-blue-400 hover:text-blue-300 underline"
+                                    >
+                                    {drill.level === 'year' ?
+                                      drill.key :
+                                      drill.level === 'month' ?
                                       new Date(drill.key).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }) :
                                       drill.level === 'week' ?
                                       `W${drill.key.split('-W')[1]}` :
@@ -3036,7 +3050,9 @@ function FieldPerformanceAnalytics() {
                                   </button>
                                 ) : (
                                   <span className="text-zinc-300">
-                                    {drill.level === 'month' ?
+                                    {drill.level === 'year' ?
+                                      drill.key :
+                                      drill.level === 'month' ?
                                       new Date(drill.key).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }) :
                                       drill.level === 'week' ?
                                       `W${drill.key.split('-W')[1]}` :

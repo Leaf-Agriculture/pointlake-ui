@@ -2097,31 +2097,49 @@ function FieldPerformanceAnalytics() {
               <div className="p-2 space-y-1">
                 {filteredFields.map((field) => (
                   <div key={field.id} className="space-y-1">
-                    <button
-                      onClick={() => handleSelectField(field)}
-                      className={`w-full text-left p-3 rounded transition-all ${
+                    <div
+                      className={`relative group rounded transition-all ${
                         selectedField?.id === field.id
                           ? 'bg-blue-950 border border-blue-800'
                           : 'bg-zinc-800/50 hover:bg-zinc-800 border border-transparent'
                       }`}
                     >
-                      <div className="text-sm font-medium text-zinc-100 truncate">
-                        {field.name || field.fieldName || `Field ${field.id.substring(0, 8)}`}
-                      </div>
-                      {field.farmName && (
-                        <div className="text-xs text-zinc-400 truncate mt-0.5">
-                          {field.farmName}
+                      <button
+                        onClick={() => handleSelectField(field)}
+                        className="w-full text-left p-3 pr-8"
+                      >
+                        <div className="text-sm font-medium text-zinc-100 truncate">
+                          {field.name || field.fieldName || `Field ${field.id.substring(0, 8)}`}
                         </div>
-                      )}
-                      <div className="text-xs text-zinc-500 mt-1">
-                        {getFieldArea(field)}
-                      </div>
-                      {field.providerName && (
-                        <div className="text-xs text-zinc-600 mt-0.5">
-                          {field.providerName}
+                        {field.farmName && (
+                          <div className="text-xs text-zinc-400 truncate mt-0.5">
+                            {field.farmName}
+                          </div>
+                        )}
+                        <div className="text-xs text-zinc-500 mt-1">
+                          {getFieldArea(field)}
                         </div>
-                      )}
-                    </button>
+                        {field.providerName && (
+                          <div className="text-xs text-zinc-600 mt-0.5">
+                            {field.providerName}
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Botão de delete */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteField(field.id)
+                        }}
+                        className="absolute top-2 right-2 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                        title="Delete field"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                     
                     {/* Zones do Field - exibido quando o field está selecionado */}
                     {selectedField?.id === field.id && (

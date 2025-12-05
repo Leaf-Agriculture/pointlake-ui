@@ -33,14 +33,15 @@ function FieldPerformanceAnalytics() {
   const [isDrawingField, setIsDrawingField] = useState(false)
   const [drawnFieldCoords, setDrawnFieldCoords] = useState([])
   
-  // Estados para análise
-  const [showAnalysisModal, setShowAnalysisModal] = useState(false)
+  // Estados para análise simplificada
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [analysisData, setAnalysisData] = useState(null)
-  const [analysisSampleRate, setAnalysisSampleRate] = useState(10)
-  const [analysisStartDate, setAnalysisStartDate] = useState('2020-01-01')
-  const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
+
+  // Estados para comparações salvas
+  const [savedComparisons, setSavedComparisons] = useState([]) // [{id, name, season, zone, data, createdAt}, ...]
+  const [showComparisonModal, setShowComparisonModal] = useState(false)
+  const [comparisonName, setComparisonName] = useState('')
 
   // Estados para drill-down da timeline
   const [timelineLevel, setTimelineLevel] = useState('yearmonth') // 'yearmonth', 'week', 'day'
@@ -899,47 +900,45 @@ function FieldPerformanceAnalytics() {
     }
   }, [compareMode, leftLayerId, rightLayerId, filteredPoints, boundaryData, showBoundaryLayer])
 
-  // Função para criar análise do projeto
-  const handleCreateAnalysis = async () => {
-    if (!token || !selectedLeafUserId) {
-      setError('Authentication required')
+  // Função para executar análise simplificada (season + zone opcional)
+  const handleRunAnalysis = async (season, selectedZone = null) => {
+    if (!token || !selectedLeafUserId || !season) {
+      setError('Season is required for analysis')
       return
     }
 
     setLoadingAnalysis(true)
     setError(null)
-    setShowAnalysisModal(false)
 
     // Resetar drill-down da timeline para nova análise
     resetTimelineDrill()
-    
+
     try {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
-      
-      // Formatar datas para ISO
-      const startDateISO = `${analysisStartDate}T00:00:00.000Z`
-      const endDateISO = `${analysisEndDate}T23:59:59.000Z`
-      
-      // Obter polygon para filtrar (zone visível ou field boundary)
-      const polygon = getAnalyticsPolygon()
-      
-      console.log('📊 Creating analysis with params:', {
-        userId: selectedLeafUserId,
-        sampleRate: analysisSampleRate,
+
+      // Usar datas da season
+      const startDateISO = `${season.startDate}T00:00:00.000Z`
+      const endDateISO = `${season.endDate}T23:59:59.000Z`
+
+      // Obter polygon (zone específica ou visão geral do field)
+      const polygon = selectedZone ? getAnalyticsPolygon(selectedZone) : null
+
+      console.log('📊 Running analysis:', {
+        season: season.name,
+        zone: selectedZone?.name || 'Field Overview',
         startDate: startDateISO,
         endDate: endDateISO,
-        polygon: polygon ? polygon.substring(0, 50) + '...' : null
+        polygon: polygon ? 'Zone geometry' : 'Field boundary'
       })
 
-      // Preparar parâmetros
       const params = {
-        samplerate: analysisSampleRate,
+        samplerate: 10, // Sample rate fixo
         startDate: startDateISO,
         endDate: endDateISO
       }
-      
-      // Adicionar polygon se disponível
+
+      // Adicionar polygon se zone foi selecionada
       if (polygon) {
         params.polygon = polygon
       }
@@ -961,8 +960,8 @@ function FieldPerformanceAnalytics() {
       const processedData = processAnalyticsData(response.data)
       setAnalysisData(processedData)
       setShowAnalysisResults(true)
-      
-      // Extrair pontos da resposta (pode vir em diferentes formatos)
+
+      // Extrair e processar pontos
       let pointsData = []
       if (Array.isArray(response.data)) {
         pointsData = response.data
@@ -971,27 +970,22 @@ function FieldPerformanceAnalytics() {
       } else if (response.data?.data && Array.isArray(response.data.data)) {
         pointsData = response.data.data
       }
-      
+
       console.log(`📊 Found ${pointsData.length} points in response`)
-      
-      // Transformar pontos para o formato esperado pelo MapComponent
+
       if (pointsData.length > 0) {
         const transformedPoints = pointsData.map((point, index) => {
-          // Verificar se já tem coordenadas diretas
           let lat = point.latitude || point.lat
           let lng = point.longitude || point.lng || point.lon
-          
-          // Se não tem coordenadas mas tem geometry, usar geometry
+
           if ((!lat || !lng) && point.geometry) {
-            // geometry pode ser WKB binário - passar para o MapComponent processar
             return {
               ...point,
               geometry: point.geometry,
               id: point.id || index
             }
           }
-          
-          // Se tem coordenadas válidas
+
           if (lat && lng) {
             return {
               ...point,
@@ -1002,24 +996,24 @@ function FieldPerformanceAnalytics() {
               id: point.id || index
             }
           }
-          
-          // Ponto sem coordenadas válidas - retornar como está
+
           return {
             ...point,
             id: point.id || index
           }
         }).filter(p => p.geometry || (p.latitude && p.longitude))
-        
+
         console.log(`📊 ${transformedPoints.length} valid points transformed for map`)
-        
+
         if (transformedPoints.length > 0) {
-          // Salvar pontos e extrair filtros disponíveis
           setAnalysisPoints(transformedPoints)
           setFilteredPoints(transformedPoints)
           extractAvailableFilters(transformedPoints)
           setMapData(transformedPoints)
           setShowFilters(true)
-          setSuccessMessage(`Analysis completed! ${transformedPoints.length} points loaded. Use filters to refine.`)
+
+          const analysisType = selectedZone ? `${season.name} - ${selectedZone.name}` : `${season.name} (Field Overview)`
+          setSuccessMessage(`Analysis completed for ${analysisType}! ${transformedPoints.length} points loaded.`)
         } else {
           setAnalysisPoints([])
           setFilteredPoints([])
@@ -1030,16 +1024,74 @@ function FieldPerformanceAnalytics() {
         setFilteredPoints([])
         setSuccessMessage('Analysis completed! No points found for this period.')
       }
-      
+
       setTimeout(() => setSuccessMessage(null), 5000)
-      
+
     } catch (err) {
-      console.error('Error creating analysis:', err)
-      console.error('Response:', err.response?.data)
-      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error creating analysis')
+      console.error('Error running analysis:', err)
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error running analysis')
     } finally {
       setLoadingAnalysis(false)
     }
+  }
+
+  // Salvar análise atual para comparação
+  const handleSaveForComparison = () => {
+    if (!analysisData || !selectedSeason) {
+      setError('No analysis data to save')
+      return
+    }
+
+    setShowComparisonModal(true)
+  }
+
+  // Confirmar salvamento para comparação
+  const handleConfirmSaveComparison = () => {
+    if (!comparisonName.trim()) {
+      setError('Comparison name is required')
+      return
+    }
+
+    const comparison = {
+      id: Date.now().toString(),
+      name: comparisonName.trim(),
+      season: selectedSeason,
+      zone: null, // Por enquanto, assumir field overview
+      data: analysisData,
+      points: analysisPoints,
+      createdAt: new Date().toISOString()
+    }
+
+    setSavedComparisons(prev => [...prev, comparison])
+    setShowComparisonModal(false)
+    setComparisonName('')
+    setSuccessMessage('Analysis saved for comparison!')
+    setTimeout(() => setSuccessMessage(null), 3000)
+  }
+
+  // Carregar comparação salva
+  const handleLoadComparison = (comparison) => {
+    setAnalysisData(comparison.data)
+    setAnalysisPoints(comparison.points)
+    setFilteredPoints(comparison.points)
+    setShowAnalysisResults(true)
+    setSelectedSeason(comparison.season)
+
+    if (comparison.points.length > 0) {
+      extractAvailableFilters(comparison.points)
+      setMapData(comparison.points)
+      setShowFilters(true)
+    }
+
+    setSuccessMessage(`Loaded comparison: ${comparison.name}`)
+    setTimeout(() => setSuccessMessage(null), 3000)
+  }
+
+  // Remover comparação salva
+  const handleDeleteComparison = (comparisonId) => {
+    setSavedComparisons(prev => prev.filter(c => c.id !== comparisonId))
+    setSuccessMessage('Comparison deleted!')
+    setTimeout(() => setSuccessMessage(null), 3000)
   }
 
   // Criar novo field com boundary
@@ -2015,26 +2067,6 @@ function FieldPerformanceAnalytics() {
                 </div>
               )}
               
-              {/* Botão de Criar Análise */}
-              <button
-                onClick={() => setShowAnalysisModal(true)}
-                disabled={loadingAnalysis}
-                className="w-full mt-3 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loadingAnalysis ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    Create Analysis
-                  </>
-                )}
-              </button>
             </div>
           )}
 
@@ -2251,7 +2283,7 @@ function FieldPerformanceAnalytics() {
                         {/* Seasons do Field */}
                         <div className="mt-3 pt-3 border-t border-zinc-700">
                           <div className="flex items-center justify-between py-1">
-                            <span className="text-xs text-zinc-400 font-medium">Seasons</span>
+                            <span className="text-xs text-zinc-400 font-medium">Analysis</span>
                             <button
                               onClick={() => setShowSeasonModal(true)}
                               className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
@@ -2259,7 +2291,7 @@ function FieldPerformanceAnalytics() {
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                               </svg>
-                              Add
+                              Add Season
                             </button>
                           </div>
                           
@@ -2339,6 +2371,47 @@ function FieldPerformanceAnalytics() {
                             <div className="text-xs text-zinc-600 py-1 italic">No seasons created</div>
                           )}
                         </div>
+
+                        {/* Comparações Salvas */}
+                        {savedComparisons.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-zinc-700">
+                            <div className="flex items-center justify-between py-1">
+                              <span className="text-xs text-zinc-400 font-medium">Saved Comparisons</span>
+                            </div>
+                            <div className="space-y-1">
+                              {savedComparisons.map(comparison => (
+                                <div key={comparison.id} className="group relative">
+                                  <button
+                                    onClick={() => handleLoadComparison(comparison)}
+                                    className="w-full text-left px-2 py-1.5 rounded text-xs bg-orange-950/30 hover:bg-orange-900/50 transition flex items-center gap-2"
+                                  >
+                                    <svg className="w-3 h-3 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                    </svg>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="text-orange-300 truncate block">{comparison.name}</span>
+                                      <span className="text-[10px] text-zinc-500 block truncate">
+                                        {comparison.season?.name || 'Unknown'} • {new Date(comparison.createdAt).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteComparison(comparison.id)
+                                    }}
+                                    className="absolute top-1 right-1 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                    title="Delete comparison"
+                                  >
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2957,6 +3030,16 @@ function FieldPerformanceAnalytics() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                           </svg>
                           Filters
+                        </button>
+                        <button
+                          onClick={handleSaveForComparison}
+                          className="px-2 py-1 text-xs rounded flex items-center gap-1 bg-orange-600 text-white hover:bg-orange-500 transition"
+                          title="Save for comparison"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                          </svg>
+                          Save
                         </button>
                         <button
                           onClick={() => setAnalysisPanelCollapsed(true)}
@@ -3609,96 +3692,6 @@ function FieldPerformanceAnalytics() {
         </div>
       )}
 
-      {/* Modal Create Analysis */}
-      {showAnalysisModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 rounded-lg border border-zinc-800 w-full max-w-md mx-4">
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-zinc-100">Create Analysis</h3>
-              <button
-                onClick={() => setShowAnalysisModal(false)}
-                className="text-zinc-400 hover:text-zinc-200"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              <div className="bg-zinc-800 rounded-lg p-3">
-                <div className="text-xs text-zinc-500 uppercase">Project</div>
-                <div className="text-sm font-medium text-zinc-100">
-                  {pinnedProject?.field?.name || pinnedProject?.field?.fieldName || 'Unnamed Field'}
-                </div>
-              </div>
-
-              {/* Sample Rate */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">
-                  Sample Rate (%)
-                </label>
-                <input
-                  type="number"
-                  value={analysisSampleRate}
-                  onChange={(e) => setAnalysisSampleRate(parseInt(e.target.value) || 1)}
-                  min={1}
-                  max={100}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <p className="text-xs text-zinc-500 mt-1">
-                  Percentage of points to sample (1-100)
-                </p>
-              </div>
-
-              {/* Start Date */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={analysisStartDate}
-                  onChange={(e) => setAnalysisStartDate(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* End Date */}
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={analysisEndDate}
-                  onChange={(e) => setAnalysisEndDate(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
-              <button
-                onClick={() => setShowAnalysisModal(false)}
-                className="px-4 py-2 text-sm font-medium bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition border border-zinc-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateAnalysis}
-                disabled={loadingAnalysis}
-                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {loadingAnalysis && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                )}
-                Run Analysis
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal Create Zone */}
       {showZoneModal && (
@@ -3900,6 +3893,65 @@ function FieldPerformanceAnalytics() {
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
                 Create Season
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Salvar Comparação */}
+      {showComparisonModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-lg border border-zinc-800 w-full max-w-md mx-4">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-100">Save for Comparison</h3>
+              <button
+                onClick={() => setShowComparisonModal(false)}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="bg-zinc-800 rounded-lg p-3">
+                <div className="text-xs text-zinc-500 uppercase">Current Analysis</div>
+                <div className="text-sm font-medium text-zinc-100">
+                  {selectedSeason?.name || 'Unknown'} • {analysisPoints.length} points
+                </div>
+              </div>
+
+              {/* Nome da comparação */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">
+                  Comparison Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={comparisonName}
+                  onChange={(e) => setComparisonName(e.target.value)}
+                  placeholder="e.g., Corn Season 2024 vs 2023"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+              <button
+                onClick={() => setShowComparisonModal(false)}
+                className="px-4 py-2 text-sm font-medium bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition border border-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSaveComparison}
+                disabled={!comparisonName.trim()}
+                className="px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded hover:bg-orange-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Comparison
               </button>
             </div>
           </div>

@@ -37,7 +37,7 @@ function FieldPerformanceAnalytics() {
   const [showAnalysisModal, setShowAnalysisModal] = useState(false)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [analysisData, setAnalysisData] = useState(null)
-  const [analysisSampleRate, setAnalysisSampleRate] = useState(100)
+  const [analysisSampleRate, setAnalysisSampleRate] = useState(10)
   const [analysisStartDate, setAnalysisStartDate] = useState('2020-01-01')
   const [analysisEndDate, setAnalysisEndDate] = useState('2025-12-01')
   const [showAnalysisResults, setShowAnalysisResults] = useState(false)
@@ -1374,6 +1374,89 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Rodar análise para uma zone específica
+  const handleRunZoneAnalysis = async (zone) => {
+    if (!token || !selectedLeafUserId || !zone) return
+
+    // Definir a zone como visível para filtrar
+    setVisibleZones(prev => ({
+      ...prev,
+      [zone.id]: true
+    }))
+
+    setLoadingAnalysis(true)
+    setError(null)
+
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+
+      // Formatar datas para ISO
+      const startDateISO = `${analysisStartDate}T00:00:00.000Z`
+      const endDateISO = `${analysisEndDate}T23:59:59.000Z`
+
+      // Obter polygon da zone específica
+      let polygon = null
+      if (zone.geometry) {
+        console.log('📍 Using zone geometry for analytics filter:', zone.name)
+        if (typeof zone.geometry === 'string' && zone.geometry.includes('POLYGON')) {
+          polygon = zone.geometry
+        } else {
+          // Tentar converter de GeoJSON
+          polygon = geoJsonToWkt(zone.geometry)
+        }
+      }
+
+      console.log('📊 Running zone analysis:', {
+        zoneName: zone.name,
+        userId: selectedLeafUserId,
+        sampleRate: analysisSampleRate,
+        startDate: startDateISO,
+        endDate: endDateISO,
+        polygon: polygon ? polygon.substring(0, 50) + '...' : null
+      })
+
+      // Preparar parâmetros
+      const params = {
+        samplerate: analysisSampleRate,
+        startDate: startDateISO,
+        endDate: endDateISO
+      }
+
+      // Adicionar polygon se disponível
+      if (polygon) {
+        params.polygon = polygon
+      }
+
+      const response = await axios.get(
+        `${baseUrl}/services/pointlake/api/v2/beta/analytics/user/${selectedLeafUserId}/points`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params
+        }
+      )
+
+      console.log('✅ Zone analysis completed:', response.data)
+
+      // Processar dados
+      const processedData = processAnalyticsData(response.data)
+      setAnalysisData(processedData)
+
+      // Mostrar resultados
+      setShowAnalysisResults(true)
+      setSuccessMessage(`Analysis completed for zone: ${zone.name}`)
+
+    } catch (err) {
+      console.error('Error running zone analysis:', err)
+      setError(err.response?.data?.message || 'Error running zone analysis')
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
   // Rodar análise para uma season específica
   const handleRunSeasonAnalysis = async (season) => {
     if (!token || !selectedLeafUserId || !season) return
@@ -1891,17 +1974,41 @@ function FieldPerformanceAnalytics() {
                                     </svg>
                                     <span className={`truncate ${isVisible ? 'text-purple-300' : 'text-zinc-300'}`}>{zone.name}</span>
                                   </div>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleDeleteZone(zone.id)
-                                    }}
-                                    className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleRunZoneAnalysis(zone)
+                                      }}
+                                      disabled={loadingAnalysis}
+                                      className={`p-1 rounded transition ${
+                                        isVisible
+                                          ? 'text-purple-300 hover:text-purple-200 hover:bg-purple-900/50'
+                                          : 'text-zinc-400 hover:text-purple-400 opacity-0 group-hover:opacity-100'
+                                      }`}
+                                      title="Run Analysis"
+                                    >
+                                      {loadingAnalysis ? (
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400"></div>
+                                      ) : (
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteZone(zone.id)
+                                      }}
+                                      className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
                                 </div>
                               )
                             })}

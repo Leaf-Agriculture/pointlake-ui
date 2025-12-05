@@ -525,17 +525,35 @@ function FieldPerformanceAnalytics() {
 
   // Função para obter o polygon WKT para filtrar analytics
   // Prioriza zone visível, senão usa boundary do field
-  const getAnalyticsPolygon = () => {
+  // Pode receber uma zona específica como parâmetro para forçar o uso dela
+  const getAnalyticsPolygon = (forcedZone = null) => {
+    // Se uma zona foi forçada (como no caso de análise específica de zona)
+    if (forcedZone) {
+      console.log('📍 Using forced zone geometry for analytics filter:', forcedZone.name)
+      console.log('📍 Zone geometry type:', typeof forcedZone.geometry)
+      console.log('📍 Zone geometry preview:', forcedZone.geometry?.substring?.(0, 100) || forcedZone.geometry)
+
+      if (typeof forcedZone.geometry === 'string' && forcedZone.geometry.includes('POLYGON')) {
+        console.log('📍 Using WKT polygon directly')
+        return forcedZone.geometry
+      }
+      // Tentar converter de GeoJSON
+      console.log('📍 Converting from GeoJSON to WKT')
+      const wkt = geoJsonToWkt(forcedZone.geometry)
+      console.log('📍 WKT result:', wkt?.substring?.(0, 100) || wkt)
+      if (wkt) return wkt
+    }
+
     // Verificar se há alguma zone visível
     const visibleZoneIds = Object.entries(visibleZones)
       .filter(([_, isVisible]) => isVisible)
       .map(([zoneId]) => zoneId)
-    
+
     if (visibleZoneIds.length > 0) {
       // Usar a primeira zone visível
       const zone = fieldZones.find(z => z.id === visibleZoneIds[0])
       if (zone?.geometry) {
-        console.log('📍 Using zone geometry for analytics filter:', zone.name)
+        console.log('📍 Using visible zone geometry for analytics filter:', zone.name)
         // Zone geometry pode ser GeoJSON ou WKT
         if (typeof zone.geometry === 'string' && zone.geometry.includes('POLYGON')) {
           return zone.geometry
@@ -545,13 +563,13 @@ function FieldPerformanceAnalytics() {
         if (wkt) return wkt
       }
     }
-    
+
     // Fallback: usar boundary do field
     if (boundaryData?.geometry) {
       console.log('📍 Using field boundary for analytics filter')
       return boundaryData.geometry
     }
-    
+
     return null
   }
 
@@ -1605,17 +1623,8 @@ function FieldPerformanceAnalytics() {
       const startDateISO = `${analysisStartDate}T00:00:00.000Z`
       const endDateISO = `${analysisEndDate}T23:59:59.000Z`
 
-      // Obter polygon da zone específica
-      let polygon = null
-      if (zone.geometry) {
-        console.log('📍 Using zone geometry for analytics filter:', zone.name)
-        if (typeof zone.geometry === 'string' && zone.geometry.includes('POLYGON')) {
-          polygon = zone.geometry
-        } else {
-          // Tentar converter de GeoJSON
-          polygon = geoJsonToWkt(zone.geometry)
-        }
-      }
+      // Obter polygon para filtrar (forçar uso da geometria desta zona específica)
+      const polygon = getAnalyticsPolygon(zone)
 
       console.log('📊 Running zone analysis:', {
         zoneName: zone.name,

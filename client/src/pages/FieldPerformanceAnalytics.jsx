@@ -469,30 +469,39 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
       
-      // Converter geometry para WKT se necessário
-      let wktGeometry = fieldGeometry
+      // Extrair o centróide do polígono para uma query mais simples
+      let centroid = null
+      
       if (typeof fieldGeometry === 'object') {
-        wktGeometry = geoJsonToWkt(fieldGeometry)
+        // Calcular centróide aproximado do polígono
+        let coords = null
+        if (fieldGeometry.type === 'Polygon' && fieldGeometry.coordinates?.[0]) {
+          coords = fieldGeometry.coordinates[0]
+        } else if (fieldGeometry.type === 'MultiPolygon' && fieldGeometry.coordinates?.[0]?.[0]) {
+          coords = fieldGeometry.coordinates[0][0]
+        }
+        
+        if (coords && coords.length > 0) {
+          // Calcular centróide simples (média das coordenadas)
+          const sumLng = coords.reduce((sum, c) => sum + c[0], 0)
+          const sumLat = coords.reduce((sum, c) => sum + c[1], 0)
+          centroid = {
+            lng: sumLng / coords.length,
+            lat: sumLat / coords.length
+          }
+        }
       }
       
-      if (!wktGeometry) {
-        console.log('⚠️ Could not convert field geometry to WKT for soil query')
+      if (!centroid) {
+        console.log('⚠️ Could not calculate centroid for soil query')
         return
       }
       
-      // Escapar aspas simples no WKT (se houver) e envolver com aspas
-      const escapedWkt = wktGeometry.replace(/'/g, "''")
+      // Construir a query SQL usando ST_Point com o centróide
+      // Formato: ST_Point(longitude, latitude)
+      const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${centroid.lng}, ${centroid.lat}))`
       
-      // Construir a query SQL usando ST_GeomFromText para o WKT
-      const sqlQuery = `SELECT 
-    mukey, 
-    county,
-    muaggatt_col_16 as drainage_class, 
-    geometry
-FROM ssurgo_illinois 
-WHERE ST_INTERSECTS(ST_GeomFromWKB(geometry), ST_GeomFromText('${escapedWkt}'))`
-      
-      console.log('🌱 Fetching soil data with query:', sqlQuery.substring(0, 150) + '...')
+      console.log('🌱 Fetching soil data with centroid:', centroid)
       
       const response = await axios.get(
         `${baseUrl}/services/pointlake/api/v2/query`,

@@ -3099,11 +3099,11 @@ function FieldPerformanceAnalytics() {
                                     }}
                                   >
                                     {/* Point count indicator */}
-                                    {day.count > 0 && (
+                                    {item.count > 0 && (
                                       <div className="w-full h-full flex items-end justify-center pb-1">
                                         <div
                                           className="w-1 bg-white rounded-full opacity-80"
-                                          style={{ height: `${Math.max(2, (day.count / Math.max(...analysisData.timeline.map(d => d.count))) * 8)}px` }}
+                                          style={{ height: `${Math.max(2, (item.count / Math.max(...analysisData.timeline.map(d => d.count))) * 8)}px` }}
                                         ></div>
                                       </div>
                                     )}

@@ -512,47 +512,32 @@ function FieldPerformanceAnalytics() {
       const centroidLat = (minLat + maxLat) / 2
       gridPoints.push({ lng: centroidLng, lat: centroidLat })
       
-      console.log('🌱 Fetching soil data with', gridPoints.length, 'grid points')
+      console.log('🌱 Fetching soil data with', gridPoints.length, 'grid points in single query')
       
-      // Fazer queries em paralelo para todos os pontos do grid
-      const uniqueSoilData = new Map() // Usar Map para evitar duplicatas por mukey
+      // Construir uma única query com múltiplos OR para todos os pontos
+      const pointConditions = gridPoints
+        .map(p => `ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${p.lng}, ${p.lat}))`)
+        .join(' OR ')
       
-      const queryPromises = gridPoints.map(async (point) => {
-        try {
-          const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${point.lng}, ${point.lat}))`
-          
-          const response = await axios.get(
-            `${baseUrl}/services/pointlake/api/v2/query`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'accept': 'application/json'
-              },
-              params: {
-                sql: sqlQuery
-              }
-            }
-          )
-          
-          return response.data || []
-        } catch (err) {
-          // Ignorar erros individuais de pontos
-          return []
+      const sqlQuery = `SELECT DISTINCT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ${pointConditions}`
+      
+      console.log('🌱 SQL Query length:', sqlQuery.length, 'chars')
+      
+      const response = await axios.get(
+        `${baseUrl}/services/pointlake/api/v2/query`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params: {
+            sql: sqlQuery
+          }
         }
-      })
+      )
       
-      // Aguardar todas as queries
-      const results = await Promise.all(queryPromises)
-      
-      // Consolidar resultados únicos por mukey
-      results.flat().forEach(soil => {
-        if (soil.mukey && !uniqueSoilData.has(soil.mukey)) {
-          uniqueSoilData.set(soil.mukey, soil)
-        }
-      })
-      
-      const soilArray = Array.from(uniqueSoilData.values())
-      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons from', gridPoints.length, 'points')
+      const soilArray = response.data || []
+      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons')
       
       setSoilData(soilArray)
       // Mostrar layer automaticamente se tiver dados

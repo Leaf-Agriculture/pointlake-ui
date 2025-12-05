@@ -1670,6 +1670,7 @@ function FieldPerformanceAnalytics() {
 
   // Selecionar field
   const handleSelectField = (field) => {
+    console.log('🏗️ Selecting field:', field.name, '- will load soil data automatically')
     setSelectedField(field)
     setAnalysisData(null)
     setShowAnalysisResults(false)
@@ -2383,42 +2384,48 @@ function FieldPerformanceAnalytics() {
                         </label>
                       )}
                       
-                      {/* Soil Data Layer (SSURGO) */}
-                      {soilData.length > 0 && (
-                        <label className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition ${
-                          showSoilLayer ? 'bg-amber-950/50 border border-amber-700/50' : 'hover:bg-zinc-800'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={showSoilLayer}
-                            onChange={(e) => setShowSoilLayer(e.target.checked)}
-                            className="rounded bg-amber-700 border-amber-600 text-amber-500 w-4 h-4"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs text-amber-300 flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
-                              </svg>
-                              Soil Drainage
-                            </div>
-                            {showSoilLayer && (
-                              <div className="text-[10px] text-amber-400/70 mt-0.5">
-                                {soilData.length} polygons • SSURGO
-                              </div>
-                            )}
+                      {/* Soil Data Layer (SSURGO) - Sempre mostrar */}
+                      <label className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition ${
+                        showSoilLayer ? 'bg-amber-950/50 border border-amber-700/50' : 'hover:bg-zinc-800'
+                      } ${!selectedField ? 'opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={showSoilLayer && soilData.length > 0}
+                          onChange={(e) => {
+                            if (selectedField && soilData.length > 0) {
+                              setShowSoilLayer(e.target.checked)
+                            }
+                          }}
+                          disabled={!selectedField || soilData.length === 0}
+                          className="rounded bg-zinc-700 border-zinc-600 text-amber-500 w-3 h-3 disabled:opacity-50"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-amber-300 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                            </svg>
+                            Soil Drainage
                           </div>
                           {loadingSoil ? (
-                            <div className="flex items-center gap-1 text-xs text-amber-400">
-                              <div className="w-3 h-3 border border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-[10px] text-amber-400/70 mt-0.5 flex items-center gap-1">
+                              <div className="w-2 h-2 border border-amber-400 border-t-transparent rounded-full animate-spin"></div>
                               <span>Loading soil data...</span>
                             </div>
-                          ) : soilData.length > 0 && (
+                          ) : !selectedField ? (
+                            <div className="text-[10px] text-zinc-500 mt-0.5">
+                              Select a field to load soil data
+                            </div>
+                          ) : soilData.length === 0 ? (
+                            <div className="text-[10px] text-zinc-500 mt-0.5">
+                              No soil data available
+                            </div>
+                          ) : (
                             <div className="text-[10px] text-amber-400/70 mt-0.5">
-                              {soilData.length} polygons • SSURGO
+                              {soilData.length} polygons loaded • SSURGO
                             </div>
                           )}
-                        </label>
-                      )}
+                        </div>
+                      </label>
                       
                       {/* Visible Zones - mostrar zones que estão ativas */}
                       {fieldZones.length > 0 && Object.values(visibleZones).some(v => v) && (

@@ -30,6 +30,8 @@ function FieldPerformanceAnalytics() {
   const [newFieldName, setNewFieldName] = useState('')
   const [newFarmId, setNewFarmId] = useState('')
   const [newBoundaryGeoJson, setNewBoundaryGeoJson] = useState('')
+  const [isDrawingField, setIsDrawingField] = useState(false)
+  const [drawnFieldCoords, setDrawnFieldCoords] = useState([])
   
   // Estados para análise
   const [showAnalysisModal, setShowAnalysisModal] = useState(false)
@@ -813,9 +815,26 @@ function FieldPerformanceAnalytics() {
       return
     }
 
-    // Validar GeoJSON se fornecido
+    // Validar GeoJSON ou usar coordenadas desenhadas
     let parsedGeometry = null
-    if (newBoundaryGeoJson.trim()) {
+    
+    // Priorizar coordenadas desenhadas
+    if (drawnFieldCoords.length >= 3) {
+      // Converter coordenadas desenhadas para GeoJSON MultiPolygon
+      // drawnFieldCoords está em [lat, lng], precisamos converter para [lng, lat]
+      const coords = drawnFieldCoords.map(c => [c[1], c[0]])
+      // Fechar o polígono (primeiro ponto = último ponto)
+      if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
+        coords.push([...coords[0]])
+      }
+      parsedGeometry = {
+        type: 'MultiPolygon',
+        coordinates: [[coords]]
+      }
+      console.log('Using drawn coordinates for field boundary:', coords.length, 'points')
+    }
+    // Fallback para GeoJSON colado
+    else if (newBoundaryGeoJson.trim()) {
       try {
         parsedGeometry = JSON.parse(newBoundaryGeoJson)
         if (!parsedGeometry.type || !['Polygon', 'MultiPolygon'].includes(parsedGeometry.type)) {
@@ -926,6 +945,7 @@ function FieldPerformanceAnalytics() {
       setNewFieldName('')
       setNewFarmId('')
       setNewBoundaryGeoJson('')
+      setDrawnFieldCoords([])
       setShowCreateModal(false)
       
       // Recarregar lista
@@ -2128,9 +2148,9 @@ function FieldPerformanceAnalytics() {
                 <MapComponent 
                   data={mapData} 
                   mapRef={mapRef}
-                  isDrawingMode={isDrawingZone}
-                  drawnCoords={drawnZoneCoords}
-                  onCoordsChange={setDrawnZoneCoords}
+                  isDrawingMode={isDrawingZone || isDrawingField}
+                  drawnCoords={isDrawingField ? drawnFieldCoords : drawnZoneCoords}
+                  onCoordsChange={isDrawingField ? setDrawnFieldCoords : setDrawnZoneCoords}
                 />
               
               {/* Painel de Controle de Layers */}
@@ -2333,7 +2353,7 @@ function FieldPerformanceAnalytics() {
                 </div>
               )}
               
-              {/* Drawing Mode Overlay */}
+              {/* Drawing Mode Overlay - Zone */}
               {isDrawingZone && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
                   <div className="bg-emerald-900/95 backdrop-blur rounded-lg px-4 py-3 border border-emerald-600 shadow-lg">
@@ -2370,6 +2390,65 @@ function FieldPerformanceAnalytics() {
                     {drawnZoneCoords.length > 0 && drawnZoneCoords.length < 3 && (
                       <div className="mt-2 text-xs text-emerald-400/70">
                         Need {3 - drawnZoneCoords.length} more point{3 - drawnZoneCoords.length > 1 ? 's' : ''} to create zone
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Drawing Mode Overlay - Field */}
+              {isDrawingField && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                  <div className="bg-blue-900/95 backdrop-blur rounded-lg px-4 py-3 border border-blue-600 shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center animate-pulse">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-blue-100 font-medium text-sm">Drawing Field Boundary</div>
+                        <div className="text-blue-300/80 text-xs">Click on the map to add points ({drawnFieldCoords.length} points)</div>
+                      </div>
+                    </div>
+                    {drawnFieldCoords.length >= 3 && (
+                      <div className="mt-2 pt-2 border-t border-blue-700 flex gap-2 pointer-events-auto">
+                        <button
+                          onClick={() => {
+                            setIsDrawingField(false)
+                            setShowCreateModal(true)
+                          }}
+                          className="flex-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-500 transition font-medium"
+                        >
+                          Continue to Create Field
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsDrawingField(false)
+                            setDrawnFieldCoords([])
+                          }}
+                          className="px-3 py-1.5 text-xs bg-zinc-700 text-zinc-200 rounded hover:bg-zinc-600 transition"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {drawnFieldCoords.length > 0 && drawnFieldCoords.length < 3 && (
+                      <div className="mt-2 text-xs text-blue-400/70">
+                        Need {3 - drawnFieldCoords.length} more point{3 - drawnFieldCoords.length > 1 ? 's' : ''} to create boundary
+                      </div>
+                    )}
+                    {drawnFieldCoords.length === 0 && (
+                      <div className="mt-2 flex gap-2 pointer-events-auto">
+                        <button
+                          onClick={() => {
+                            setIsDrawingField(false)
+                            setShowCreateModal(true)
+                          }}
+                          className="px-3 py-1.5 text-xs bg-zinc-700 text-zinc-200 rounded hover:bg-zinc-600 transition"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     )}
                   </div>
@@ -2875,22 +2954,82 @@ function FieldPerformanceAnalytics() {
                 />
               </div>
 
-              {/* Boundary GeoJSON */}
+              {/* Boundary - Draw or Paste GeoJSON */}
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">
-                  Boundary GeoJSON <span className="text-zinc-500">(optional)</span>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Field Boundary
                 </label>
-                <textarea
-                  value={newBoundaryGeoJson}
-                  onChange={(e) => setNewBoundaryGeoJson(e.target.value)}
-                  placeholder={geoJsonExample}
-                  rows={10}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                />
-                <p className="text-xs text-zinc-500 mt-1">
-                  Paste a valid GeoJSON Polygon geometry. Coordinates must be in [longitude, latitude] format.
-                  The polygon must be closed (first and last coordinates must be the same).
-                </p>
+                
+                {/* Opção para desenhar */}
+                <div className="mb-3">
+                  {drawnFieldCoords.length >= 3 ? (
+                    <div className="bg-emerald-950/50 border border-emerald-700 rounded p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-emerald-300 font-medium">
+                          ✓ Boundary drawn ({drawnFieldCoords.length} points)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDrawnFieldCoords([])
+                            setNewBoundaryGeoJson('')
+                          }}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCreateModal(false)
+                          setIsDrawingField(true)
+                        }}
+                        className="w-full px-3 py-1.5 text-xs bg-emerald-700 text-white rounded hover:bg-emerald-600"
+                      >
+                        Edit Drawing
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateModal(false)
+                        setIsDrawingField(true)
+                      }}
+                      className="w-full px-4 py-3 bg-blue-950 border-2 border-dashed border-blue-700 rounded-lg text-blue-300 hover:bg-blue-900 hover:border-blue-600 transition flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      Draw Boundary on Map
+                    </button>
+                  )}
+                </div>
+                
+                {/* Divisor */}
+                <div className="flex items-center gap-3 my-3">
+                  <div className="flex-1 border-t border-zinc-700"></div>
+                  <span className="text-xs text-zinc-500">OR</span>
+                  <div className="flex-1 border-t border-zinc-700"></div>
+                </div>
+                
+                {/* Opção para colar GeoJSON */}
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">
+                    Paste GeoJSON
+                  </label>
+                  <textarea
+                    value={newBoundaryGeoJson}
+                    onChange={(e) => {
+                      setNewBoundaryGeoJson(e.target.value)
+                      setDrawnFieldCoords([]) // Limpar coords desenhadas se colar GeoJSON
+                    }}
+                    placeholder={geoJsonExample}
+                    rows={6}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  />
+                </div>
               </div>
             </div>
 

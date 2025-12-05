@@ -119,6 +119,11 @@ function FieldPerformanceAnalytics() {
   const [selectedZone, setSelectedZone] = useState(null)
   const [visibleZones, setVisibleZones] = useState({}) // { zoneId: true/false }
   
+  // Estados para dados de solo (SSURGO)
+  const [soilData, setSoilData] = useState([])
+  const [loadingSoil, setLoadingSoil] = useState(false)
+  const [showSoilLayer, setShowSoilLayer] = useState(false)
+  
   // Estados para modo de comparação lado a lado
   const [compareMode, setCompareMode] = useState(false)
   const [leftLayerId, setLeftLayerId] = useState(null)
@@ -414,6 +419,8 @@ function FieldPerformanceAnalytics() {
           if (showBoundaryLayer) {
             updateMapDisplay({ geometry: wkt }, null)
           }
+          // Buscar dados de solo baseado na geometria do field
+          loadSoilData(response.data.geometry)
         } else {
           console.error('Could not convert geometry to WKT')
           setError('Could not display boundary geometry')
@@ -452,6 +459,69 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Função para buscar dados de solo (SSURGO) baseado na geometria do field
+  const loadSoilData = async (fieldGeometry) => {
+    if (!token || !fieldGeometry) return
+    
+    setLoadingSoil(true)
+    
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+      const baseUrl = getLeafApiBaseUrl(env)
+      
+      // Converter geometry para WKT se necessário
+      let wktGeometry = fieldGeometry
+      if (typeof fieldGeometry === 'object') {
+        wktGeometry = geoJsonToWkt(fieldGeometry)
+      }
+      
+      if (!wktGeometry) {
+        console.log('⚠️ Could not convert field geometry to WKT for soil query')
+        return
+      }
+      
+      // Construir a query SQL
+      const sqlQuery = `SELECT 
+    mukey, 
+    county,
+    muaggatt_col_16 as drainage_class, 
+    geometry
+FROM ssurgo_illinois 
+WHERE ST_INTERSECTS(ST_GeomFromWKB(geometry), ${wktGeometry})`
+      
+      console.log('🌱 Fetching soil data with query:', sqlQuery.substring(0, 100) + '...')
+      
+      const response = await axios.get(
+        `${baseUrl}/services/pointlake/api/v2/query`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json'
+          },
+          params: {
+            sql: sqlQuery
+          }
+        }
+      )
+      
+      console.log('🌱 Soil data loaded:', response.data?.length || 0, 'polygons')
+      
+      if (response.data && Array.isArray(response.data)) {
+        setSoilData(response.data)
+        // Mostrar layer automaticamente se tiver dados
+        if (response.data.length > 0) {
+          setShowSoilLayer(true)
+        }
+      }
+    } catch (err) {
+      console.error('Error loading soil data:', err)
+      // Não mostrar erro ao usuário, apenas log - é uma feature opcional
+      setSoilData([])
+    } finally {
+      setLoadingSoil(false)
+    }
+  }
+
   // Função para atualizar o display do mapa com layers combinadas
   const updateMapDisplay = (boundary, points) => {
     const currentBoundary = boundary || boundaryData
@@ -470,17 +540,36 @@ function FieldPerformanceAnalytics() {
         type: 'zone'
       }))
     
+    // Dados de solo se layer estiver ativa
+    const currentSoilData = showSoilLayer && soilData.length > 0 ? soilData : null
+    
     console.log('🔄 updateMapDisplay:', {
       hasBoundary: !!currentBoundary?.geometry,
       pointsCount: currentPoints?.length || 0,
       showBoundaryLayer,
       activeLayerId,
-      visibleZonesCount: zoneGeometries.length
+      visibleZonesCount: zoneGeometries.length,
+      soilPolygons: currentSoilData?.length || 0
     })
     
-    // Se temos pontos e alguma layer de dados está ativa
+    // Construir objeto de dados do mapa
+    const mapDataObj = {
+      zones: zoneGeometries
+    }
+    
+    // Adicionar boundary se ativo
+    if (showBoundaryLayer && currentBoundary?.geometry) {
+      mapDataObj.geometry = currentBoundary.geometry
+      mapDataObj.boundary = currentBoundary.geometry
+    }
+    
+    // Adicionar dados de solo se ativo
+    if (currentSoilData) {
+      mapDataObj.soilData = currentSoilData
+    }
+    
+    // Adicionar pontos se layer de dados está ativa
     if (activeLayerId && currentPoints && currentPoints.length > 0) {
-      // Preparar pontos com campo de heatmap selecionado
       const pointsWithHeatmapValue = currentPoints.map(p => ({
         ...p,
         heatmapField: activeLayerId,
@@ -489,32 +578,15 @@ function FieldPerformanceAnalytics() {
       
       console.log('📍 Points prepared for map:', pointsWithHeatmapValue.length, 'layer:', activeLayerId)
       
-      // Combinar boundary + pontos + zones se layers estão ativas
-      if (showBoundaryLayer && currentBoundary?.geometry) {
-        setMapData({
-          boundary: currentBoundary.geometry,
-          points: pointsWithHeatmapValue,
-          heatmapField: activeLayerId,
-          zones: zoneGeometries
-        })
-      } else {
-        setMapData({
-          points: pointsWithHeatmapValue,
-          heatmapField: activeLayerId,
-          zones: zoneGeometries
-        })
-      }
-    } else if (showBoundaryLayer && currentBoundary?.geometry) {
-      // Apenas boundary + zones
-      setMapData({ 
-        geometry: currentBoundary.geometry,
-        zones: zoneGeometries
-      })
-    } else if (zoneGeometries.length > 0) {
-      // Apenas zones
-      setMapData({ zones: zoneGeometries })
-    } else {
+      mapDataObj.points = pointsWithHeatmapValue
+      mapDataObj.heatmapField = activeLayerId
+    }
+    
+    // Se não temos nada para mostrar
+    if (!mapDataObj.geometry && !mapDataObj.points && !mapDataObj.soilData && zoneGeometries.length === 0) {
       setMapData(null)
+    } else {
+      setMapData(mapDataObj)
     }
   }
 
@@ -533,7 +605,7 @@ function FieldPerformanceAnalytics() {
   // Atualizar mapa quando layers mudarem
   useEffect(() => {
     updateMapDisplay(boundaryData, filteredPoints)
-  }, [showBoundaryLayer, activeLayers, boundaryData, visibleZones, fieldZones])
+  }, [showBoundaryLayer, activeLayers, boundaryData, visibleZones, fieldZones, showSoilLayer, soilData])
 
   // Preparar dados para modo de comparação
   const prepareCompareMapData = (layerId) => {
@@ -2057,6 +2129,36 @@ function FieldPerformanceAnalytics() {
                             className="rounded bg-zinc-700 border-zinc-600 text-blue-500 w-4 h-4"
                           />
                           <span className="text-xs text-zinc-300">Field Boundary</span>
+                        </label>
+                      )}
+                      
+                      {/* Soil Data Layer (SSURGO) */}
+                      {soilData.length > 0 && (
+                        <label className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition ${
+                          showSoilLayer ? 'bg-amber-950/50 border border-amber-700/50' : 'hover:bg-zinc-800'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={showSoilLayer}
+                            onChange={(e) => setShowSoilLayer(e.target.checked)}
+                            className="rounded bg-amber-700 border-amber-600 text-amber-500 w-4 h-4"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-amber-300 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                              </svg>
+                              Soil Drainage
+                            </div>
+                            {showSoilLayer && (
+                              <div className="text-[10px] text-amber-400/70 mt-0.5">
+                                {soilData.length} polygons • SSURGO
+                              </div>
+                            )}
+                          </div>
+                          {loadingSoil && (
+                            <div className="w-3 h-3 border border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                          )}
                         </label>
                       )}
                       

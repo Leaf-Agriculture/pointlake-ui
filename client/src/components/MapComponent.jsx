@@ -328,6 +328,109 @@ const decodeBinaryGeometry = (binaryString) => {
   }
 }
 
+// Função para decodificar geometria de polígono WKB (base64)
+const decodePolygonWKB = (binaryString) => {
+  try {
+    // Decodificar Base64 para bytes
+    const binaryData = atob(binaryString)
+    const bytes = new Uint8Array(binaryData.length)
+    for (let i = 0; i < binaryData.length; i++) {
+      bytes[i] = binaryData.charCodeAt(i)
+    }
+    
+    if (bytes.length < 9) return null
+    
+    // Ler endianness (byte 0)
+    const littleEndian = bytes[0] === 1
+    const view = new DataView(bytes.buffer)
+    
+    // Ler tipo de geometria (bytes 1-4)
+    const geometryTypeRaw = view.getUint32(1, littleEndian)
+    const hasZ = (geometryTypeRaw & 0x80000000) !== 0
+    const hasM = (geometryTypeRaw & 0x40000000) !== 0
+    const geometryType = geometryTypeRaw & 0x0FFFFFFF
+    
+    // Tamanho de cada coordenada
+    const coordSize = 8 + 8 + (hasZ ? 8 : 0) + (hasM ? 8 : 0)
+    
+    // Tipo 3 = Polygon, Tipo 6 = MultiPolygon
+    if (geometryType === 3) {
+      // Polygon
+      let offset = 5
+      const numRings = view.getUint32(offset, littleEndian)
+      offset += 4
+      
+      if (numRings === 0) return null
+      
+      // Ler exterior ring (primeiro ring)
+      const numPoints = view.getUint32(offset, littleEndian)
+      offset += 4
+      
+      const coords = []
+      for (let i = 0; i < numPoints; i++) {
+        const lng = view.getFloat64(offset, littleEndian)
+        const lat = view.getFloat64(offset + 8, littleEndian)
+        offset += coordSize
+        
+        if (lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+          coords.push([lat, lng]) // Leaflet usa [lat, lng]
+        }
+      }
+      
+      return coords.length > 2 ? coords : null
+    }
+    else if (geometryType === 6) {
+      // MultiPolygon - retornar apenas o primeiro polígono
+      let offset = 5
+      const numPolygons = view.getUint32(offset, littleEndian)
+      offset += 4
+      
+      if (numPolygons === 0) return null
+      
+      // Pular o header do primeiro polígono (byte order + type)
+      offset += 5
+      
+      const numRings = view.getUint32(offset, littleEndian)
+      offset += 4
+      
+      if (numRings === 0) return null
+      
+      const numPoints = view.getUint32(offset, littleEndian)
+      offset += 4
+      
+      const coords = []
+      for (let i = 0; i < numPoints; i++) {
+        const lng = view.getFloat64(offset, littleEndian)
+        const lat = view.getFloat64(offset + 8, littleEndian)
+        offset += coordSize
+        
+        if (lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+          coords.push([lat, lng])
+        }
+      }
+      
+      return coords.length > 2 ? coords : null
+    }
+    
+    return null
+  } catch (error) {
+    console.error('Erro ao decodificar polígono WKB:', error)
+    return null
+  }
+}
+
+// Cores para classes de drenagem de solo (SSURGO)
+const soilDrainageColors = {
+  'Very poorly drained': { color: '#1e40af', fillColor: '#3b82f6' },      // Azul escuro
+  'Poorly drained': { color: '#1d4ed8', fillColor: '#60a5fa' },           // Azul
+  'Somewhat poorly drained': { color: '#0891b2', fillColor: '#22d3ee' },  // Ciano
+  'Moderately well drained': { color: '#059669', fillColor: '#34d399' },  // Verde
+  'Well drained': { color: '#65a30d', fillColor: '#a3e635' },             // Verde limão
+  'Somewhat excessively drained': { color: '#ca8a04', fillColor: '#facc15' }, // Amarelo
+  'Excessively drained': { color: '#ea580c', fillColor: '#fb923c' },      // Laranja
+  'default': { color: '#6b7280', fillColor: '#9ca3af' }                   // Cinza (unknown)
+}
+
 function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, drawnCoords = [], onCoordsChange }) {
   const internalMapRef = useRef(null)
   const mapRef = externalMapRef || internalMapRef
@@ -608,6 +711,8 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         hasGeometry: !!data?.geometry,
         hasZones: !!data?.zones,
         zonesCount: data?.zones?.length || 0,
+        hasSoilData: !!data?.soilData,
+        soilCount: data?.soilData?.length || 0,
         dataLength: Array.isArray(data) ? data.length : (data?.points?.length || 'N/A'),
         sample: JSON.stringify(data)?.substring(0, 300)
       })
@@ -659,6 +764,73 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
             console.error('Error rendering zone:', zone.name, err)
           }
         })
+      }
+      
+      // Função auxiliar para renderizar dados de solo (SSURGO)
+      const renderSoilData = (soilPolygons, bounds) => {
+        if (!soilPolygons || !Array.isArray(soilPolygons) || soilPolygons.length === 0) return
+        
+        console.log('🌱 Rendering', soilPolygons.length, 'soil polygons')
+        
+        // Agrupar por classe de drenagem para legenda
+        const drainageClasses = {}
+        
+        soilPolygons.forEach(soil => {
+          if (!soil.geometry) return
+          
+          try {
+            // Decodificar WKB base64 para coordenadas
+            const coords = decodePolygonWKB(soil.geometry)
+            
+            if (coords && coords.length > 2) {
+              const drainageClass = soil.drainage_class || 'Unknown'
+              const colorScheme = soilDrainageColors[drainageClass] || soilDrainageColors.default
+              
+              // Contar classes para legenda
+              drainageClasses[drainageClass] = (drainageClasses[drainageClass] || 0) + 1
+              
+              const polygon = L.polygon(coords, {
+                color: colorScheme.color,
+                fillColor: colorScheme.fillColor,
+                fillOpacity: 0.4,
+                weight: 1.5,
+                className: 'soil-polygon'
+              }).addTo(mapInstance.current)
+              
+              // Popup com informações do solo
+              polygon.bindPopup(`
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; min-width: 180px;">
+                  <div style="background: ${colorScheme.fillColor}; color: white; padding: 8px 10px; margin: -8px -10px 8px -10px; border-radius: 4px 4px 0 0; font-weight: 600;">
+                    🌱 Soil Data
+                  </div>
+                  <div style="padding: 0 2px;">
+                    <div style="margin-bottom: 6px;">
+                      <span style="color: #666; font-size: 11px;">Drainage Class</span><br/>
+                      <span style="font-weight: 500; color: ${colorScheme.color};">${drainageClass}</span>
+                    </div>
+                    ${soil.mukey ? `
+                    <div style="margin-bottom: 6px;">
+                      <span style="color: #666; font-size: 11px;">Map Unit Key</span><br/>
+                      <span style="font-weight: 500;">${soil.mukey}</span>
+                    </div>` : ''}
+                    ${soil.county ? `
+                    <div>
+                      <span style="color: #666; font-size: 11px;">County</span><br/>
+                      <span style="font-weight: 500;">${soil.county}</span>
+                    </div>` : ''}
+                  </div>
+                </div>
+              `)
+              
+              markersRef.current.push(polygon)
+              if (bounds) bounds.extend(polygon.getBounds())
+            }
+          } catch (err) {
+            console.error('Error rendering soil polygon:', err)
+          }
+        })
+        
+        console.log('🌱 Soil drainage classes found:', drainageClasses)
       }
       
       // Novo formato: { boundary: wkt, points: array, heatmapField: string }
@@ -723,6 +895,11 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
           renderZones(data.zones, bounds)
         }
         
+        // Renderizar dados de solo se existirem
+        if (data.soilData && data.soilData.length > 0) {
+          renderSoilData(data.soilData, bounds)
+        }
+        
         // Ajustar zoom para mostrar tudo
         if (!bounds.isEmpty()) {
           mapInstance.current.fitBounds(bounds.pad(0.05))
@@ -733,6 +910,11 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         console.log('📍 Rendering only zones:', data.zones.length)
         const bounds = L.latLngBounds()
         renderZones(data.zones, bounds)
+        
+        // Renderizar dados de solo se existirem
+        if (data.soilData && data.soilData.length > 0) {
+          renderSoilData(data.soilData, bounds)
+        }
         
         if (!bounds.isEmpty()) {
           mapInstance.current.fitBounds(bounds.pad(0.1))
@@ -770,6 +952,11 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
           const bounds = polygon.getBounds()
           if (data.zones && data.zones.length > 0) {
             renderZones(data.zones, bounds)
+          }
+          
+          // Renderizar dados de solo se existirem
+          if (data.soilData && data.soilData.length > 0) {
+            renderSoilData(data.soilData, bounds)
           }
           
           // Ajustar o zoom para mostrar o polígono e zones

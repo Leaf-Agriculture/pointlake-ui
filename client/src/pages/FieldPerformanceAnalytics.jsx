@@ -738,10 +738,19 @@ function FieldPerformanceAnalytics() {
       // Fazer consultas paralelas para cada ponto (mais confiável)
       const uniqueSoilData = new Map()
 
+      // Criar filtro WKT do field para garantir que pontos estão dentro do field
+      let fieldWktFilter = ''
+      if (fieldGeometry) {
+        const fieldWkt = geoJsonToWkt(fieldGeometry)
+        if (fieldWkt) {
+          fieldWktFilter = ` AND ST_Contains(ST_GeomFromText('${fieldWkt}'), ST_Point(${point.lng}, ${point.lat}))`
+        }
+      }
+
       const queryPromises = gridPoints.map(async (point, index) => {
         try {
-          // Para cada ponto, buscar o polígono de solo mais próximo
-          const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${point.lng}, ${point.lat}))`
+          // Para cada ponto, buscar o polígono de solo mais próximo (dentro do field)
+          const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${point.lng}, ${point.lat}))${fieldWktFilter}`
 
           const response = await axios.get(
             `${baseUrl}/services/pointlake/api/v2/query`,
@@ -913,6 +922,13 @@ function FieldPerformanceAnalytics() {
       return
     }
 
+    // Verificar se temos geometria para filtrar (field boundary ou zone)
+    const hasGeometry = selectedZone || boundaryData?.geometry
+    if (!hasGeometry) {
+      setError('Field boundary not loaded yet. Please wait for the field to load completely.')
+      return
+    }
+
     setLoadingAnalysis(true)
     setError(null)
 
@@ -934,15 +950,15 @@ function FieldPerformanceAnalytics() {
       const startDateISO = `${startDate}T00:00:00.000Z`
       const endDateISO = `${endDate}T23:59:59.000Z`
 
-      // Obter polygon (zone específica ou visão geral do field)
-      const polygon = selectedZone ? getAnalyticsPolygon(selectedZone) : null
+      // Obter polygon (sempre usar zone específica ou boundary do field)
+      const polygon = getAnalyticsPolygon(selectedZone)
 
       console.log('📊 Running analysis:', {
         season: season.name,
         zone: selectedZone?.name || 'Field Overview',
         startDate: startDateISO,
         endDate: endDateISO,
-        polygon: polygon ? 'Zone geometry' : 'Field boundary'
+        polygon: polygon ? 'Geometry filter applied' : 'No geometry filter'
       })
 
       const params = {
@@ -951,7 +967,7 @@ function FieldPerformanceAnalytics() {
         endDate: endDateISO
       }
 
-      // Adicionar polygon se zone foi selecionada
+      // Sempre adicionar polygon para filtrar dados pelo field ou zone
       if (polygon) {
         params.polygon = polygon
       }

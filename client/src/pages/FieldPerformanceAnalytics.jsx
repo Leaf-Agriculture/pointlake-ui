@@ -480,16 +480,19 @@ function FieldPerformanceAnalytics() {
         return
       }
       
-      // Construir a query SQL
+      // Escapar aspas simples no WKT (se houver) e envolver com aspas
+      const escapedWkt = wktGeometry.replace(/'/g, "''")
+      
+      // Construir a query SQL usando ST_GeomFromText para o WKT
       const sqlQuery = `SELECT 
     mukey, 
     county,
     muaggatt_col_16 as drainage_class, 
     geometry
 FROM ssurgo_illinois 
-WHERE ST_INTERSECTS(ST_GeomFromWKB(geometry), ${wktGeometry})`
+WHERE ST_INTERSECTS(ST_GeomFromWKB(geometry), ST_GeomFromText('${escapedWkt}'))`
       
-      console.log('🌱 Fetching soil data with query:', sqlQuery.substring(0, 100) + '...')
+      console.log('🌱 Fetching soil data with query:', sqlQuery.substring(0, 150) + '...')
       
       const response = await axios.get(
         `${baseUrl}/services/pointlake/api/v2/query`,

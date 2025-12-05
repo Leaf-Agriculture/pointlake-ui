@@ -1059,6 +1059,16 @@ function FieldPerformanceAnalytics() {
     }
   }
 
+  // Abrir modal para salvar análise
+  const handleSaveForComparison = () => {
+    if (!analysisData || !selectedSeason) {
+      setError('No analysis data to save')
+      return
+    }
+
+    setShowComparisonModal(true)
+  }
+
   // Confirmar salvamento para comparação
   const handleConfirmSaveComparison = () => {
     if (!comparisonName.trim()) {

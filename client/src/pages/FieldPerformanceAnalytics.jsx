@@ -137,14 +137,6 @@ function FieldPerformanceAnalytics() {
   const [loadingSoil, setLoadingSoil] = useState(false)
   const [showSoilLayer, setShowSoilLayer] = useState(false)
   
-  // Estados para modo de comparação lado a lado
-  const [compareMode, setCompareMode] = useState(false)
-  const [leftLayerId, setLeftLayerId] = useState(null)
-  const [rightLayerId, setRightLayerId] = useState(null)
-  const [leftMapData, setLeftMapData] = useState(null)
-  const [rightMapData, setRightMapData] = useState(null)
-  const leftMapRef = useRef(null)
-  const rightMapRef = useRef(null)
   
   // Estado para painel de análise retrátil
   const [analysisPanelCollapsed, setAnalysisPanelCollapsed] = useState(false)
@@ -883,37 +875,7 @@ function FieldPerformanceAnalytics() {
     updateMapDisplay(boundaryData, filteredPoints)
   }, [showBoundaryLayer, activeLayers, boundaryData, visibleZones, fieldZones, showSoilLayer, soilData])
 
-  // Preparar dados para modo de comparação
-  const prepareCompareMapData = (layerId) => {
-    if (!filteredPoints || filteredPoints.length === 0) return null
-    
-    const pointsWithHeatmapValue = filteredPoints.map(p => ({
-      ...p,
-      heatmapField: layerId,
-      heatmapValue: p[layerId]
-    }))
-    
-    if (showBoundaryLayer && boundaryData?.geometry) {
-      return {
-        boundary: boundaryData.geometry,
-        points: pointsWithHeatmapValue,
-        heatmapField: layerId
-      }
-    }
-    return pointsWithHeatmapValue
-  }
 
-  // Atualizar mapas de comparação quando layers mudarem
-  useEffect(() => {
-    if (compareMode) {
-      if (leftLayerId) {
-        setLeftMapData(prepareCompareMapData(leftLayerId))
-      }
-      if (rightLayerId) {
-        setRightMapData(prepareCompareMapData(rightLayerId))
-      }
-    }
-  }, [compareMode, leftLayerId, rightLayerId, filteredPoints, boundaryData, showBoundaryLayer])
 
   // Função para executar análise simplificada (season + zone opcional)
   const handleRunAnalysis = async (season, selectedZone = null) => {
@@ -1055,11 +1017,6 @@ function FieldPerformanceAnalytics() {
       }
 
       setTimeout(() => setSuccessMessage(null), 3000)
-
-      // Mostrar modal de salvar comparação após análise bem-sucedida
-      setTimeout(() => {
-        setShowComparisonModal(true)
-      }, 1000)
 
     } catch (err) {
       console.error('Error running analysis:', err)
@@ -2343,153 +2300,7 @@ function FieldPerformanceAnalytics() {
 
           {/* Mapa e Resultados de Análise */}
           <div className="flex-1 flex">
-            {/* Modo de Comparação ou Mapa Normal */}
-            {compareMode && analysisPoints.length > 0 ? (
-              /* Modo Comparação - 2 mapas lado a lado */
-              <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all flex flex-col`}>
-                {/* Header do modo comparação */}
-                <div className="bg-zinc-900 border-b border-zinc-700 px-3 py-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-zinc-300">Compare Mode</span>
-                  <button
-                    onClick={() => setCompareMode(false)}
-                    className="px-2 py-1 text-xs bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600"
-                  >
-                    Exit Compare
-                  </button>
-                </div>
-                
-                {/* Container dos 2 mapas */}
-                <div className="flex-1 flex">
-                  {/* Mapa Esquerdo */}
-                  <div className="w-1/2 relative border-r border-zinc-700 flex flex-col">
-                    <div className="flex-1 relative">
-                      <MapComponent 
-                        data={leftMapData} 
-                        mapRef={leftMapRef}
-                      />
-                      {/* Seletor de layer */}
-                      <div className="absolute top-2 left-2 z-20">
-                        <select
-                          value={leftLayerId || ''}
-                          onChange={(e) => setLeftLayerId(e.target.value || null)}
-                          className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
-                        >
-                          <option value="">Select Layer</option>
-                          {availableDataLayers.map(layer => {
-                            const hasData = filteredPoints.some(p => p[layer.id] != null)
-                            if (!hasData) return null
-                            return (
-                              <option key={layer.id} value={layer.id}>{layer.name}</option>
-                            )
-                          })}
-                        </select>
-                      </div>
-                    </div>
-                    {/* Stats do lado esquerdo */}
-                    {leftLayerId && (
-                      <div className="bg-zinc-900 border-t border-zinc-700 p-2">
-                        {(() => {
-                          const layer = availableDataLayers.find(l => l.id === leftLayerId)
-                          const values = filteredPoints.map(p => p[leftLayerId]).filter(v => v != null)
-                          const min = values.length > 0 ? Math.min(...values) : 0
-                          const max = values.length > 0 ? Math.max(...values) : 0
-                          const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
-                          const std = values.length > 0 ? Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length) : 0
-                          return (
-                            <div>
-                              <div className="text-xs font-medium text-zinc-300 mb-1">{layer?.name}</div>
-                              <div className="grid grid-cols-4 gap-1 text-xs">
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Min</div>
-                                  <div className="text-blue-400 font-medium">{min.toFixed(1)}</div>
-                                </div>
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Avg</div>
-                                  <div className="text-yellow-400 font-medium">{avg.toFixed(1)}</div>
-                                </div>
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Max</div>
-                                  <div className="text-red-400 font-medium">{max.toFixed(1)}</div>
-                                </div>
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Std</div>
-                                  <div className="text-purple-400 font-medium">{std.toFixed(1)}</div>
-                                </div>
-                              </div>
-                              <div className="text-xs text-zinc-500 mt-1 text-center">{values.length} points</div>
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Mapa Direito */}
-                  <div className="w-1/2 relative flex flex-col">
-                    <div className="flex-1 relative">
-                      <MapComponent 
-                        data={rightMapData} 
-                        mapRef={rightMapRef}
-                      />
-                      {/* Seletor de layer */}
-                      <div className="absolute top-2 left-2 z-20">
-                        <select
-                          value={rightLayerId || ''}
-                          onChange={(e) => setRightLayerId(e.target.value || null)}
-                          className="px-2 py-1 text-xs bg-zinc-900/95 border border-zinc-700 rounded text-zinc-200"
-                        >
-                          <option value="">Select Layer</option>
-                          {availableDataLayers.map(layer => {
-                            const hasData = filteredPoints.some(p => p[layer.id] != null)
-                            if (!hasData) return null
-                            return (
-                              <option key={layer.id} value={layer.id}>{layer.name}</option>
-                            )
-                          })}
-                        </select>
-                      </div>
-                    </div>
-                    {/* Stats do lado direito */}
-                    {rightLayerId && (
-                      <div className="bg-zinc-900 border-t border-zinc-700 p-2">
-                        {(() => {
-                          const layer = availableDataLayers.find(l => l.id === rightLayerId)
-                          const values = filteredPoints.map(p => p[rightLayerId]).filter(v => v != null)
-                          const min = values.length > 0 ? Math.min(...values) : 0
-                          const max = values.length > 0 ? Math.max(...values) : 0
-                          const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
-                          const std = values.length > 0 ? Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length) : 0
-                          return (
-                            <div>
-                              <div className="text-xs font-medium text-zinc-300 mb-1">{layer?.name}</div>
-                              <div className="grid grid-cols-4 gap-1 text-xs">
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Min</div>
-                                  <div className="text-blue-400 font-medium">{min.toFixed(1)}</div>
-                                </div>
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Avg</div>
-                                  <div className="text-yellow-400 font-medium">{avg.toFixed(1)}</div>
-                                </div>
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Max</div>
-                                  <div className="text-red-400 font-medium">{max.toFixed(1)}</div>
-                                </div>
-                                <div className="text-center bg-zinc-800 rounded p-1">
-                                  <div className="text-zinc-500">Std</div>
-                                  <div className="text-purple-400 font-medium">{std.toFixed(1)}</div>
-                                </div>
-                              </div>
-                              <div className="text-xs text-zinc-500 mt-1 text-center">{values.length} points</div>
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
+            {/* Mapa Normal */}
               /* Mapa Normal */
               <div className={`${showAnalysisResults ? 'w-1/2' : 'flex-1'} relative transition-all`}>
                 <MapComponent 
@@ -2691,7 +2502,6 @@ function FieldPerformanceAnalytics() {
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                             </svg>
-                            Compare Layers
                           </button>
                         </>
                       )}
@@ -2826,7 +2636,6 @@ function FieldPerformanceAnalytics() {
                 </div>
               )}
             </div>
-            )}
 
             {/* Painel de Resultados da Análise - Retrátil */}
             {showAnalysisResults && analysisData && (
@@ -2880,6 +2689,16 @@ function FieldPerformanceAnalytics() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                           </svg>
                           Filters
+                        </button>
+                        <button
+                          onClick={handleSaveForComparison}
+                          className="px-2 py-1 text-xs rounded flex items-center gap-1 bg-orange-600 text-white hover:bg-orange-500 transition"
+                          title="Save analysis for comparison"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                          </svg>
+                          Save
                         </button>
                         <button
                           onClick={() => setAnalysisPanelCollapsed(true)}

@@ -631,6 +631,7 @@ function FieldPerformanceAnalytics() {
             updateMapDisplay({ geometry: wkt }, null)
           }
           // Buscar dados de solo baseado na geometria do field
+          console.log('🌱 loadFieldBoundary: Calling loadSoilData with geometry:', response.data.geometry?.type, response.data.geometry)
           loadSoilData(response.data.geometry)
         } else {
           console.error('Could not convert geometry to WKT')
@@ -672,12 +673,20 @@ function FieldPerformanceAnalytics() {
 
   // Função para buscar dados de solo (SSURGO) baseado na geometria do field
   const loadSoilData = async (fieldGeometry) => {
+    console.log('🌱 loadSoilData called with:', {
+      hasToken: !!token,
+      geometryType: typeof fieldGeometry,
+      geometryKeys: fieldGeometry ? Object.keys(fieldGeometry) : 'null',
+      geometryTypeProp: fieldGeometry?.type,
+      geometrySample: fieldGeometry?.coordinates ? JSON.stringify(fieldGeometry.coordinates).substring(0, 100) + '...' : 'no coordinates'
+    })
+
     if (!token || !fieldGeometry) {
-      console.log('⚠️ loadSoilData: Missing token or geometry')
+      console.log('⚠️ loadSoilData: Missing token or geometry - aborting')
       return
     }
 
-    console.log('🌱 Starting soil data load with geometry:', typeof fieldGeometry, fieldGeometry?.type || 'unknown type')
+    console.log('🌱 Starting soil data load with geometry type:', fieldGeometry.type || 'unknown')
     setLoadingSoil(true)
     
     try {
@@ -748,6 +757,12 @@ function FieldPerformanceAnalytics() {
           // Para cada ponto, buscar o polígono de solo mais próximo (dentro do field)
           const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${point.lng}, ${point.lat}))${fieldWktFilter}`
 
+          console.log(`🌱 Querying soil data for point ${index + 1}/${gridPoints.length}:`, {
+            point: point,
+            query: sqlQuery.substring(0, 100) + '...',
+            url: `${baseUrl}/services/pointlake/api/v2/query`
+          })
+
           const response = await axios.get(
             `${baseUrl}/services/pointlake/api/v2/query`,
             {
@@ -761,9 +776,14 @@ function FieldPerformanceAnalytics() {
             }
           )
 
+          console.log(`✅ Soil query ${index + 1} response:`, response.data?.length || 0, 'results')
           return response.data || []
         } catch (err) {
-          console.warn(`Point ${index + 1}/${gridPoints.length} failed:`, err.message)
+          console.error(`❌ Point ${index + 1}/${gridPoints.length} failed:`, {
+            error: err.message,
+            status: err.response?.status,
+            data: err.response?.data
+          })
           return []
         }
       })
@@ -779,7 +799,16 @@ function FieldPerformanceAnalytics() {
       })
 
       const soilArray = Array.from(uniqueSoilData.values())
-      console.log('🌱 Soil data loaded:', soilArray.length, 'unique polygons from', gridPoints.length, 'grid points within boundary')
+      console.log('🌱 Soil data loading completed:', {
+        totalQueries: gridPoints.length,
+        successfulQueries: results.filter(r => r.length > 0).length,
+        uniquePolygons: soilArray.length,
+        samplePolygon: soilArray[0] ? {
+          mukey: soilArray[0].mukey,
+          drainage_class: soilArray[0].drainage_class,
+          county: soilArray[0].county
+        } : 'none'
+      })
 
       setSoilData(soilArray)
       // Mostrar layer automaticamente se tiver dados
@@ -787,9 +816,18 @@ function FieldPerformanceAnalytics() {
         setShowSoilLayer(true)
       }
     } catch (err) {
-      console.error('Error loading soil data:', err)
+      console.error('❌ Error loading soil data:', {
+        message: err.message,
+        stack: err.stack,
+        response: err.response ? {
+          status: err.response.status,
+          statusText: err.response.statusText,
+          data: err.response.data
+        } : 'no response'
+      })
       setSoilData([])
     } finally {
+      console.log('🏁 Soil data loading finished (success or error)')
       setLoadingSoil(false)
     }
   }

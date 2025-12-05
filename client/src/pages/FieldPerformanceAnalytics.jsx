@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLeafUser } from '../context/LeafUserContext'
 import MapComponent from '../components/MapComponent'
 import axios from 'axios'
-import { getLeafApiBaseUrl } from '../config/api'
+import { getLeafApiBaseUrl, getPointlakeApiUrl } from '../config/api'
 
 function FieldPerformanceAnalytics() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
@@ -714,12 +714,15 @@ function FieldPerformanceAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const baseUrl = getLeafApiBaseUrl(env)
 
+      const pointlakeBaseUrl = getPointlakeApiUrl(env)  // Usar função correta para PointLake API
+
       console.log('🌱 API Configuration for soil data:', {
         environment: env,
         baseUrl: baseUrl,
+        pointlakeBaseUrl: pointlakeBaseUrl,
         tokenPresent: !!token,
         tokenLength: token.length,
-        queryUrl: `${baseUrl}/services/pointlake/api/v2/query`
+        queryUrl: `${pointlakeBaseUrl}/v2/query`
       })
       
       // Extrair coordenadas do polígono
@@ -796,7 +799,7 @@ function FieldPerformanceAnalytics() {
       try {
         const testQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois LIMIT 1`
         const testResponse = await axios.get(
-          `${baseUrl}/services/pointlake/api/v2/query`,
+          `${pointlakeBaseUrl}/v2/query`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -824,11 +827,11 @@ function FieldPerformanceAnalytics() {
           console.log(`🌱 Querying soil data for point ${index + 1}/${gridPoints.length}:`, {
             point: point,
             query: sqlQuery.substring(0, 100) + '...',
-            url: `${baseUrl}/services/pointlake/api/v2/query`
+            url: `${pointlakeBaseUrl}/v2/query`
           })
 
           const response = await axios.get(
-            `${baseUrl}/services/pointlake/api/v2/query`,
+            `${pointlakeBaseUrl}/v2/query`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,

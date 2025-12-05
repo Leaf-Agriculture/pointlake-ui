@@ -296,28 +296,37 @@ function FieldPerformanceAnalytics() {
   // Função para converter GeoJSON para WKT POLYGON
   const geoJsonToWkt = (geometry) => {
     try {
+      console.log('🔄 geoJsonToWkt called with:', typeof geometry, geometry?.type)
       let geoJson = geometry
-      
+
       // Se for string, fazer parse
       if (typeof geometry === 'string') {
+        console.log('🔄 Parsing string geometry')
         geoJson = JSON.parse(geometry)
       }
-      
+
       if (geoJson.type === 'Polygon' && geoJson.coordinates && geoJson.coordinates[0]) {
+        console.log('🔄 Converting Polygon with', geoJson.coordinates[0].length, 'coordinates')
         // Converter coordenadas [lng, lat] para "lng lat" format
         const coords = geoJson.coordinates[0].map(c => `${c[0]} ${c[1]}`).join(', ')
-        return `POLYGON((${coords}))`
+        const wkt = `POLYGON((${coords}))`
+        console.log('✅ Polygon WKT result:', wkt.substring(0, 100) + '...')
+        return wkt
       }
-      
+
       if (geoJson.type === 'MultiPolygon' && geoJson.coordinates && geoJson.coordinates[0]) {
+        console.log('🔄 Converting MultiPolygon with', geoJson.coordinates[0][0].length, 'coordinates')
         // Usar apenas o primeiro polígono do MultiPolygon
         const coords = geoJson.coordinates[0][0].map(c => `${c[0]} ${c[1]}`).join(', ')
-        return `POLYGON((${coords}))`
+        const wkt = `POLYGON((${coords}))`
+        console.log('✅ MultiPolygon WKT result:', wkt.substring(0, 100) + '...')
+        return wkt
       }
-      
+
+      console.log('⚠️ Unsupported geometry type:', geoJson.type)
       return null
     } catch (e) {
-      console.error('Error converting GeoJSON to WKT:', e)
+      console.error('❌ Error converting GeoJSON to WKT:', e)
       return null
     }
   }
@@ -679,11 +688,19 @@ function FieldPerformanceAnalytics() {
   const loadSoilData = async (fieldGeometry) => {
     console.log('🌱 loadSoilData called with:', {
       hasToken: !!token,
+      tokenLength: token?.length,
       geometryType: typeof fieldGeometry,
       geometryKeys: fieldGeometry ? Object.keys(fieldGeometry) : 'null',
       geometryTypeProp: fieldGeometry?.type,
       geometrySample: fieldGeometry?.coordinates ? JSON.stringify(fieldGeometry.coordinates).substring(0, 100) + '...' : 'no coordinates'
     })
+
+    // Verificação crítica: se não tem token, abortar imediatamente
+    if (!token) {
+      console.error('🚫 CRITICAL: No authentication token available for soil data API calls')
+      setLoadingSoil(false)
+      return
+    }
 
     if (!token || !fieldGeometry) {
       console.log('⚠️ loadSoilData: Missing token or geometry - aborting')

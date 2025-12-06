@@ -1000,7 +1000,7 @@ function FieldPerformanceAnalytics() {
       }
 
       const params = {
-        samplerate: 10, // Sample rate fixo
+        samplerate: analysisSampleRate, // Sample rate ajustável pelo usuário
         startDate: startDateISO,
         endDate: endDateISO
       }
@@ -2352,6 +2352,25 @@ function FieldPerformanceAnalytics() {
                             </option>
                           ))}
                         </select>
+                      </div>
+
+                      {/* Sample Rate Input */}
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Sample Rate (%)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={analysisSampleRate}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value)
+                            if (!isNaN(value) && value >= 1 && value <= 100) {
+                              setAnalysisSampleRate(value)
+                            }
+                          }}
+                          className="bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-green-500 w-20"
+                          placeholder="10"
+                        />
                       </div>
 
                       {/* Botão Run Analysis */}

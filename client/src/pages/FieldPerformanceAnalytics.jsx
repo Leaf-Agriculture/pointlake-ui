@@ -740,65 +740,41 @@ function FieldPerformanceAnalytics() {
         return
       }
       
-      // Calcular bounding box do polígono
-      const lngs = coords.map(c => c[0])
-      const lats = coords.map(c => c[1])
-      const minLng = Math.min(...lngs)
-      const maxLng = Math.max(...lngs)
-      const minLat = Math.min(...lats)
-      const maxLat = Math.max(...lats)
-      
-      // Criar grid de pontos dentro do bounding box (mais denso para melhor cobertura)
-      const gridSize = 8 // 8x8 = 64 pontos para melhor cobertura
-      const lngStep = (maxLng - minLng) / (gridSize + 1)
-      const latStep = (maxLat - minLat) / (gridSize + 1)
-
-      const gridPoints = []
-      for (let i = 1; i <= gridSize; i++) {
-        for (let j = 1; j <= gridSize; j++) {
-          gridPoints.push({
-            lng: minLng + (lngStep * i),
-            lat: minLat + (latStep * j)
-          })
-        }
-      }
-
-      // Adicionar pontos extras nos cantos e centro
-      gridPoints.push({ lng: minLng, lat: minLat }) // canto inferior esquerdo
-      gridPoints.push({ lng: maxLng, lat: minLat }) // canto inferior direito
-      gridPoints.push({ lng: minLng, lat: maxLat }) // canto superior esquerdo
-      gridPoints.push({ lng: maxLng, lat: maxLat }) // canto superior direito
-      gridPoints.push({ lng: (minLng + maxLng) / 2, lat: (minLat + maxLat) / 2 }) // centro
-
-      console.log('🌱 Fetching soil data for', gridPoints.length, 'grid points (parallel queries)')
-
-      // Fazer consultas paralelas para cada ponto (mais confiável)
+      // Mapa para armazenar dados únicos de solo
       const uniqueSoilData = new Map()
 
-      // Criar filtro WKT do field para garantir que pontos estão dentro do field
-      let fieldWktFilter = ''
-      if (fieldGeometry) {
-        const fieldWkt = geoJsonToWkt(fieldGeometry)
-        console.log('🌱 WKT conversion:', {
-          inputGeometryType: fieldGeometry.type,
-          wktResult: fieldWkt ? fieldWkt.substring(0, 100) + '...' : 'null',
-          wktLength: fieldWkt?.length || 0
-        })
-        if (fieldWkt) {
-          fieldWktFilter = ` AND ST_Contains(ST_GeomFromText('${fieldWkt}'), ST_Point(${point.lng}, ${point.lat}))`
-          console.log('🌱 Field filter applied:', fieldWktFilter.substring(0, 150) + '...')
-        } else {
-          console.log('⚠️ No WKT filter applied - geoJsonToWkt returned null')
-        }
-      } else {
-        console.log('⚠️ No field geometry for WKT filter')
+      // Criar geometria WKT do field para uma única query
+      if (!fieldGeometry) {
+        console.error('❌ No field geometry provided for soil query')
+        setLoadingSoil(false)
+        return
       }
 
-      // Primeiro testar uma query simples para verificar se a API está funcionando
-      console.log('🌱 Testing basic soil query first...')
-      try {
-        const testQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois LIMIT 1`
-        const testResponse = await axios.get(
+      const fieldWkt = geoJsonToWkt(fieldGeometry)
+      if (!fieldWkt) {
+        console.error('❌ Failed to convert field geometry to WKT')
+        setLoadingSoil(false)
+        return
+      }
+
+      console.log('🌱 Field WKT generated:', fieldWkt.substring(0, 150) + '...')
+
+      // Uma única query que retorna todos os polígonos de solo que intersectam o field
+      const sqlQuery = `SELECT
+        mukey,
+        county,
+        muaggatt_col_16 as drainage_class,
+        ROUND(ST_Area(ST_GeomFromWKB(geometry)) * 247.105, 2) as acres,
+        geometry
+      FROM ssurgo_illinois
+      WHERE ST_Intersects(ST_GeomFromWKB(geometry), ST_GeomFromText('${fieldWkt}'))`
+
+      console.log('🌱 Executing single soil query:', {
+        query: sqlQuery,
+        url: `${pointlakeBaseUrl}/v2/query`
+      })
+
+      const response = await axios.get(
           `${pointlakeBaseUrl}/v2/query`,
           {
             headers: {
@@ -806,82 +782,41 @@ function FieldPerformanceAnalytics() {
               'accept': 'application/json'
             },
             params: {
-              sql: testQuery
+              sql: sqlQuery
             }
           }
         )
-        console.log('✅ Basic soil query test successful:', testResponse.data?.length || 0, 'results')
-      } catch (testErr) {
-        console.error('❌ Basic soil query test failed:', {
-          error: testErr.message,
-          status: testErr.response?.status,
-          data: testErr.response?.data
+
+        console.log('✅ Single soil query response:', {
+          status: response.status,
+          resultsCount: response.data?.length || 0,
+          sampleResult: response.data?.[0] ? {
+            mukey: response.data[0].mukey,
+            drainage_class: response.data[0].drainage_class,
+            county: response.data[0].county,
+            acres: response.data[0].acres
+          } : 'none'
         })
-      }
 
-      const queryPromises = gridPoints.map(async (point, index) => {
-        try {
-          // Para cada ponto, buscar o polígono de solo mais próximo (dentro do field)
-          const sqlQuery = `SELECT mukey, county, muaggatt_col_16 as drainage_class, geometry FROM ssurgo_illinois WHERE ST_Contains(ST_GeomFromWKB(geometry), ST_Point(${point.lng}, ${point.lat}))${fieldWktFilter}`
+        const soilArray = response.data || []
+        soilArray.forEach(soil => {
+          if (soil.mukey) {
+            uniqueSoilData.set(soil.mukey, soil)
+          }
+        })
 
-          console.log(`🌱 Querying soil data for point ${index + 1}/${gridPoints.length}:`, {
-            point: point,
-            query: sqlQuery.substring(0, 100) + '...',
-            url: `${pointlakeBaseUrl}/v2/query`
-          })
+        const finalSoilArray = Array.from(uniqueSoilData.values())
+        console.log('🌱 Soil data loading completed:', {
+          totalResults: finalSoilArray.length,
+          queryType: 'single ST_Intersects query',
+          fieldGeometry: fieldGeometry.type
+        })
 
-          const response = await axios.get(
-            `${pointlakeBaseUrl}/v2/query`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'accept': 'application/json'
-              },
-              params: {
-                sql: sqlQuery
-              }
-            }
-          )
-
-          console.log(`✅ Soil query ${index + 1} response:`, response.data?.length || 0, 'results')
-          return response.data || []
-        } catch (err) {
-          console.error(`❌ Point ${index + 1}/${gridPoints.length} failed:`, {
-            error: err.message,
-            status: err.response?.status,
-            data: err.response?.data
-          })
-          return []
+        setSoilData(finalSoilArray)
+        // Mostrar layer automaticamente se tiver dados
+        if (finalSoilArray.length > 0) {
+          setShowSoilLayer(true)
         }
-      })
-
-      // Aguardar todas as consultas
-      const results = await Promise.all(queryPromises)
-
-      // Consolidar resultados únicos por mukey
-      results.flat().forEach(soil => {
-        if (soil.mukey && !uniqueSoilData.has(soil.mukey)) {
-          uniqueSoilData.set(soil.mukey, soil)
-        }
-      })
-
-      const soilArray = Array.from(uniqueSoilData.values())
-      console.log('🌱 Soil data loading completed:', {
-        totalQueries: gridPoints.length,
-        successfulQueries: results.filter(r => r.length > 0).length,
-        uniquePolygons: soilArray.length,
-        samplePolygon: soilArray[0] ? {
-          mukey: soilArray[0].mukey,
-          drainage_class: soilArray[0].drainage_class,
-          county: soilArray[0].county
-        } : 'none'
-      })
-
-      setSoilData(soilArray)
-      // Mostrar layer automaticamente se tiver dados
-      if (soilArray.length > 0) {
-        setShowSoilLayer(true)
-      }
     } catch (err) {
       console.error('❌ Error loading soil data:', {
         message: err.message,

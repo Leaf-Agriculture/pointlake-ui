@@ -1764,6 +1764,10 @@ function FieldPerformanceAnalytics() {
       numericFields: []
     })
     setSelectedFilters({
+      operationType: [],
+      crop: [],
+      variety: [],
+      recordingStatus: [],
       activityTypes: [],
       pointTypes: []
     })

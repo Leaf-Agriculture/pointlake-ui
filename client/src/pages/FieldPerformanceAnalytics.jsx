@@ -852,8 +852,8 @@ function FieldPerformanceAnalytics() {
         type: 'zone'
       }))
     
-    // Dados de solo se layer estiver ativa
-    const currentSoilData = showSoilLayer && soilData.length > 0 ? soilData : null
+    // Dados de solo - sempre incluir se houver dados (independente do boundary)
+    const currentSoilData = soilData.length > 0 ? soilData : null
     
     console.log('🔄 updateMapDisplay:', {
       hasBoundary: !!currentBoundary?.geometry,
@@ -864,32 +864,35 @@ function FieldPerformanceAnalytics() {
       soilPolygons: currentSoilData?.length || 0
     })
     
-    // Construir objeto de dados do mapa
-    const mapDataObj = {
-      zones: zoneGeometries
+    // Construir objeto de dados do mapa na ordem correta (solo -> field -> zones -> pontos)
+    const mapDataObj = {}
+
+    // 1. Adicionar dados de solo (sempre, independente do boundary)
+    if (currentSoilData) {
+      mapDataObj.soilData = currentSoilData
     }
-    
-    // Adicionar boundary se ativo
+
+    // 2. Adicionar boundary do field (se ativo)
     if (showBoundaryLayer && currentBoundary?.geometry) {
       mapDataObj.geometry = currentBoundary.geometry
       mapDataObj.boundary = currentBoundary.geometry
     }
-    
-    // Adicionar dados de solo se ativo
-    if (currentSoilData) {
-      mapDataObj.soilData = currentSoilData
+
+    // 3. Adicionar zones visíveis
+    if (zoneGeometries.length > 0) {
+      mapDataObj.zones = zoneGeometries
     }
-    
-    // Adicionar pontos se layer de dados está ativa
+
+    // 4. Adicionar pontos (mais alto)
     if (activeLayerId && currentPoints && currentPoints.length > 0) {
       const pointsWithHeatmapValue = currentPoints.map(p => ({
         ...p,
         heatmapField: activeLayerId,
         heatmapValue: p[activeLayerId]
       }))
-      
+
       console.log('📍 Points prepared for map:', pointsWithHeatmapValue.length, 'layer:', activeLayerId)
-      
+
       mapDataObj.points = pointsWithHeatmapValue
       mapDataObj.heatmapField = activeLayerId
     }

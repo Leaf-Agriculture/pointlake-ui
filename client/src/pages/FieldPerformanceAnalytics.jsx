@@ -1711,19 +1711,91 @@ function FieldPerformanceAnalytics() {
 
 
 
-  // Selecionar field
+  // Selecionar field - LIMPAR TUDO e focar no field
   const handleSelectField = (field) => {
     console.log('🏗️ handleSelectField called with:', field.name)
-    console.log('🏗️ Selecting field:', field.name, '- will load soil data automatically')
+    console.log('🏗️ Selecting field:', field.name, '- CLEARING ALL DATA and focusing on new field')
+
+    // ===========================================
+    // LIMPAR TODOS OS DADOS ANTERIORES COMPLETAMENTE
+    // ===========================================
+
+    // Field e boundary
     setSelectedField(field)
+    setFieldBoundary(null)
+    setBoundaryData(null)
+    setLoadingBoundary(false)
+
+    // Análises e dados
     setAnalysisData(null)
+    setAnalysisPoints([])
+    setFilteredPoints([])
     setShowAnalysisResults(false)
+    setLoadingAnalysis(false)
+
+    // Timeline e drill-down
+    setTimelineLevel('yearmonth')
+    setTimelineDrillPath([])
     setSelectedSeason(null)
+    setSelectedZoneForAnalysis(null)
+
+    // Seasons
+    setSeasons([])
+    setLoadingSeasons(false)
+
+    // Zones
+    setFieldZones([])
+    setLoadingZones(false)
+    setSelectedZone(null)
+    setVisibleZones({})
     setIsDrawingZone(false)
     setDrawnZoneCoords([])
-    // Limpar seasons e zones antes de carregar novas
-    setSeasons([])
-    setFieldZones([])
+
+    // Soil data
+    setSoilData([])
+    setLoadingSoil(false)
+    setShowSoilLayer(false)
+
+    // Filtros
+    setShowFilters(false)
+    setAvailableFilters({
+      activityTypes: [],
+      pointTypes: [],
+      numericFields: []
+    })
+    setSelectedFilters({
+      activityTypes: [],
+      pointTypes: []
+    })
+    setNumericFilters({
+      min: {},
+      max: {}
+    })
+    setNumericRanges({})
+
+    // Layers do mapa
+    setActiveLayers({
+      ndvi: false,
+      yield: false,
+      elevation: false,
+      soil_moisture: false,
+      organic_matter: false,
+      ph: false,
+      conductivity: false
+    })
+    setShowBoundaryLayer(true)
+
+    // Estados de modais
+    setShowAnalysisResults(false)
+    setShowComparisonModal(false)
+    setComparisonName('')
+
+    // Mapa
+    setMapData(null)
+
+    // ===========================================
+    // CARREGAR DADOS DO NOVO FIELD
+    // ===========================================
     loadFieldBoundary(field)
     loadFieldSeasons(field.id)
     loadFieldZones(field.id)

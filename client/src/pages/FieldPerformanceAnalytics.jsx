@@ -97,6 +97,20 @@ function FieldPerformanceAnalytics() {
   // Estados para Layers (visualização) - cada layer pode ser ligada/desligada
   const [showBoundaryLayer, setShowBoundaryLayer] = useState(true) // Default: ON
   const [boundaryData, setBoundaryData] = useState(null)
+
+  // Ordem das camadas - controlada por drag and drop
+  const [layerOrder, setLayerOrder] = useState([
+    'soilData',      // Solo (mais baixo)
+    'boundary',      // Field boundary
+    'zones',         // Zones
+    'elevation',     // Data layers (mais alto)
+    'speed',
+    'appliedRate',
+    'area',
+    'yieldVolume',
+    'harvestMoisture',
+    'seedRate'
+  ])
   
   // Layers de dados - cada campo numérico é uma layer separada
   const [activeLayers, setActiveLayers] = useState({
@@ -864,57 +878,54 @@ function FieldPerformanceAnalytics() {
       soilPolygons: currentSoilData?.length || 0
     })
     
-    // Construir objeto de dados do mapa - ORDEM DINÂMICA baseada na camada ativa
+    // Construir objeto de dados do mapa baseado na ORDEM DEFINIDA PELO USUÁRIO
     const mapDataObj = {}
 
-    // SE HÁ CAMADA ATIVA: pontos primeiro (mais alto), depois zones, boundary, solo
+    // Preparar pontos se houver camada ativa
+    let pointsData = null
     if (activeLayerId && currentPoints && currentPoints.length > 0) {
-      // 1. Pontos ativos - SEMPRE em primeiro plano quando ativos
-      const pointsWithHeatmapValue = currentPoints.map(p => ({
+      pointsData = currentPoints.map(p => ({
         ...p,
         heatmapField: activeLayerId,
         heatmapValue: p[activeLayerId]
       }))
-
-      console.log('📍 Points prepared for map (ACTIVE LAYER):', pointsWithHeatmapValue.length, 'layer:', activeLayerId)
-
-      mapDataObj.points = pointsWithHeatmapValue
-      mapDataObj.heatmapField = activeLayerId
-
-      // 2. Zones visíveis (acima do boundary)
-      if (zoneGeometries.length > 0) {
-        mapDataObj.zones = zoneGeometries
-      }
-
-      // 3. Boundary do field (se ativo)
-      if (showBoundaryLayer && currentBoundary?.geometry) {
-        mapDataObj.geometry = currentBoundary.geometry
-        mapDataObj.boundary = currentBoundary.geometry
-      }
-
-      // 4. Dados de solo (mais baixo)
-      if (currentSoilData) {
-        mapDataObj.soilData = currentSoilData
-      }
-
-    } else {
-      // SEM CAMADA ATIVA: ordem normal (solo -> boundary -> zones)
-      // 1. Adicionar dados de solo (sempre, independente do boundary)
-      if (currentSoilData) {
-        mapDataObj.soilData = currentSoilData
-      }
-
-      // 2. Adicionar boundary do field (se ativo)
-      if (showBoundaryLayer && currentBoundary?.geometry) {
-        mapDataObj.geometry = currentBoundary.geometry
-        mapDataObj.boundary = currentBoundary.geometry
-      }
-
-      // 3. Adicionar zones visíveis
-      if (zoneGeometries.length > 0) {
-        mapDataObj.zones = zoneGeometries
-      }
+      console.log('📍 Points prepared for map (ACTIVE LAYER):', pointsData.length, 'layer:', activeLayerId)
     }
+
+    // Aplicar ordem definida pelo usuário (do mais baixo para o mais alto)
+    layerOrder.forEach(layerId => {
+      switch (layerId) {
+        case 'soilData':
+          if (currentSoilData) {
+            mapDataObj.soilData = currentSoilData
+          }
+          break
+
+        case 'boundary':
+          if (showBoundaryLayer && currentBoundary?.geometry) {
+            mapDataObj.geometry = currentBoundary.geometry
+            mapDataObj.boundary = currentBoundary.geometry
+          }
+          break
+
+        case 'zones':
+          if (zoneGeometries.length > 0) {
+            mapDataObj.zones = zoneGeometries
+          }
+          break
+
+        default:
+          // Data layers (elevation, speed, etc.)
+          if (layerId === activeLayerId && pointsData) {
+            mapDataObj.points = pointsData
+            mapDataObj.heatmapField = activeLayerId
+          }
+          break
+      }
+    })
+
+    console.log('🎨 Layer order applied:', layerOrder)
+    console.log('🗺️ Map data object keys:', Object.keys(mapDataObj))
     
     // Se não temos nada para mostrar
     if (!mapDataObj.geometry && !mapDataObj.points && !mapDataObj.soilData && zoneGeometries.length === 0) {
@@ -933,6 +944,37 @@ function FieldPerformanceAnalytics() {
         newState[key] = key === layerId ? !prev[key] : false
       })
       return newState
+    })
+  }
+
+  // Funções de drag and drop para reordenar camadas
+  const handleDragStart = (e, layerId) => {
+    e.dataTransfer.setData('text/plain', layerId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e, targetLayerId) => {
+    e.preventDefault()
+    const draggedLayerId = e.dataTransfer.getData('text/plain')
+
+    if (draggedLayerId === targetLayerId) return
+
+    setLayerOrder(prevOrder => {
+      const newOrder = [...prevOrder]
+      const draggedIndex = newOrder.indexOf(draggedLayerId)
+      const targetIndex = newOrder.indexOf(targetLayerId)
+
+      // Remover o item arrastado
+      newOrder.splice(draggedIndex, 1)
+      // Inserir na nova posição
+      newOrder.splice(targetIndex, 0, draggedLayerId)
+
+      return newOrder
     })
   }
 
@@ -2529,23 +2571,39 @@ function FieldPerformanceAnalytics() {
                     </div>
                     
                     <div className="p-2 space-y-1">
-                      {/* Field Boundary Layer - sempre primeiro */}
+                      {/* DRAG & DROP Layers */}
+                      {/* Field Boundary Layer */}
                       {boundaryData && (
-                        <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 cursor-pointer">
+                        <div
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, 'boundary')}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, 'boundary')}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 cursor-move transition border border-transparent hover:border-zinc-600"
+                        >
                           <input
                             type="checkbox"
                             checked={showBoundaryLayer}
                             onChange={(e) => setShowBoundaryLayer(e.target.checked)}
                             className="rounded bg-zinc-700 border-zinc-600 text-blue-500 w-4 h-4"
                           />
-                          <span className="text-xs text-zinc-300">Field Boundary</span>
-                        </label>
+                          <span className="text-xs text-zinc-300 flex-1">Field Boundary</span>
+                          <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                          </svg>
+                        </div>
                       )}
                       
                       {/* Soil Data Layer (SSURGO) - Sempre mostrar */}
-                      <label className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition ${
-                        showSoilLayer ? 'bg-amber-950/50 border border-amber-700/50' : 'hover:bg-zinc-800'
-                      } ${!selectedField ? 'opacity-50' : ''}`}>
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, 'soilData')}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, 'soilData')}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-move transition border border-transparent hover:border-zinc-600 ${
+                          showSoilLayer ? 'bg-amber-950/50 border border-amber-700/50' : 'hover:bg-zinc-800'
+                        } ${!selectedField ? 'opacity-50' : ''}`}
+                      >
                         <input
                           type="checkbox"
                           checked={showSoilLayer && soilData.length > 0}
@@ -2583,7 +2641,10 @@ function FieldPerformanceAnalytics() {
                             </div>
                           )}
                         </div>
-                      </label>
+                        <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                        </svg>
+                      </div>
                       
                       {/* Visible Zones - mostrar zones que estão ativas */}
                       {fieldZones.length > 0 && Object.values(visibleZones).some(v => v) && (
@@ -2635,9 +2696,13 @@ function FieldPerformanceAnalytics() {
                             const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
                             
                             return (
-                              <label 
-                                key={layer.id} 
-                                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition ${
+                              <div
+                                key={layer.id}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, layer.id)}
+                                onDragOver={handleDragOver}
+                                onDrop={(e) => handleDrop(e, layer.id)}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-move transition border border-transparent hover:border-zinc-600 ${
                                   isActive ? 'bg-blue-950 border border-blue-700' : 'hover:bg-zinc-800'
                                 }`}
                               >
@@ -2666,7 +2731,10 @@ function FieldPerformanceAnalytics() {
                                     </div>
                                   )}
                                 </div>
-                              </label>
+                                <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                </svg>
+                              </div>
                             )
                           })}
                         </>

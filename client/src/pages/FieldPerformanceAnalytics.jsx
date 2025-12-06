@@ -864,37 +864,56 @@ function FieldPerformanceAnalytics() {
       soilPolygons: currentSoilData?.length || 0
     })
     
-    // Construir objeto de dados do mapa na ordem correta (solo -> field -> zones -> pontos)
+    // Construir objeto de dados do mapa - ORDEM DINÂMICA baseada na camada ativa
     const mapDataObj = {}
 
-    // 1. Adicionar dados de solo (sempre, independente do boundary)
-    if (currentSoilData) {
-      mapDataObj.soilData = currentSoilData
-    }
-
-    // 2. Adicionar boundary do field (se ativo)
-    if (showBoundaryLayer && currentBoundary?.geometry) {
-      mapDataObj.geometry = currentBoundary.geometry
-      mapDataObj.boundary = currentBoundary.geometry
-    }
-
-    // 3. Adicionar zones visíveis
-    if (zoneGeometries.length > 0) {
-      mapDataObj.zones = zoneGeometries
-    }
-
-    // 4. Adicionar pontos (mais alto)
+    // SE HÁ CAMADA ATIVA: pontos primeiro (mais alto), depois zones, boundary, solo
     if (activeLayerId && currentPoints && currentPoints.length > 0) {
+      // 1. Pontos ativos - SEMPRE em primeiro plano quando ativos
       const pointsWithHeatmapValue = currentPoints.map(p => ({
         ...p,
         heatmapField: activeLayerId,
         heatmapValue: p[activeLayerId]
       }))
 
-      console.log('📍 Points prepared for map:', pointsWithHeatmapValue.length, 'layer:', activeLayerId)
+      console.log('📍 Points prepared for map (ACTIVE LAYER):', pointsWithHeatmapValue.length, 'layer:', activeLayerId)
 
       mapDataObj.points = pointsWithHeatmapValue
       mapDataObj.heatmapField = activeLayerId
+
+      // 2. Zones visíveis (acima do boundary)
+      if (zoneGeometries.length > 0) {
+        mapDataObj.zones = zoneGeometries
+      }
+
+      // 3. Boundary do field (se ativo)
+      if (showBoundaryLayer && currentBoundary?.geometry) {
+        mapDataObj.geometry = currentBoundary.geometry
+        mapDataObj.boundary = currentBoundary.geometry
+      }
+
+      // 4. Dados de solo (mais baixo)
+      if (currentSoilData) {
+        mapDataObj.soilData = currentSoilData
+      }
+
+    } else {
+      // SEM CAMADA ATIVA: ordem normal (solo -> boundary -> zones)
+      // 1. Adicionar dados de solo (sempre, independente do boundary)
+      if (currentSoilData) {
+        mapDataObj.soilData = currentSoilData
+      }
+
+      // 2. Adicionar boundary do field (se ativo)
+      if (showBoundaryLayer && currentBoundary?.geometry) {
+        mapDataObj.geometry = currentBoundary.geometry
+        mapDataObj.boundary = currentBoundary.geometry
+      }
+
+      // 3. Adicionar zones visíveis
+      if (zoneGeometries.length > 0) {
+        mapDataObj.zones = zoneGeometries
+      }
     }
     
     // Se não temos nada para mostrar
@@ -1779,13 +1798,13 @@ function FieldPerformanceAnalytics() {
 
     // Layers do mapa
     setActiveLayers({
-      ndvi: false,
-      yield: false,
       elevation: false,
-      soil_moisture: false,
-      organic_matter: false,
-      ph: false,
-      conductivity: false
+      speed: false,
+      appliedRate: false,
+      area: false,
+      yieldVolume: false,
+      harvestMoisture: false,
+      seedRate: false
     })
     setShowBoundaryLayer(true)
 

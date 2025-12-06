@@ -2103,7 +2103,7 @@ function FieldPerformanceAnalytics() {
                           e.stopPropagation()
                           handleDeleteField(field.id)
                         }}
-                        className="absolute top-2 right-2 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                        className="absolute top-2 right-2 text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded opacity-60 group-hover:opacity-100 transition-all p-1"
                         title="Delete field"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

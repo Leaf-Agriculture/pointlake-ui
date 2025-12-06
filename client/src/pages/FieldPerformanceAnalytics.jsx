@@ -2112,7 +2112,7 @@ function FieldPerformanceAnalytics() {
                         {/* Seasons do Field */}
                         <div className="mt-3 pt-3 border-t border-zinc-700">
                           <div className="flex items-center justify-between py-1">
-                            <span className="text-xs text-zinc-400 font-medium">Analysis</span>
+                            <span className="text-xs text-zinc-400 font-medium">Seasons</span>
                             <button
                               onClick={() => setShowSeasonModal(true)}
                               className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1"

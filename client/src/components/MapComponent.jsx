@@ -14,19 +14,88 @@ L.Icon.Default.mergeOptions({
 // Função para converter POLYGON WKT para coordenadas do Leaflet
 const parsePolygonWKT = (wktString) => {
   try {
-    // Extrair coordenadas do POLYGON WKT
-    const coordMatch = wktString.match(/POLYGON\s*\(\(([^)]+)\)\)/)
-    if (!coordMatch) return null
+    if (!wktString || typeof wktString !== 'string') return null
     
-    const coordString = coordMatch[1]
-    const coords = coordString.split(',').map(coord => {
-      const [lng, lat] = coord.trim().split(' ').map(Number)
+    // Extrair coordenadas do POLYGON ou MULTIPOLYGON WKT
+    // Suporta formatos: POLYGON((...)), POLYGON ((...)), MULTIPOLYGON(((...)))
+    
+    // Normalizar string
+    const normalizedWkt = wktString.trim().toUpperCase()
+    
+    let coordString = null
+    
+    if (normalizedWkt.startsWith('MULTIPOLYGON')) {
+      // Para MultiPolygon, vamos pegar o primeiro polígono por enquanto
+      // Ex: MULTIPOLYGON (((coords))) -> extrair coords
+      const match = normalizedWkt.match(/MULTIPOLYGON\s*\(\(\(([^)]+)\)\)\)/)
+      if (match) coordString = match[1]
+    } else {
+      // Para Polygon simples
+      // Ex: POLYGON ((coords)) -> extrair coords
+      const match = normalizedWkt.match(/POLYGON\s*\(\(([^)]+)\)\)/)
+      if (match) {
+        coordString = match[1]
+      } else {
+         // Tentar formato alternativo com espaços: POLYGON ((...))
+         const altMatch = normalizedWkt.match(/POLYGON\s+\(\(([^)]+)\)\)/)
+         if (altMatch) coordString = altMatch[1]
+      }
+    }
+    
+    if (!coordString) {
+      console.warn('⚠️ Could not parse WKT polygon format:', wktString.substring(0, 100))
+      return null
+    }
+
+    // Tentar primeiro como lng lat (formato WKT padrão)
+    let coords = coordString.split(',').map((coord, idx) => {
+      const parts = coord.trim().split(/\s+/).map(Number)
+      if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null
+      
+      const lng = parts[0]
+      const lat = parts[1]
+      
+      // Log primeiro ponto para debug
+      if (idx === 0) {
+        console.log('📍 Parsed first coordinate (lng, lat):', { raw: coord.trim(), lng, lat })
+      }
+      
+      // Validar ranges
+      if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+        return null
+      }
+      
       return [lat, lng] // Leaflet usa [lat, lng]
-    })
+    }).filter(Boolean)
     
-    return coords
+    // Se não conseguiu parsear ou coordenadas parecem inválidas, tentar ordem invertida (lat, lng)
+    if (coords.length < 3) {
+      console.log('⚠️ Trying swapped coordinate order (lat, lng)')
+      coords = coordString.split(',').map((coord, idx) => {
+        const parts = coord.trim().split(/\s+/).map(Number)
+        if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null
+        
+        // Tentar como lat lng (ordem invertida)
+        const lat = parts[0]
+        const lng = parts[1]
+        
+        // Log primeiro ponto para debug
+        if (idx === 0) {
+          console.log('📍 Parsed first coordinate (lat, lng swapped):', { raw: coord.trim(), lng, lat })
+        }
+        
+        // Validar ranges
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+          return null
+        }
+        
+        return [lat, lng] // Leaflet usa [lat, lng]
+      }).filter(Boolean)
+    }
+    
+    return coords.length > 2 ? coords : null
   } catch (error) {
-    console.error('Erro ao fazer parse do POLYGON:', error)
+    console.error('Erro ao fazer parse do POLYGON:', error, wktString?.substring(0, 100))
     return null
   }
 }
@@ -776,11 +845,32 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         const drainageClasses = {}
         
         soilPolygons.forEach(soil => {
-          if (!soil.geometry) return
+          if (!soil.geometry) {
+            console.warn('⚠️ Soil polygon missing geometry:', soil.mukey || 'unknown')
+            return
+          }
           
           try {
-            // Decodificar WKB base64 para coordenadas
-            const coords = decodePolygonWKB(soil.geometry)
+            // Tentar primeiro como WKT (formato retornado pela API), depois WKB
+            let coords = null
+            if (typeof soil.geometry === 'string') {
+              // Se parece com WKT (começa com "POLYGON")
+              if (soil.geometry.trim().toUpperCase().startsWith('POLYGON')) {
+                coords = parsePolygonWKT(soil.geometry)
+                if (!coords) {
+                  console.warn('⚠️ Failed to parse WKT polygon:', soil.geometry.substring(0, 100))
+                }
+              } else {
+                // Tentar como WKB base64
+                coords = decodePolygonWKB(soil.geometry)
+                if (!coords) {
+                  console.warn('⚠️ Failed to decode WKB polygon')
+                }
+              }
+            } else {
+              // Tentar como WKB base64
+              coords = decodePolygonWKB(soil.geometry)
+            }
             
             if (coords && coords.length > 2) {
               const drainageClass = soil.drainage_class || 'Unknown'

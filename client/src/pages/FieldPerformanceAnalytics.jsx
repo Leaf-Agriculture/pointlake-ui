@@ -782,7 +782,9 @@ function FieldPerformanceAnalytics() {
 
     muaggatt_col_16 as drainage_class,
 
-    ROUND(ST_Area(geometry) * 247.105, 2) as acres
+    ROUND(ST_Area(geometry) * 247.105, 2) as acres,
+
+    geometry
 
 FROM ssurgo_illinois 
 

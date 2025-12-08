@@ -16,70 +16,37 @@ const parsePolygonWKT = (wktString) => {
   try {
     if (!wktString || typeof wktString !== 'string') return null
     
-    // Extrair coordenadas do POLYGON WKT
-    // Suporta formatos: POLYGON((...)) ou POLYGON ((...))
-    // Para polígonos simples (um ring), pegar apenas o primeiro ring
-    const coordMatch = wktString.match(/POLYGON\s*\(\(([^)]+)\)\)/)
-    if (!coordMatch) {
-      // Tentar formato alternativo com espaços: POLYGON ((...))
-      const altMatch = wktString.match(/POLYGON\s+\(\(([^)]+)\)\)/)
-      if (!altMatch) {
-        console.warn('⚠️ Could not parse WKT polygon format:', wktString.substring(0, 100))
-        return null
+    // Extrair coordenadas do POLYGON ou MULTIPOLYGON WKT
+    // Suporta formatos: POLYGON((...)), POLYGON ((...)), MULTIPOLYGON(((...)))
+    
+    // Normalizar string
+    const normalizedWkt = wktString.trim().toUpperCase()
+    
+    let coordString = null
+    
+    if (normalizedWkt.startsWith('MULTIPOLYGON')) {
+      // Para MultiPolygon, vamos pegar o primeiro polígono por enquanto
+      // Ex: MULTIPOLYGON (((coords))) -> extrair coords
+      const match = normalizedWkt.match(/MULTIPOLYGON\s*\(\(\(([^)]+)\)\)\)/)
+      if (match) coordString = match[1]
+    } else {
+      // Para Polygon simples
+      // Ex: POLYGON ((coords)) -> extrair coords
+      const match = normalizedWkt.match(/POLYGON\s*\(\(([^)]+)\)\)/)
+      if (match) {
+        coordString = match[1]
+      } else {
+         // Tentar formato alternativo com espaços: POLYGON ((...))
+         const altMatch = normalizedWkt.match(/POLYGON\s+\(\(([^)]+)\)\)/)
+         if (altMatch) coordString = altMatch[1]
       }
-      const coordString = altMatch[1]
-      
-      // Tentar primeiro como lng lat (formato WKT padrão)
-      let coords = coordString.split(',').map((coord, idx) => {
-        const parts = coord.trim().split(/\s+/).map(Number)
-        if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null
-        
-        const lng = parts[0]
-        const lat = parts[1]
-        
-        // Log primeiro ponto para debug
-        if (idx === 0) {
-          console.log('📍 Parsed first coordinate (lng, lat):', { raw: coord.trim(), lng, lat })
-        }
-        
-        // Validar ranges
-        if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
-          return null
-        }
-        
-        return [lat, lng] // Leaflet usa [lat, lng]
-      }).filter(Boolean)
-      
-      // Se não conseguiu parsear ou coordenadas parecem inválidas, tentar ordem invertida (lat, lng)
-      if (coords.length < 3) {
-        console.log('⚠️ Trying swapped coordinate order (lat, lng)')
-        coords = coordString.split(',').map((coord, idx) => {
-          const parts = coord.trim().split(/\s+/).map(Number)
-          if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null
-          
-          // Tentar como lat lng (ordem invertida)
-          const lat = parts[0]
-          const lng = parts[1]
-          
-          // Log primeiro ponto para debug
-          if (idx === 0) {
-            console.log('📍 Parsed first coordinate (lat, lng swapped):', { raw: coord.trim(), lng, lat })
-          }
-          
-          // Validar ranges
-          if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
-            return null
-          }
-          
-          return [lat, lng] // Leaflet usa [lat, lng]
-        }).filter(Boolean)
-      }
-      
-      return coords.length > 2 ? coords : null
     }
     
-    const coordString = coordMatch[1]
-    
+    if (!coordString) {
+      console.warn('⚠️ Could not parse WKT polygon format:', wktString.substring(0, 100))
+      return null
+    }
+
     // Tentar primeiro como lng lat (formato WKT padrão)
     let coords = coordString.split(',').map((coord, idx) => {
       const parts = coord.trim().split(/\s+/).map(Number)

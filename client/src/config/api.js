@@ -35,6 +35,14 @@ export const getUserManagementApiUrl = (environment) => {
 }
 
 /**
+ * Obtém a URL da API de Analytics (zones, analytics)
+ */
+export const getAnalyticsApiUrl = (environment) => {
+  const base = getLeafApiBaseUrl(environment)
+  return `${base}/services/analytics/api`
+}
+
+/**
  * Helper para construir URLs da API Point Lake
  */
 export const leafApiUrl = (path, environment = 'prod') => {
@@ -83,7 +91,12 @@ export const leafApiUrl = (path, environment = 'prod') => {
   if (path.startsWith('/api/users') || path.startsWith('/users')) {
     return `${getUserManagementApiUrl(environment)}/users`
   }
-  
+
+  if (path.startsWith('/api/analytics')) {
+    const analyticsPath = path.replace('/api/analytics', '')
+    return `${getAnalyticsApiUrl(environment)}${analyticsPath}`
+  }
+
   // Fallback: assume que é um endpoint da API base
   return `${getLeafApiBaseUrl(environment)}/${cleanPath}`
 }

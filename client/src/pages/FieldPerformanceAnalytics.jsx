@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLeafUser } from '../context/LeafUserContext'
 import MapComponent from '../components/MapComponent'
 import axios from 'axios'
-import { getLeafApiBaseUrl, getPointlakeApiUrl } from '../config/api'
+import { getLeafApiBaseUrl, getPointlakeApiUrl, getAnalyticsApiUrl } from '../config/api'
 
 function FieldPerformanceAnalytics() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
@@ -1228,11 +1228,14 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
       // Codificar o polygon WKT para URL
       const encodedPolygon = encodeURIComponent(fieldPolygon)
 
-      // URL da API conforme especificado
-      const apiUrl = `http://localhost:8083/api/analytics/user/${selectedLeafUserId}/zones?h3resolution=12&numzones=4&polygon=${encodedPolygon}&startDate=${startDateISO}&endDate=${endDateISO}`
+      // URL da API usando a configuração correta
+      const analyticsBaseUrl = getAnalyticsApiUrl(env)
+      const apiUrl = `${analyticsBaseUrl}/user/${selectedLeafUserId}/zones?h3resolution=12&numzones=4&polygon=${encodedPolygon}&startDate=${startDateISO}&endDate=${endDateISO}`
 
       console.log('🏗️ Creating zones:', {
         field: selectedField.name,
+        environment: env,
+        analyticsBaseUrl,
         fieldPolygon: fieldPolygon.substring(0, 100) + '...',
         encodedPolygon: encodedPolygon.substring(0, 100) + '...',
         startDate: startDateISO,

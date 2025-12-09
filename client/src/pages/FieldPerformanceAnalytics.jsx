@@ -1250,6 +1250,13 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
         }
       })
 
+      console.log('📡 API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data
+      })
+
       const zonesData = response.data
 
       console.log('✅ Zones created successfully:', zonesData)
@@ -1288,8 +1295,40 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
       }
 
     } catch (err) {
-      console.error('Error creating zones:', err)
-      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error creating zones')
+      console.error('❌ Error creating zones:', {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        url: apiUrl
+      })
+
+      let errorMessage = 'Error creating zones'
+
+      if (err.response) {
+        // Server responded with error status
+        const status = err.response.status
+        const data = err.response.data
+
+        if (status === 401) {
+          errorMessage = 'Authentication failed. Please check your login.'
+        } else if (status === 403) {
+          errorMessage = 'Access forbidden. You may not have permission to use this feature.'
+        } else if (status === 404) {
+          errorMessage = 'Analytics API endpoint not found. The feature may not be available yet.'
+        } else if (status >= 500) {
+          errorMessage = 'Server error. Please try again later.'
+        } else if (data?.message) {
+          errorMessage = data.message
+        } else if (data?.error) {
+          errorMessage = data.error
+        }
+      } else if (err.request) {
+        // Network error
+        errorMessage = 'Network error. Please check your internet connection.'
+      }
+
+      setError(errorMessage)
     } finally {
       setLoadingCreateZones(false)
     }

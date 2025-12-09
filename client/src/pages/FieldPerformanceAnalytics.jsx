@@ -779,14 +779,21 @@ function FieldPerformanceAnalytics() {
       console.log('🌱 Field WKT generated:', fieldWkt.substring(0, 150) + '...')
 
       // Uma única query que retorna todos os polígonos de solo que intersectam o field
-      const sqlQuery = `SELECT
-        mukey,
-        county,
-        muaggatt_col_16 as drainage_class,
-        ROUND(ST_Area(ST_GeomFromWKB(geometry)) * 247.105, 2) as acres,
-        geometry
-      FROM ssurgo_illinois
-      WHERE ST_Intersects(ST_GeomFromWKB(geometry), ST_GeomFromText('${fieldWkt}'))`
+      const sqlQuery = `SELECT 
+
+    mukey, 
+
+    county,
+
+    muaggatt_col_16 as drainage_class,
+
+    ROUND(ST_Area(ST_Intersection(geometry, ST_GeomFromText('${fieldWkt}'))) * 247.105, 2) as acres,
+
+    ST_Intersection(geometry, ST_GeomFromText('${fieldWkt}')) as geometry
+
+FROM ssurgo_illinois 
+
+WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
 
       console.log('🌱 Executing single soil query:', {
         query: sqlQuery,

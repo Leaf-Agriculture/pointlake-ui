@@ -39,7 +39,7 @@ export const getUserManagementApiUrl = (environment) => {
  */
 export const getAnalyticsApiUrl = (environment) => {
   const base = getLeafApiBaseUrl(environment)
-  return `${base}/api/v2/beta/analytics`
+  return `${base}/services/pointlake/api/v2/beta/analytics`
 }
 
 /**

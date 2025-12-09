@@ -1198,6 +1198,13 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
       return
     }
 
+    // Verificar se é token demo (não válido para API real)
+    if (token && token.startsWith('demo_token_')) {
+      setError('Create Zones requires real authentication. Please login with valid Leaf credentials.')
+      console.warn('❌ Create Zones blocked: demo token detected')
+      return
+    }
+
     if (!selectedField) {
       setError('Please select a field first')
       return
@@ -1243,18 +1250,34 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
         apiUrl
       })
 
-      const response = await axios.get(apiUrl, {
+      console.log('🔐 Authentication details:', {
+        token: token ? `${token.substring(0, 20)}...` : 'NO TOKEN',
+        tokenLength: token ? token.length : 0,
+        environment: env
+      })
+
+      const requestHeaders = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+
+      console.log('📤 Making API request:', {
+        url: apiUrl,
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          ...requestHeaders,
+          'Authorization': requestHeaders.Authorization.substring(0, 30) + '...' // Hide full token in logs
         }
+      })
+
+      const response = await axios.get(apiUrl, {
+        headers: requestHeaders
       })
 
       console.log('📡 API Response:', {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
-        data: response.data
+        data: response.data ? JSON.stringify(response.data).substring(0, 200) + '...' : response.data
       })
 
       const zonesData = response.data
@@ -2640,20 +2663,26 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
 
                         <button
                           onClick={handleCreateZones}
-                          disabled={loadingCreateZones || !selectedField}
-                          className="px-4 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+                          disabled={loadingCreateZones || !selectedField || (token && token.startsWith('demo_token_'))}
+                          className={`px-4 py-1.5 rounded transition flex items-center gap-2 text-sm font-medium ${
+                            token && token.startsWith('demo_token_')
+                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                              : 'bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+                          }`}
                         >
                           {loadingCreateZones ? (
                             <>
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              <span>Creating...</span>
+                              <span>Creating Zones...</span>
                             </>
                           ) : (
                             <>
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                               </svg>
-                              <span>Create Zones</span>
+                              <span>
+                                {token && token.startsWith('demo_token_') ? 'Create Zones (Real Login Required)' : 'Create Zones'}
+                              </span>
                             </>
                           )}
                         </button>

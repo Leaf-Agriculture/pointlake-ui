@@ -93,6 +93,11 @@ function FieldPerformanceAnalytics() {
   const [newSeasonEndDate, setNewSeasonEndDate] = useState('')
   const [newSeasonActivityTypes, setNewSeasonActivityTypes] = useState([])
   const [selectedSeason, setSelectedSeason] = useState(null)
+
+  // Estados para Create Zones
+  const [loadingCreateZones, setLoadingCreateZones] = useState(false)
+  const [autoZones, setAutoZones] = useState([]) // Zones criadas automaticamente pela API
+  const [autoZonesVisible, setAutoZonesVisible] = useState({}) // Controle de visibilidade das auto zones
   
   // Estados para Layers (visualização) - cada layer pode ser ligada/desligada
   const [showBoundaryLayer, setShowBoundaryLayer] = useState(true) // Default: ON
@@ -865,6 +870,19 @@ function FieldPerformanceAnalytics() {
         geometry: zone.geometry,
         type: 'zone'
       }))
+
+    // Coletar geometrias das auto zones visíveis
+    const autoZoneGeometries = autoZones
+      .filter(zone => autoZonesVisible[zone.id])
+      .map(zone => ({
+        id: zone.id,
+        name: zone.name,
+        geometry: zone.geometry,
+        statistics: zone.statistics,
+        recommendations: zone.recommendations,
+        areaHectares: zone.areaHectares,
+        type: 'auto_zone'
+      }))
     
     // Dados de solo - sempre incluir se houver dados (independente do boundary)
     const currentSoilData = soilData.length > 0 ? soilData : null
@@ -875,6 +893,7 @@ function FieldPerformanceAnalytics() {
       showBoundaryLayer,
       activeLayerId,
       visibleZonesCount: zoneGeometries.length,
+      autoZonesCount: autoZoneGeometries.length,
       soilPolygons: currentSoilData?.length || 0
     })
     
@@ -909,8 +928,10 @@ function FieldPerformanceAnalytics() {
           break
 
         case 'zones':
-          if (zoneGeometries.length > 0) {
-            mapDataObj.zones = zoneGeometries
+          // Combinar zones manuais e auto zones
+          const allZoneGeometries = [...zoneGeometries, ...autoZoneGeometries]
+          if (allZoneGeometries.length > 0) {
+            mapDataObj.zones = allZoneGeometries
           }
           break
 
@@ -981,7 +1002,7 @@ function FieldPerformanceAnalytics() {
   // Atualizar mapa quando layers mudarem
   useEffect(() => {
     updateMapDisplay(boundaryData, filteredPoints)
-  }, [showBoundaryLayer, activeLayers, boundaryData, visibleZones, fieldZones, showSoilLayer, soilData])
+  }, [showBoundaryLayer, activeLayers, boundaryData, visibleZones, fieldZones, showSoilLayer, soilData, autoZonesVisible, autoZones])
 
 
 
@@ -1160,6 +1181,107 @@ function FieldPerformanceAnalytics() {
       setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error running analysis')
     } finally {
       setLoadingAnalysis(false)
+    }
+  }
+
+  // Função para criar zones automaticamente via API
+  const handleCreateZones = async () => {
+    if (!token || !selectedLeafUserId) {
+      setError('Authentication required')
+      return
+    }
+
+    if (!selectedField) {
+      setError('Please select a field first')
+      return
+    }
+
+    setLoadingCreateZones(true)
+    setError(null)
+
+    try {
+      const env = getEnvironment ? getEnvironment() : 'prod'
+
+      // Usar datas da season selecionada ou valores padrão
+      const startDate = selectedSeason ?
+        (selectedSeason.startDate?.split('T')[0] || '2020-01-01') : '2024-01-01'
+      const endDate = selectedSeason ?
+        (selectedSeason.endDate?.split('T')[0] || '2025-12-01') : '2024-12-31'
+
+      const startDateISO = `${startDate}T00:00:00.000Z`
+      const endDateISO = `${endDate}T23:59:59.999Z`
+
+      // Obter polygon do field selecionado
+      const fieldPolygon = boundaryData?.geometry || selectedField?.boundary
+      if (!fieldPolygon) {
+        setError('Field boundary not found. Please ensure the field has boundary data.')
+        return
+      }
+
+      // Codificar o polygon WKT para URL
+      const encodedPolygon = encodeURIComponent(fieldPolygon)
+
+      // URL da API conforme especificado
+      const apiUrl = `http://localhost:8083/api/analytics/user/${selectedLeafUserId}/zones?h3resolution=12&numzones=4&polygon=${encodedPolygon}&startDate=${startDateISO}&endDate=${endDateISO}`
+
+      console.log('🏗️ Creating zones:', {
+        field: selectedField.name,
+        fieldPolygon: fieldPolygon.substring(0, 100) + '...',
+        encodedPolygon: encodedPolygon.substring(0, 100) + '...',
+        startDate: startDateISO,
+        endDate: endDateISO,
+        apiUrl
+      })
+
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const zonesData = response.data
+
+      console.log('✅ Zones created successfully:', zonesData)
+
+      // Processar as zones recebidas
+      if (zonesData.zones && zonesData.zones.length > 0) {
+        const processedZones = zonesData.zones.map(zone => ({
+          id: `auto_zone_${zone.zoneId}`,
+          name: zone.name,
+          geometry: zone.geometry, // WKT format
+          statistics: zone.statistics,
+          recommendations: zone.recommendations || [],
+          areaHectares: zone.areaHectares,
+          h3Cells: zone.h3Cells,
+          cellCount: zone.cellCount,
+          type: 'auto_zone'
+        }))
+
+        // Atualizar estado das auto zones
+        setAutoZones(processedZones)
+
+        // Inicializar visibilidade das zones como true
+        const visibilityMap = {}
+        processedZones.forEach(zone => {
+          visibilityMap[zone.id] = true
+        })
+        setAutoZonesVisible(visibilityMap)
+
+        setSuccessMessage(`Created ${processedZones.length} zones automatically!`)
+        setTimeout(() => setSuccessMessage(null), 3000)
+
+        // Forçar atualização do mapa
+        updateMapDisplay(boundaryData, filteredPoints)
+      } else {
+        setError('No zones created - no suitable data found')
+      }
+
+    } catch (err) {
+      console.error('Error creating zones:', err)
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Error creating zones')
+    } finally {
+      setLoadingCreateZones(false)
     }
   }
 
@@ -2438,8 +2560,8 @@ function FieldPerformanceAnalytics() {
                         />
                       </div>
 
-                      {/* Botão Run Analysis */}
-                      <div className="flex items-end">
+                      {/* Botões Run Analysis e Create Zones */}
+                      <div className="flex items-end gap-2">
                         <button
                           onClick={() => {
                             if (!selectedSeason) {
@@ -2463,6 +2585,26 @@ function FieldPerformanceAnalytics() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                               <span>Run Analysis</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={handleCreateZones}
+                          disabled={loadingCreateZones || !selectedField}
+                          className="px-4 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+                        >
+                          {loadingCreateZones ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              <span>Creating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                              </svg>
+                              <span>Create Zones</span>
                             </>
                           )}
                         </button>
@@ -2680,7 +2822,62 @@ function FieldPerformanceAnalytics() {
                           ))}
                         </>
                       )}
-                      
+
+                      {/* Auto Zones - zones criadas automaticamente pela API */}
+                      {autoZones.length > 0 && (
+                        <>
+                          <div className="border-t border-zinc-700 my-1"></div>
+                          <div className="text-xs text-zinc-500 px-2 py-1 flex items-center justify-between">
+                            <span>Auto Zones ({autoZones.length})</span>
+                            <button
+                              onClick={() => {
+                                setAutoZones([])
+                                setAutoZonesVisible({})
+                                updateMapDisplay(boundaryData, filteredPoints)
+                              }}
+                              className="text-xs text-red-400 hover:text-red-300"
+                              title="Clear all auto zones"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                          {autoZones.map(zone => (
+                            <label
+                              key={zone.id}
+                              className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-950/50 border border-green-800/50 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={autoZonesVisible[zone.id] || false}
+                                onChange={() => {
+                                  setAutoZonesVisible(prev => ({
+                                    ...prev,
+                                    [zone.id]: !prev[zone.id]
+                                  }))
+                                }}
+                                className="rounded bg-green-700 border-green-600 text-green-500 w-4 h-4"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs text-green-300 truncate">{zone.name}</div>
+                                <div className="text-[10px] text-green-400/60">
+                                  {zone.areaHectares?.toFixed(1)} ha • {zone.cellCount} cells
+                                </div>
+                                {zone.statistics && (
+                                  <div className="text-[10px] text-green-400/80 mt-0.5">
+                                    Yield: {zone.statistics.avgYield?.toFixed(1)} • CV: {(zone.statistics.yieldCV * 100)?.toFixed(1)}%
+                                  </div>
+                                )}
+                              </div>
+                              <svg className="w-3 h-3 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                            </label>
+                          ))}
+                        </>
+                      )}
+
                       {/* Data Layers - cada campo numérico é uma layer separada */}
                       {analysisPoints.length > 0 && (
                         <>
@@ -3500,6 +3697,113 @@ function FieldPerformanceAnalytics() {
           </div>
         </div>
       </div>
+
+      {/* Auto Zones Statistics Panel */}
+      {autoZones.length > 0 && (
+        <div className="w-96 bg-zinc-900 border-l border-zinc-800 flex flex-col">
+          <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Auto Zones Statistics ({autoZones.length})
+            </h3>
+            <button
+              onClick={() => {
+                setAutoZones([])
+                setAutoZonesVisible({})
+                updateMapDisplay(boundaryData, filteredPoints)
+              }}
+              className="text-zinc-400 hover:text-zinc-200 p-1"
+              title="Clear all auto zones"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {autoZones.map(zone => (
+              <div key={zone.id} className="bg-zinc-800 rounded-lg p-3 border border-green-800/30">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-green-300 truncate">{zone.name}</h4>
+                  <input
+                    type="checkbox"
+                    checked={autoZonesVisible[zone.id] || false}
+                    onChange={() => {
+                      setAutoZonesVisible(prev => ({
+                        ...prev,
+                        [zone.id]: !prev[zone.id]
+                      }))
+                    }}
+                    className="rounded bg-green-700 border-green-600 text-green-500 w-4 h-4"
+                  />
+                </div>
+
+                {/* Basic Info */}
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                  <div className="bg-zinc-700/50 rounded p-2">
+                    <div className="text-zinc-400">Area</div>
+                    <div className="text-zinc-200 font-medium">{zone.areaHectares?.toFixed(1)} ha</div>
+                  </div>
+                  <div className="bg-zinc-700/50 rounded p-2">
+                    <div className="text-zinc-400">H3 Cells</div>
+                    <div className="text-zinc-200 font-medium">{zone.cellCount}</div>
+                  </div>
+                </div>
+
+                {/* Statistics */}
+                {zone.statistics && (
+                  <div className="space-y-2">
+                    <h5 className="text-xs font-medium text-zinc-400 uppercase">Statistics</h5>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="bg-zinc-700/50 rounded p-2">
+                        <div className="text-zinc-400 text-xs">Yield (Total Points: {zone.statistics.totalPoints})</div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-emerald-400 text-xs">{zone.statistics.minYield?.toFixed(1)}</span>
+                          <span className="text-amber-400 text-sm font-medium">{zone.statistics.avgYield?.toFixed(1)}</span>
+                          <span className="text-red-400 text-xs">{zone.statistics.maxYield?.toFixed(1)}</span>
+                        </div>
+                        <div className="text-zinc-500 text-xs mt-1">CV: {(zone.statistics.yieldCV * 100)?.toFixed(1)}%</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-zinc-700/50 rounded p-2">
+                          <div className="text-zinc-400 text-xs">Moisture</div>
+                          <div className="text-zinc-200 text-sm font-medium">{zone.statistics.avgMoisture?.toFixed(1)}%</div>
+                        </div>
+                        <div className="bg-zinc-700/50 rounded p-2">
+                          <div className="text-zinc-400 text-xs">Elevation</div>
+                          <div className="text-zinc-200 text-sm font-medium">{zone.statistics.avgElevation?.toFixed(0)}m</div>
+                        </div>
+                        <div className="bg-zinc-700/50 rounded p-2">
+                          <div className="text-zinc-400 text-xs">Speed</div>
+                          <div className="text-zinc-200 text-sm font-medium">{zone.statistics.avgSpeed?.toFixed(1)} km/h</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommendations */}
+                {zone.recommendations && zone.recommendations.length > 0 && (
+                  <div className="mt-3">
+                    <h5 className="text-xs font-medium text-zinc-400 uppercase mb-2">Recommendations</h5>
+                    <div className="space-y-1">
+                      {zone.recommendations.map((rec, idx) => (
+                        <div key={idx} className="text-xs text-zinc-300 bg-zinc-700/30 rounded px-2 py-1">
+                          • {rec}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Modal Create Field */}
       {showCreateModal && (

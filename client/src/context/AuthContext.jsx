@@ -26,6 +26,20 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password, rememberMe = true, environment = 'prod') => {
     try {
+      console.log('🔑 Tentando login:', username, password === 'demo' ? '[DEMO]' : '[HIDDEN]', environment)
+      console.log('🔑 Senha recebida:', password, 'tipo:', typeof password, 'comprimento:', password.length)
+
+      // Verificar se é login demo (aceita qualquer senha quando usuário é "demo")
+      if (username === 'demo') {
+        console.log('🔑 Login demo detectado - usando token mockado')
+        const mockToken = 'demo_token_' + Date.now()
+        setToken(mockToken)
+        localStorage.setItem('leaf_token', mockToken)
+        localStorage.setItem('leaf_environment', environment)
+        console.log('✅ Login demo bem-sucedido')
+        return { success: true }
+      }
+
       const apiUrl = leafApiUrl('/api/authenticate', environment)
       const response = await axios.post(apiUrl, {
         username,

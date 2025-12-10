@@ -884,9 +884,6 @@ function PointsAnalytics() {
     navigate('/login')
   }
 
-  const handleBackToDashboard = () => {
-    navigate('/dashboard')
-  }
 
   // Função para baixar análise em PDF
   const downloadAnalysisPDF = async () => {
@@ -1046,12 +1043,6 @@ function PointsAnalytics() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button
-                onClick={handleBackToDashboard}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm font-medium"
-              >
-                ← Dashboard
-              </button>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
                 📍 Points Analytics
               </h1>

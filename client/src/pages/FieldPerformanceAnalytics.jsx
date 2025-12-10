@@ -2150,15 +2150,6 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
         <div className="px-4 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="text-zinc-400 hover:text-zinc-200 transition-colors"
-                title="Back to Dashboard"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-              </button>
               <h1 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
                 <svg className="w-6 h-6 text-blue-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke="currentColor" strokeWidth="2" fill="none"/>
@@ -2201,12 +2192,6 @@ WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
             
             {/* Barra de Ferramentas */}
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => navigate('/points-analytics')}
-                className="px-3 py-2 text-sm font-medium bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition duration-150 border border-zinc-700"
-              >
-                Points Analytics
-              </button>
               <button
                 onClick={handleLogout}
                 className="px-3 py-2 text-sm font-medium bg-red-950 text-red-200 rounded hover:bg-red-900 transition duration-150 border border-red-800 hover:border-red-700"

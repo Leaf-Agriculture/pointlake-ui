@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import FileQueryWindow from './pages/FileQueryWindow'
 import PointsAnalytics from './pages/PointsAnalytics'
 import FieldPerformanceAnalytics from './pages/FieldPerformanceAnalytics'
+import SqlAnalytics from './pages/SqlAnalytics'
 import ErrorBoundary from './components/ErrorBoundary'
 import AppLayout from './components/AppLayout'
 import { AuthProvider } from './context/AuthContext'
@@ -38,6 +39,11 @@ function App() {
               <Route path="/field-performance" element={
                 <AppLayout>
                   <FieldPerformanceAnalytics />
+                </AppLayout>
+              } />
+              <Route path="/sql-analytics" element={
+                <AppLayout>
+                  <SqlAnalytics />
                 </AppLayout>
               } />
               <Route path="/" element={<Navigate to="/login" replace />} />

@@ -77,15 +77,19 @@ function SqlAnalytics() {
       const env = getEnvironment ? getEnvironment() : 'prod'
       const analyticsBaseUrl = getPointlakeApiUrl(env)
 
+      // Substituir aspas duplas por aspas simples (API requer aspas simples)
+      const normalizedQuery = sqlQuery.trim().replace(/"/g, "'")
+
       const requestBody = {
-        query: sqlQuery.trim(),
+        query: normalizedQuery,
         startDate: startDate,
         endDate: endDate
       }
 
       console.log('🔍 Executing SQL Analytics query:', {
         userId,
-        query: sqlQuery,
+        query: normalizedQuery,
+        originalQuery: sqlQuery !== normalizedQuery ? sqlQuery : undefined,
         startDate,
         endDate,
         analyticsBaseUrl

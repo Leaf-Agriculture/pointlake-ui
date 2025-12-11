@@ -603,10 +603,10 @@ function SqlAnalytics() {
         </div>
 
         {/* Right Panel - Results */}
-        <div className="flex-1 flex flex-col" ref={resizeRef}>
+        <div className="flex-1 flex flex-col min-w-0" ref={resizeRef}>
           {mapData && results?.data && results.data.length > 0 ? (
             /* Combined View: Map + Table for GIS Data */
-            <div className="flex-1 flex flex-col relative">
+            <div className="flex-1 flex flex-col relative min-w-0">
               {/* View Mode Toggle */}
               <div className="absolute top-3 right-3 z-[1000] flex gap-1 bg-zinc-900/90 backdrop-blur-sm rounded-lg p-1 border border-zinc-700">
                 <button
@@ -695,8 +695,8 @@ function SqlAnalytics() {
                   <div 
                     ref={tableContainerRef}
                     onScroll={handleTableScroll}
-                    className="flex-1 relative"
-                    style={{ minHeight: 0, overflow: 'scroll' }}
+                    className="flex-1 relative min-w-0"
+                    style={{ minHeight: 0, overflow: 'scroll', maxWidth: '100%' }}
                   >
                     <table style={{ minWidth: '100%', width: 'max-content', tableLayout: 'auto', borderCollapse: 'collapse' }}>
                       <thead className="sticky top-0 z-10">
@@ -760,7 +760,7 @@ function SqlAnalytics() {
             </div>
           ) : results?.data && results.data.length > 0 ? (
             /* Table View Only for Non-GIS Data with Infinite Scroll */
-            <div className="flex-1 flex flex-col bg-zinc-950">
+            <div className="flex-1 flex flex-col bg-zinc-950 min-w-0">
               {/* Table Header */}
               <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/80 border-b border-zinc-800">
                 <div className="flex items-center gap-3">
@@ -782,8 +782,8 @@ function SqlAnalytics() {
               <div 
                 ref={tableContainerRef}
                 onScroll={handleTableScroll}
-                className="flex-1 relative"
-                style={{ minHeight: 0, overflow: 'scroll' }}
+                className="flex-1 relative min-w-0"
+                style={{ minHeight: 0, overflow: 'scroll', maxWidth: '100%' }}
               >
                 <table style={{ minWidth: '100%', width: 'max-content', tableLayout: 'auto', borderCollapse: 'collapse' }}>
                   <thead className="sticky top-0 z-10">

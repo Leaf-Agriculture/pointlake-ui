@@ -23,8 +23,17 @@ function SqlAnalytics() {
   const [queryHistory, setQueryHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const [queryExecutionTime, setQueryExecutionTime] = useState(null)
+  
+  // Estados para infinite scroll e view tabular
+  const [displayedRows, setDisplayedRows] = useState(50) // Número inicial de linhas
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [viewMode, setViewMode] = useState('split') // 'split', 'map', 'table'
+  const [tableHeight, setTableHeight] = useState(300) // Altura inicial da tabela em px
+  const [isResizing, setIsResizing] = useState(false)
 
   const mapRef = useRef(null)
+  const tableContainerRef = useRef(null)
+  const resizeRef = useRef(null)
 
   // Redirecionar se não autenticado
   useEffect(() => {
@@ -257,7 +266,67 @@ function SqlAnalytics() {
     setMapData(null)
     setError('')
     setQueryExecutionTime(null)
+    setDisplayedRows(50)
   }
+
+  // Reset displayed rows quando novos resultados chegarem
+  useEffect(() => {
+    if (results?.data) {
+      setDisplayedRows(50)
+    }
+  }, [results])
+
+  // Infinite scroll handler
+  const handleTableScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target
+    // Quando estiver a 100px do final, carregar mais linhas
+    if (scrollHeight - scrollTop - clientHeight < 100 && !isLoadingMore) {
+      if (results?.data && displayedRows < results.data.length) {
+        setIsLoadingMore(true)
+        // Simular um pequeno delay para UX melhor
+        setTimeout(() => {
+          setDisplayedRows(prev => Math.min(prev + 50, results.data.length))
+          setIsLoadingMore(false)
+        }, 100)
+      }
+    }
+  }
+
+  // Handler para resize do painel da tabela
+  const handleMouseDown = (e) => {
+    e.preventDefault()
+    setIsResizing(true)
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing || !resizeRef.current) return
+      
+      const containerRect = resizeRef.current.parentElement.getBoundingClientRect()
+      const newHeight = containerRect.bottom - e.clientY
+      
+      // Limitar altura entre 150px e 600px
+      setTableHeight(Math.min(Math.max(newHeight, 150), 600))
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizing])
 
   if (authLoading) {
     return (
@@ -505,18 +574,25 @@ function SqlAnalytics() {
                 {/* Data Type Indicator */}
                 <div className="bg-zinc-800 rounded-lg p-3">
                   <div className="text-xs text-zinc-400 mb-2">Data Type</div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2">
                     {mapData ? (
                       <>
-                        <span className="text-green-400">🗺️ GIS Data</span>
-                        <span className="text-zinc-500">•</span>
-                        <span className="text-zinc-400">Showing on map</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-400">🗺️ GIS Data</span>
+                          <span className="text-zinc-500">•</span>
+                          <span className="text-zinc-400">Map + Table</span>
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          Use toggle buttons to switch between Split/Map/Table view
+                        </div>
                       </>
                     ) : (
                       <>
-                        <span className="text-blue-400">📊 Tabular Data</span>
-                        <span className="text-zinc-500">•</span>
-                        <span className="text-zinc-400">Showing in table</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-blue-400">📊 Tabular Data</span>
+                          <span className="text-zinc-500">•</span>
+                          <span className="text-zinc-400">Table view</span>
+                        </div>
                       </>
                     )}
                   </div>
@@ -527,53 +603,239 @@ function SqlAnalytics() {
         </div>
 
         {/* Right Panel - Results */}
-        <div className="flex-1 flex flex-col">
-          {mapData ? (
-            /* Map View for GIS Data */
-            <div className="flex-1 relative">
-              <MapComponent
-                data={mapData}
-                mapRef={mapRef}
-              />
-            </div>
-          ) : results?.data && results.data.length > 0 ? (
-            /* Table View for Tabular Data */
-            <div className="flex-1 overflow-auto bg-zinc-950">
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-zinc-100 mb-4">
-                  Query Results ({results.data.length} records)
-                </h3>
+        <div className="flex-1 flex flex-col" ref={resizeRef}>
+          {mapData && results?.data && results.data.length > 0 ? (
+            /* Combined View: Map + Table for GIS Data */
+            <div className="flex-1 flex flex-col relative">
+              {/* View Mode Toggle */}
+              <div className="absolute top-3 right-3 z-[1000] flex gap-1 bg-zinc-900/90 backdrop-blur-sm rounded-lg p-1 border border-zinc-700">
+                <button
+                  onClick={() => setViewMode('split')}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    viewMode === 'split' 
+                      ? 'bg-green-600 text-white' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+                  }`}
+                  title="Show map and table"
+                >
+                  Split
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    viewMode === 'map' 
+                      ? 'bg-green-600 text-white' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+                  }`}
+                  title="Show only map"
+                >
+                  🗺️ Map
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    viewMode === 'table' 
+                      ? 'bg-green-600 text-white' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+                  }`}
+                  title="Show only table"
+                >
+                  📊 Table
+                </button>
+              </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full bg-zinc-900 border border-zinc-800 rounded-lg">
-                    <thead>
-                      <tr className="bg-zinc-800">
-                        {Object.keys(results.data[0]).map(key => (
-                          <th key={key} className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700">
-                            {key}
+              {/* Map View */}
+              {(viewMode === 'split' || viewMode === 'map') && (
+                <div className={`relative ${viewMode === 'split' ? 'flex-1' : 'h-full'}`}>
+                  <MapComponent
+                    data={mapData}
+                    mapRef={mapRef}
+                  />
+                </div>
+              )}
+
+              {/* Table View with Infinite Scroll */}
+              {(viewMode === 'split' || viewMode === 'table') && (
+                <div 
+                  className={`bg-zinc-950 border-t border-zinc-700 flex flex-col ${
+                    viewMode === 'table' ? 'flex-1' : ''
+                  }`}
+                  style={viewMode === 'split' ? { height: `${tableHeight}px` } : {}}
+                >
+                  {/* Resize Handle (only in split mode) */}
+                  {viewMode === 'split' && (
+                    <div
+                      onMouseDown={handleMouseDown}
+                      className="h-2 bg-zinc-800 hover:bg-zinc-600 cursor-ns-resize flex items-center justify-center border-b border-zinc-700 transition-colors"
+                    >
+                      <div className="w-8 h-0.5 bg-zinc-600 rounded-full"></div>
+                    </div>
+                  )}
+
+                  {/* Table Header */}
+                  <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/80 border-b border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-semibold text-zinc-100">
+                        📊 Query Results
+                      </h3>
+                      <span className="text-xs text-zinc-500">
+                        Showing {Math.min(displayedRows, results.data.length)} of {results.data.length} records
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {displayedRows < results.data.length && (
+                        <span className="text-xs text-green-400 animate-pulse">
+                          ↓ Scroll for more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Scrollable Table */}
+                  <div 
+                    ref={tableContainerRef}
+                    onScroll={handleTableScroll}
+                    className="flex-1 overflow-auto"
+                  >
+                    <table className="w-full">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="bg-zinc-800">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 w-12">
+                            #
                           </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800">
-                      {results.data.map((row, index) => (
-                        <tr key={index} className="hover:bg-zinc-800/50">
-                          {Object.values(row).map((value, cellIndex) => (
-                            <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200 max-w-xs truncate">
-                              {value === null || value === undefined ? (
-                                <span className="text-zinc-500 italic">null</span>
-                              ) : typeof value === 'object' ? (
-                                <span className="text-zinc-400">[Object]</span>
-                              ) : (
-                                String(value)
-                              )}
-                            </td>
+                          {Object.keys(results.data[0]).filter(key => key !== 'geometry').map(key => (
+                            <th key={key} className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 whitespace-nowrap">
+                              {key}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/50">
+                        {results.data.slice(0, displayedRows).map((row, index) => (
+                          <tr 
+                            key={index} 
+                            className="hover:bg-zinc-800/30 transition-colors"
+                          >
+                            <td className="px-3 py-2 text-xs text-zinc-500 font-mono">
+                              {index + 1}
+                            </td>
+                            {Object.entries(row).filter(([key]) => key !== 'geometry').map(([key, value], cellIndex) => (
+                              <td key={cellIndex} className="px-3 py-2 text-sm text-zinc-300 max-w-xs truncate">
+                                {value === null || value === undefined ? (
+                                  <span className="text-zinc-600 italic">null</span>
+                                ) : typeof value === 'object' ? (
+                                  <span className="text-zinc-500 font-mono text-xs">{JSON.stringify(value)}</span>
+                                ) : typeof value === 'number' ? (
+                                  <span className="font-mono text-green-400">{value.toLocaleString()}</span>
+                                ) : (
+                                  String(value).length > 50 ? (
+                                    <span title={String(value)}>{String(value).substring(0, 50)}...</span>
+                                  ) : String(value)
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* Loading more indicator */}
+                    {isLoadingMore && (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500 mr-2"></div>
+                        <span className="text-sm text-zinc-400">Loading more...</span>
+                      </div>
+                    )}
+
+                    {/* End of results indicator */}
+                    {displayedRows >= results.data.length && results.data.length > 50 && (
+                      <div className="text-center py-4 text-xs text-zinc-500">
+                        ✓ All {results.data.length} records loaded
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+            </div>
+          ) : results?.data && results.data.length > 0 ? (
+            /* Table View Only for Non-GIS Data with Infinite Scroll */
+            <div className="flex-1 flex flex-col bg-zinc-950">
+              {/* Table Header */}
+              <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/80 border-b border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold text-zinc-100">
+                    📊 Query Results
+                  </h3>
+                  <span className="text-sm text-zinc-500">
+                    Showing {Math.min(displayedRows, results.data.length)} of {results.data.length} records
+                  </span>
+                </div>
+                {displayedRows < results.data.length && (
+                  <span className="text-xs text-green-400 animate-pulse">
+                    ↓ Scroll for more
+                  </span>
+                )}
+              </div>
+
+              {/* Scrollable Table */}
+              <div 
+                ref={tableContainerRef}
+                onScroll={handleTableScroll}
+                className="flex-1 overflow-auto"
+              >
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-zinc-800">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 w-12">
+                        #
+                      </th>
+                      {Object.keys(results.data[0]).map(key => (
+                        <th key={key} className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 whitespace-nowrap">
+                          {key}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {results.data.slice(0, displayedRows).map((row, index) => (
+                      <tr key={index} className="hover:bg-zinc-800/50 transition-colors">
+                        <td className="px-4 py-3 text-sm text-zinc-500 font-mono">
+                          {index + 1}
+                        </td>
+                        {Object.values(row).map((value, cellIndex) => (
+                          <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200 max-w-xs truncate">
+                            {value === null || value === undefined ? (
+                              <span className="text-zinc-500 italic">null</span>
+                            ) : typeof value === 'object' ? (
+                              <span className="text-zinc-400 font-mono text-xs">{JSON.stringify(value)}</span>
+                            ) : typeof value === 'number' ? (
+                              <span className="font-mono text-green-400">{value.toLocaleString()}</span>
+                            ) : (
+                              String(value).length > 100 ? (
+                                <span title={String(value)}>{String(value).substring(0, 100)}...</span>
+                              ) : String(value)
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Loading more indicator */}
+                {isLoadingMore && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500 mr-2"></div>
+                    <span className="text-sm text-zinc-400">Loading more...</span>
+                  </div>
+                )}
+
+                {/* End of results indicator */}
+                {displayedRows >= results.data.length && results.data.length > 50 && (
+                  <div className="text-center py-4 text-sm text-zinc-500">
+                    ✓ All {results.data.length} records loaded
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -583,7 +845,7 @@ function SqlAnalytics() {
                 <div className="text-6xl mb-4">🔍</div>
                 <h3 className="text-xl font-semibold text-zinc-100 mb-2">SQL Analytics</h3>
                 <p className="text-zinc-400 mb-6 max-w-md">
-                  Execute SQL queries against your agricultural data. Results will be displayed as a map for spatial data or as a table for tabular data.
+                  Execute SQL queries against your agricultural data. Results with GIS data will show both map and tabular views.
                 </p>
                 <div className="text-sm text-zinc-500">
                   Select a Leaf User, enter your SQL query, and click "Execute Query" to get started.

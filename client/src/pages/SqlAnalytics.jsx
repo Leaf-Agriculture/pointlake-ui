@@ -695,9 +695,9 @@ function SqlAnalytics() {
                   <div 
                     ref={tableContainerRef}
                     onScroll={handleTableScroll}
-                    className="flex-1 overflow-auto"
+                    className="flex-1 overflow-x-auto overflow-y-auto"
                   >
-                    <table className="min-w-full">
+                    <table className="w-max min-w-full border-collapse">
                       <thead className="sticky top-0 z-10">
                         <tr className="bg-zinc-800">
                           <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 w-12 sticky left-0 bg-zinc-800 z-20">
@@ -781,9 +781,9 @@ function SqlAnalytics() {
               <div 
                 ref={tableContainerRef}
                 onScroll={handleTableScroll}
-                className="flex-1 overflow-auto"
+                className="flex-1 overflow-x-auto overflow-y-auto"
               >
-                <table className="min-w-full">
+                <table className="w-max min-w-full border-collapse">
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-zinc-800">
                       <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 w-12 sticky left-0 bg-zinc-800 z-20">

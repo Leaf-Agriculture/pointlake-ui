@@ -109,6 +109,19 @@ function SqlAnalytics() {
       const responseData = response.data
       console.log('✅ SQL Analytics response:', responseData)
 
+      // Verificar se há erros no metadata
+      const hasErrors = responseData.metadata?.errors && responseData.metadata.errors.length > 0
+      const failedFiles = responseData.metadata?.failedFiles || 0
+      
+      if (hasErrors) {
+        console.warn('⚠️ Query returned with errors:', responseData.metadata.errors)
+        // Extrair mensagem de erro principal
+        const firstError = responseData.metadata.errors[0]
+        const errorMsg = firstError.message || firstError.error || 'Unknown error'
+        // Mostrar erro mas continuar processando (pode haver dados parciais)
+        setError(`SQL Error: ${errorMsg.split('\n')[0]}`) // Primeira linha do erro
+      }
+
       // Adicionar à história
       const historyItem = {
         id: Date.now(),
@@ -116,7 +129,8 @@ function SqlAnalytics() {
         timestamp: new Date().toISOString(),
         executionTime,
         resultsCount: responseData.data?.length || 0,
-        hasGeometry: hasGeometryData(responseData.data)
+        hasGeometry: hasGeometryData(responseData.data),
+        hasErrors: hasErrors
       }
       setQueryHistory(prev => [historyItem, ...prev.slice(0, 9)]) // Manter apenas 10 últimas
 
@@ -521,11 +535,16 @@ function SqlAnalytics() {
                   {queryHistory.map(item => (
                     <div
                       key={item.id}
-                      className="bg-zinc-800 rounded-lg p-3 cursor-pointer hover:bg-zinc-700 transition-colors"
+                      className={`rounded-lg p-3 cursor-pointer transition-colors ${
+                        item.hasErrors 
+                          ? 'bg-red-950/50 border border-red-800/30 hover:bg-red-950/70' 
+                          : 'bg-zinc-800 hover:bg-zinc-700'
+                      }`}
                       onClick={() => executeHistoryQuery(item)}
                     >
-                      <div className="text-xs text-zinc-400 mb-1">
-                        {new Date(item.timestamp).toLocaleString()}
+                      <div className="text-xs text-zinc-400 mb-1 flex items-center justify-between">
+                        <span>{new Date(item.timestamp).toLocaleString()}</span>
+                        {item.hasErrors && <span className="text-red-400">⚠️ Error</span>}
                       </div>
                       <div className="text-sm text-zinc-200 font-mono mb-2 truncate">
                         {item.query}
@@ -572,6 +591,36 @@ function SqlAnalytics() {
                   </div>
                 </div>
 
+                {/* Errors */}
+                {results.metadata?.errors && results.metadata.errors.length > 0 && (
+                  <div className="bg-red-950/50 border border-red-800/50 rounded-lg p-3">
+                    <div className="text-xs text-red-400 mb-2 flex items-center gap-2">
+                      <span>⚠️ Errors ({results.metadata.errors.length})</span>
+                    </div>
+                    <div className="space-y-2">
+                      {results.metadata.errors.map((err, idx) => (
+                        <div key={idx} className="text-sm">
+                          <div className="text-red-300 font-medium">{err.error || 'Error'}</div>
+                          <div className="text-red-200/70 text-xs mt-1 font-mono whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                            {err.message?.split('\n').slice(0, 3).join('\n') || 'No message'}
+                            {err.message?.split('\n').length > 3 && '...'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {results.metadata.customQuery && (
+                      <details className="mt-2">
+                        <summary className="text-xs text-red-400 cursor-pointer hover:text-red-300">
+                          View query that failed
+                        </summary>
+                        <pre className="text-xs text-red-200/60 mt-1 p-2 bg-red-950/30 rounded overflow-x-auto">
+                          {results.metadata.customQuery}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                )}
+
                 {/* Metadata */}
                 {results.metadata && (
                   <div className="bg-zinc-800 rounded-lg p-3">
@@ -585,6 +634,12 @@ function SqlAnalytics() {
                         <span className="text-zinc-500">Processed:</span>
                         <span className="text-zinc-200">{results.metadata.processedFiles || 0}</span>
                       </div>
+                      {results.metadata.failedFiles > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-red-400">Failed:</span>
+                          <span className="text-red-400">{results.metadata.failedFiles}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-zinc-500">Total Points:</span>
                         <span className="text-zinc-200">{results.metadata.totalPoints || 0}</span>

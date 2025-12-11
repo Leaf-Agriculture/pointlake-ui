@@ -20,7 +20,8 @@ function SqlAnalytics() {
     COUNT(*) as number_points,
     SUM(area) as total_area,
     AVG(appliedRate) as avg_applied_rate,
-    AVG(seedRate) as avg_seed_rate
+    AVG(seedRate) as avg_seed_rate,
+    AVG(yieldVolume) as avg_yield_volume
 FROM points 
 GROUP BY YEAR(TO_TIMESTAMP('timestamp')), MONTH(TO_TIMESTAMP('timestamp')), operationType
 ORDER BY y, m, operationType`)
@@ -489,7 +490,8 @@ ORDER BY y, m, operationType`)
     COUNT(*) as number_points,
     SUM(area) as total_area,
     AVG(appliedRate) as avg_applied_rate,
-    AVG(seedRate) as avg_seed_rate
+    AVG(seedRate) as avg_seed_rate,
+    AVG(yieldVolume) as avg_yield_volume
 FROM points 
 GROUP BY YEAR(TO_TIMESTAMP('timestamp')), MONTH(TO_TIMESTAMP('timestamp')), operationType
 ORDER BY y, m, operationType`)}

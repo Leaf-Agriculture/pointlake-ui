@@ -13,7 +13,17 @@ function SqlAnalytics() {
 
   // Estados para SQL Analytics
   const [userId, setUserId] = useState(selectedLeafUserId || '')
-  const [sqlQuery, setSqlQuery] = useState('SELECT * FROM points LIMIT 10')
+  const [sqlQuery, setSqlQuery] = useState(`SELECT 
+    YEAR(TO_TIMESTAMP('timestamp')) as y,
+    MONTH(TO_TIMESTAMP('timestamp')) as m,
+    operationType,
+    COUNT(*) as number_points,
+    SUM(area) as total_area,
+    AVG(appliedRate) as avg_applied_rate,
+    AVG(seedRate) as avg_seed_rate
+FROM points 
+GROUP BY YEAR(TO_TIMESTAMP('timestamp')), MONTH(TO_TIMESTAMP('timestamp')), operationType
+ORDER BY y, m, operationType`)
   const [startDate, setStartDate] = useState('2000-01-01T00:00:00.000Z')
   const [endDate, setEndDate] = useState('2025-12-31T23:59:59.999Z')
   const [results, setResults] = useState(null)
@@ -472,7 +482,17 @@ function SqlAnalytics() {
                     📚
                   </button>
                   <button
-                    onClick={() => setSqlQuery('SELECT * FROM points LIMIT 10')}
+                    onClick={() => setSqlQuery(`SELECT 
+    YEAR(TO_TIMESTAMP('timestamp')) as y,
+    MONTH(TO_TIMESTAMP('timestamp')) as m,
+    operationType,
+    COUNT(*) as number_points,
+    SUM(area) as total_area,
+    AVG(appliedRate) as avg_applied_rate,
+    AVG(seedRate) as avg_seed_rate
+FROM points 
+GROUP BY YEAR(TO_TIMESTAMP('timestamp')), MONTH(TO_TIMESTAMP('timestamp')), operationType
+ORDER BY y, m, operationType`)}
                     className="text-xs px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-zinc-300"
                     title="Reset to default query"
                   >

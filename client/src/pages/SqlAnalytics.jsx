@@ -691,68 +691,71 @@ function SqlAnalytics() {
                     </div>
                   </div>
 
-                  {/* Scrollable Table */}
+                  {/* Scrollable Table Container */}
                   <div 
                     ref={tableContainerRef}
                     onScroll={handleTableScroll}
-                    className="flex-1 overflow-x-auto overflow-y-auto"
+                    className="flex-1 overflow-auto relative"
+                    style={{ minHeight: 0 }}
                   >
-                    <table className="w-max min-w-full border-collapse">
-                      <thead className="sticky top-0 z-10">
-                        <tr className="bg-zinc-800">
-                          <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 w-12 sticky left-0 bg-zinc-800 z-20">
-                            #
-                          </th>
-                          {Object.keys(results.data[0]).filter(key => key !== 'geometry').map(key => (
-                            <th key={key} className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 whitespace-nowrap">
-                              {key}
+                    <div className="inline-block min-w-full">
+                      <table className="min-w-full" style={{ tableLayout: 'auto' }}>
+                        <thead className="sticky top-0 z-10 bg-zinc-800">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 bg-zinc-800">
+                              #
                             </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800/50">
-                        {results.data.slice(0, displayedRows).map((row, index) => (
-                          <tr 
-                            key={index} 
-                            className="hover:bg-zinc-800/30 transition-colors"
-                          >
-                            <td className="px-3 py-2 text-xs text-zinc-500 font-mono sticky left-0 bg-zinc-900 z-10">
-                              {index + 1}
-                            </td>
-                            {Object.entries(row).filter(([key]) => key !== 'geometry').map(([key, value], cellIndex) => (
-                              <td key={cellIndex} className="px-3 py-2 text-sm text-zinc-300 whitespace-nowrap">
-                                {value === null || value === undefined ? (
-                                  <span className="text-zinc-600 italic">null</span>
-                                ) : typeof value === 'object' ? (
-                                  <span className="text-zinc-500 font-mono text-xs">{JSON.stringify(value)}</span>
-                                ) : typeof value === 'number' ? (
-                                  <span className="font-mono text-green-400">{value.toLocaleString()}</span>
-                                ) : (
-                                  String(value).length > 100 ? (
-                                    <span title={String(value)}>{String(value).substring(0, 100)}...</span>
-                                  ) : String(value)
-                                )}
-                              </td>
+                            {Object.keys(results.data[0]).filter(key => key !== 'geometry').map(key => (
+                              <th key={key} className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 whitespace-nowrap bg-zinc-800">
+                                {key}
+                              </th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/50 bg-zinc-950">
+                          {results.data.slice(0, displayedRows).map((row, index) => (
+                            <tr 
+                              key={index} 
+                              className="hover:bg-zinc-800/30 transition-colors"
+                            >
+                              <td className="px-3 py-2 text-xs text-zinc-500 font-mono bg-zinc-900">
+                                {index + 1}
+                              </td>
+                              {Object.entries(row).filter(([key]) => key !== 'geometry').map(([key, value], cellIndex) => (
+                                <td key={cellIndex} className="px-3 py-2 text-sm text-zinc-300 whitespace-nowrap">
+                                  {value === null || value === undefined ? (
+                                    <span className="text-zinc-600 italic">null</span>
+                                  ) : typeof value === 'object' ? (
+                                    <span className="text-zinc-500 font-mono text-xs">{JSON.stringify(value)}</span>
+                                  ) : typeof value === 'number' ? (
+                                    <span className="font-mono text-green-400">{value.toLocaleString()}</span>
+                                  ) : (
+                                    String(value).length > 100 ? (
+                                      <span title={String(value)}>{String(value).substring(0, 100)}...</span>
+                                    ) : String(value)
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
 
-                    {/* Loading more indicator */}
-                    {isLoadingMore && (
-                      <div className="flex items-center justify-center py-4">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500 mr-2"></div>
-                        <span className="text-sm text-zinc-400">Loading more...</span>
-                      </div>
-                    )}
+                      {/* Loading more indicator */}
+                      {isLoadingMore && (
+                        <div className="flex items-center justify-center py-4">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500 mr-2"></div>
+                          <span className="text-sm text-zinc-400">Loading more...</span>
+                        </div>
+                      )}
 
-                    {/* End of results indicator */}
-                    {displayedRows >= results.data.length && results.data.length > 50 && (
-                      <div className="text-center py-4 text-xs text-zinc-500">
-                        ✓ All {results.data.length} records loaded
-                      </div>
-                    )}
+                      {/* End of results indicator */}
+                      {displayedRows >= results.data.length && results.data.length > 50 && (
+                        <div className="text-center py-4 text-xs text-zinc-500">
+                          ✓ All {results.data.length} records loaded
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -777,65 +780,68 @@ function SqlAnalytics() {
                 )}
               </div>
 
-              {/* Scrollable Table */}
+              {/* Scrollable Table Container */}
               <div 
                 ref={tableContainerRef}
                 onScroll={handleTableScroll}
-                className="flex-1 overflow-x-auto overflow-y-auto"
+                className="flex-1 overflow-auto relative"
+                style={{ minHeight: 0 }}
               >
-                <table className="w-max min-w-full border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-zinc-800">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 w-12 sticky left-0 bg-zinc-800 z-20">
-                        #
-                      </th>
-                      {Object.keys(results.data[0]).map(key => (
-                        <th key={key} className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 whitespace-nowrap">
-                          {key}
+                <div className="inline-block min-w-full">
+                  <table className="min-w-full" style={{ tableLayout: 'auto' }}>
+                    <thead className="sticky top-0 z-10 bg-zinc-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 bg-zinc-800">
+                          #
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800">
-                    {results.data.slice(0, displayedRows).map((row, index) => (
-                      <tr key={index} className="hover:bg-zinc-800/50 transition-colors">
-                        <td className="px-4 py-3 text-sm text-zinc-500 font-mono sticky left-0 bg-zinc-900 z-10">
-                          {index + 1}
-                        </td>
-                        {Object.values(row).map((value, cellIndex) => (
-                          <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200 whitespace-nowrap">
-                            {value === null || value === undefined ? (
-                              <span className="text-zinc-500 italic">null</span>
-                            ) : typeof value === 'object' ? (
-                              <span className="text-zinc-400 font-mono text-xs">{JSON.stringify(value)}</span>
-                            ) : typeof value === 'number' ? (
-                              <span className="font-mono text-green-400">{value.toLocaleString()}</span>
-                            ) : (
-                              String(value).length > 100 ? (
-                                <span title={String(value)}>{String(value).substring(0, 100)}...</span>
-                              ) : String(value)
-                            )}
-                          </td>
+                        {Object.keys(results.data[0]).map(key => (
+                          <th key={key} className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 whitespace-nowrap bg-zinc-800">
+                            {key}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800 bg-zinc-950">
+                      {results.data.slice(0, displayedRows).map((row, index) => (
+                        <tr key={index} className="hover:bg-zinc-800/50 transition-colors">
+                          <td className="px-4 py-3 text-sm text-zinc-500 font-mono bg-zinc-900">
+                            {index + 1}
+                          </td>
+                          {Object.values(row).map((value, cellIndex) => (
+                            <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200 whitespace-nowrap">
+                              {value === null || value === undefined ? (
+                                <span className="text-zinc-500 italic">null</span>
+                              ) : typeof value === 'object' ? (
+                                <span className="text-zinc-400 font-mono text-xs">{JSON.stringify(value)}</span>
+                              ) : typeof value === 'number' ? (
+                                <span className="font-mono text-green-400">{value.toLocaleString()}</span>
+                              ) : (
+                                String(value).length > 100 ? (
+                                  <span title={String(value)}>{String(value).substring(0, 100)}...</span>
+                                ) : String(value)
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
 
-                {/* Loading more indicator */}
-                {isLoadingMore && (
-                  <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500 mr-2"></div>
-                    <span className="text-sm text-zinc-400">Loading more...</span>
-                  </div>
-                )}
+                  {/* Loading more indicator */}
+                  {isLoadingMore && (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-500 mr-2"></div>
+                      <span className="text-sm text-zinc-400">Loading more...</span>
+                    </div>
+                  )}
 
-                {/* End of results indicator */}
-                {displayedRows >= results.data.length && results.data.length > 50 && (
-                  <div className="text-center py-4 text-sm text-zinc-500">
-                    ✓ All {results.data.length} records loaded
-                  </div>
-                )}
+                  {/* End of results indicator */}
+                  {displayedRows >= results.data.length && results.data.length > 50 && (
+                    <div className="text-center py-4 text-sm text-zinc-500">
+                      ✓ All {results.data.length} records loaded
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

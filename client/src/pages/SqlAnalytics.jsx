@@ -242,6 +242,28 @@ function SqlAnalytics() {
     }
   }
 
+  // Função auxiliar para ordenar colunas (timestamp primeiro, operationType segundo)
+  const getOrderedColumns = (columns) => {
+    const priorityColumns = ['timestamp', 'operationType']
+    const filteredColumns = columns.filter(col => col !== 'geometry')
+    
+    const ordered = []
+    // Adicionar colunas prioritárias primeiro (se existirem)
+    priorityColumns.forEach(col => {
+      if (filteredColumns.includes(col)) {
+        ordered.push(col)
+      }
+    })
+    // Adicionar demais colunas
+    filteredColumns.forEach(col => {
+      if (!priorityColumns.includes(col)) {
+        ordered.push(col)
+      }
+    })
+    
+    return ordered
+  }
+
   // Função auxiliar para determinar campo de heatmap
   const getHeatmapField = (item) => {
     const numericFields = ['appliedRate', 'elevation', 'speed', 'area', 'yieldVolume', 'harvestMoisture', 'seedRate']
@@ -704,7 +726,7 @@ function SqlAnalytics() {
                           <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700" style={{ backgroundColor: '#27272a' }}>
                             #
                           </th>
-                          {Object.keys(results.data[0]).filter(key => key !== 'geometry').map(key => (
+                          {getOrderedColumns(Object.keys(results.data[0])).map(key => (
                             <th key={key} className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700" style={{ whiteSpace: 'nowrap', backgroundColor: '#27272a' }}>
                               {key}
                             </th>
@@ -720,18 +742,18 @@ function SqlAnalytics() {
                             <td className="px-3 py-2 text-xs text-zinc-500 font-mono" style={{ backgroundColor: '#18181b' }}>
                               {index + 1}
                             </td>
-                            {Object.entries(row).filter(([key]) => key !== 'geometry').map(([key, value], cellIndex) => (
+                            {getOrderedColumns(Object.keys(row)).map((key, cellIndex) => (
                               <td key={cellIndex} className="px-3 py-2 text-sm text-zinc-300" style={{ whiteSpace: 'nowrap' }}>
-                                {value === null || value === undefined ? (
+                                {row[key] === null || row[key] === undefined ? (
                                   <span className="text-zinc-600 italic">null</span>
-                                ) : typeof value === 'object' ? (
-                                  <span className="text-zinc-500 font-mono text-xs">{JSON.stringify(value)}</span>
-                                ) : typeof value === 'number' ? (
-                                  <span className="font-mono text-green-400">{value.toLocaleString()}</span>
+                                ) : typeof row[key] === 'object' ? (
+                                  <span className="text-zinc-500 font-mono text-xs">{JSON.stringify(row[key])}</span>
+                                ) : typeof row[key] === 'number' ? (
+                                  <span className="font-mono text-green-400">{row[key].toLocaleString()}</span>
                                 ) : (
-                                  String(value).length > 100 ? (
-                                    <span title={String(value)}>{String(value).substring(0, 100)}...</span>
-                                  ) : String(value)
+                                  String(row[key]).length > 100 ? (
+                                    <span title={String(row[key])}>{String(row[key]).substring(0, 100)}...</span>
+                                  ) : String(row[key])
                                 )}
                               </td>
                             ))}
@@ -791,7 +813,7 @@ function SqlAnalytics() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700" style={{ backgroundColor: '#27272a' }}>
                         #
                       </th>
-                      {Object.keys(results.data[0]).map(key => (
+                      {getOrderedColumns(Object.keys(results.data[0])).map(key => (
                         <th key={key} className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700" style={{ whiteSpace: 'nowrap', backgroundColor: '#27272a' }}>
                           {key}
                         </th>
@@ -804,18 +826,18 @@ function SqlAnalytics() {
                         <td className="px-4 py-3 text-sm text-zinc-500 font-mono" style={{ backgroundColor: '#18181b' }}>
                           {index + 1}
                         </td>
-                        {Object.values(row).map((value, cellIndex) => (
+                        {getOrderedColumns(Object.keys(row)).map((key, cellIndex) => (
                           <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200" style={{ whiteSpace: 'nowrap' }}>
-                            {value === null || value === undefined ? (
+                            {row[key] === null || row[key] === undefined ? (
                               <span className="text-zinc-500 italic">null</span>
-                            ) : typeof value === 'object' ? (
-                              <span className="text-zinc-400 font-mono text-xs">{JSON.stringify(value)}</span>
-                            ) : typeof value === 'number' ? (
-                              <span className="font-mono text-green-400">{value.toLocaleString()}</span>
+                            ) : typeof row[key] === 'object' ? (
+                              <span className="text-zinc-400 font-mono text-xs">{JSON.stringify(row[key])}</span>
+                            ) : typeof row[key] === 'number' ? (
+                              <span className="font-mono text-green-400">{row[key].toLocaleString()}</span>
                             ) : (
-                              String(value).length > 100 ? (
-                                <span title={String(value)}>{String(value).substring(0, 100)}...</span>
-                              ) : String(value)
+                              String(row[key]).length > 100 ? (
+                                <span title={String(row[key])}>{String(row[key]).substring(0, 100)}...</span>
+                              ) : String(row[key])
                             )}
                           </td>
                         ))}

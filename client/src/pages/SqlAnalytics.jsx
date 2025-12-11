@@ -697,10 +697,10 @@ function SqlAnalytics() {
                     onScroll={handleTableScroll}
                     className="flex-1 overflow-auto"
                   >
-                    <table className="w-full">
+                    <table className="min-w-full">
                       <thead className="sticky top-0 z-10">
                         <tr className="bg-zinc-800">
-                          <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 w-12">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-700 w-12 sticky left-0 bg-zinc-800 z-20">
                             #
                           </th>
                           {Object.keys(results.data[0]).filter(key => key !== 'geometry').map(key => (
@@ -716,11 +716,11 @@ function SqlAnalytics() {
                             key={index} 
                             className="hover:bg-zinc-800/30 transition-colors"
                           >
-                            <td className="px-3 py-2 text-xs text-zinc-500 font-mono">
+                            <td className="px-3 py-2 text-xs text-zinc-500 font-mono sticky left-0 bg-zinc-900 z-10">
                               {index + 1}
                             </td>
                             {Object.entries(row).filter(([key]) => key !== 'geometry').map(([key, value], cellIndex) => (
-                              <td key={cellIndex} className="px-3 py-2 text-sm text-zinc-300 max-w-xs truncate">
+                              <td key={cellIndex} className="px-3 py-2 text-sm text-zinc-300 whitespace-nowrap">
                                 {value === null || value === undefined ? (
                                   <span className="text-zinc-600 italic">null</span>
                                 ) : typeof value === 'object' ? (
@@ -728,8 +728,8 @@ function SqlAnalytics() {
                                 ) : typeof value === 'number' ? (
                                   <span className="font-mono text-green-400">{value.toLocaleString()}</span>
                                 ) : (
-                                  String(value).length > 50 ? (
-                                    <span title={String(value)}>{String(value).substring(0, 50)}...</span>
+                                  String(value).length > 100 ? (
+                                    <span title={String(value)}>{String(value).substring(0, 100)}...</span>
                                   ) : String(value)
                                 )}
                               </td>
@@ -783,10 +783,10 @@ function SqlAnalytics() {
                 onScroll={handleTableScroll}
                 className="flex-1 overflow-auto"
               >
-                <table className="w-full">
+                <table className="min-w-full">
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-zinc-800">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 w-12">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-300 uppercase tracking-wider border-b border-zinc-700 w-12 sticky left-0 bg-zinc-800 z-20">
                         #
                       </th>
                       {Object.keys(results.data[0]).map(key => (
@@ -799,11 +799,11 @@ function SqlAnalytics() {
                   <tbody className="divide-y divide-zinc-800">
                     {results.data.slice(0, displayedRows).map((row, index) => (
                       <tr key={index} className="hover:bg-zinc-800/50 transition-colors">
-                        <td className="px-4 py-3 text-sm text-zinc-500 font-mono">
+                        <td className="px-4 py-3 text-sm text-zinc-500 font-mono sticky left-0 bg-zinc-900 z-10">
                           {index + 1}
                         </td>
                         {Object.values(row).map((value, cellIndex) => (
-                          <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200 max-w-xs truncate">
+                          <td key={cellIndex} className="px-4 py-3 text-sm text-zinc-200 whitespace-nowrap">
                             {value === null || value === undefined ? (
                               <span className="text-zinc-500 italic">null</span>
                             ) : typeof value === 'object' ? (

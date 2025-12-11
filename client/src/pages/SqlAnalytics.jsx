@@ -14,7 +14,7 @@ function SqlAnalytics() {
   // Estados para SQL Analytics
   const [userId, setUserId] = useState(selectedLeafUserId || '')
   const [sqlQuery, setSqlQuery] = useState('SELECT * FROM points LIMIT 10')
-  const [startDate, setStartDate] = useState('2020-01-01T00:00:00.000Z')
+  const [startDate, setStartDate] = useState('2000-01-01T00:00:00.000Z')
   const [endDate, setEndDate] = useState('2025-12-31T23:59:59.999Z')
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)

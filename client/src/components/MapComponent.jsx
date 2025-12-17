@@ -923,61 +923,79 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         console.log('🌱 Soil drainage classes found:', drainageClasses)
       }
       
-      // Novo formato: { boundary: wkt, points: array, heatmapField: string }
-      if (data.boundary && data.points) {
-        console.log('📍 Rendering combined boundary + points:', data.points.length, 'points')
+      // Novo formato: { points: array, heatmapField: string } ou { boundary: wkt, points: array, heatmapField: string }
+      // IMPORTANTE: Aceitar pontos mesmo SEM boundary (para SQL Analytics)
+      if (data.points && Array.isArray(data.points) && data.points.length > 0) {
+        console.log('📍 Rendering points:', data.points.length, 'points, has boundary:', !!data.boundary)
         const bounds = L.latLngBounds()
         
-        // Renderizar boundary
-        const boundaryCoords = parsePolygonWKT(data.boundary)
-        if (boundaryCoords) {
-          const polygon = L.polygon(boundaryCoords, {
-            color: '#3388ff',
-            fillColor: '#3388ff',
-            fillOpacity: 0.1,
-            weight: 2,
-            dashArray: '5, 5'
-          }).addTo(mapInstance.current)
-          polygon.bindPopup('Field Boundary')
-          markersRef.current.push(polygon)
-          bounds.extend(polygon.getBounds())
+        // Renderizar boundary se existir (opcional)
+        if (data.boundary) {
+          const boundaryCoords = parsePolygonWKT(data.boundary)
+          if (boundaryCoords) {
+            const polygon = L.polygon(boundaryCoords, {
+              color: '#3388ff',
+              fillColor: '#3388ff',
+              fillOpacity: 0.1,
+              weight: 2,
+              dashArray: '5, 5'
+            }).addTo(mapInstance.current)
+            polygon.bindPopup('Field Boundary')
+            markersRef.current.push(polygon)
+            bounds.extend(polygon.getBounds())
+          }
         }
         
         // Renderizar pontos como heatmap ou markers
-        if (data.points.length > 0) {
-          console.log('🔥 Creating visualization for', data.points.length, 'points with field:', data.heatmapField || 'default')
-          
-          // Primeiro decodificar todos os pontos para obter coordenadas
-          const decodedPoints = data.points.map(item => {
-            let coords = null
-            if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
-              coords = decodeBinaryGeometry(item.geometry)
-            } else if (item.latitude && item.longitude) {
-              coords = [parseFloat(item.latitude), parseFloat(item.longitude)]
-            } else if (item.lat && item.lng) {
-              coords = [parseFloat(item.lat), parseFloat(item.lng)]
+        console.log('🔥 Creating visualization for', data.points.length, 'points with field:', data.heatmapField || 'default')
+        
+        // Primeiro decodificar todos os pontos para obter coordenadas
+        const decodedPoints = data.points.map((item, idx) => {
+          let coords = null
+          if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
+            coords = decodeBinaryGeometry(item.geometry)
+            if (idx < 3) {
+              console.log(`📍 Point ${idx} geometry decoded:`, coords, 'from', item.geometry.substring(0, 30) + '...')
             }
-            return coords ? { ...item, decodedCoords: coords } : null
-          }).filter(Boolean)
-          
-          console.log('📍 Decoded', decodedPoints.length, 'points with valid coords out of', data.points.length)
-          
-          if (decodedPoints.length > 0) {
-            // Tentar criar heatmap
-            const heatmapLayer = createAdvancedHeatmap(data.points, mapInstance.current, data.heatmapField || 'default')
-            console.log('🔥 Heatmap layer result:', heatmapLayer)
-            
-            if (heatmapLayer) {
-              mapInstance.current.addLayer(heatmapLayer)
-              markersRef.current.push(heatmapLayer)
-              console.log('✅ Heatmap/CircleMarkers layer added to map')
-            }
-            
-            // Estender bounds com pontos decodificados
-            decodedPoints.forEach(item => {
-              bounds.extend(item.decodedCoords)
-            })
+          } else if (item.latitude && item.longitude) {
+            coords = [parseFloat(item.latitude), parseFloat(item.longitude)]
+          } else if (item.lat && item.lng) {
+            coords = [parseFloat(item.lat), parseFloat(item.lng)]
           }
+          return coords ? { ...item, decodedCoords: coords } : null
+        }).filter(Boolean)
+        
+        console.log('📍 Decoded', decodedPoints.length, 'points with valid coords out of', data.points.length)
+        
+        if (decodedPoints.length > 0) {
+          // Log das coordenadas para debug
+          const sampleCoords = decodedPoints.slice(0, 5).map(p => p.decodedCoords)
+          console.log('📍 Sample decoded coordinates:', sampleCoords)
+          
+          // Calcular bounds ANTES de criar o heatmap
+          decodedPoints.forEach(item => {
+            bounds.extend(item.decodedCoords)
+          })
+          
+          console.log('📐 Calculated bounds:', bounds.isValid() ? `SW: ${bounds.getSouthWest()}, NE: ${bounds.getNorthEast()}` : 'INVALID')
+          
+          // Ajustar zoom ANTES de criar visualização para que os pontos apareçam na área correta
+          if (bounds.isValid()) {
+            console.log('🗺️ Fitting bounds before creating visualization')
+            mapInstance.current.fitBounds(bounds.pad(0.1))
+          }
+          
+          // Criar heatmap/markers DEPOIS de ajustar o zoom
+          const heatmapLayer = createAdvancedHeatmap(data.points, mapInstance.current, data.heatmapField || 'default')
+          console.log('🔥 Heatmap layer result:', heatmapLayer)
+          
+          if (heatmapLayer) {
+            mapInstance.current.addLayer(heatmapLayer)
+            markersRef.current.push(heatmapLayer)
+            console.log('✅ Heatmap/CircleMarkers layer added to map')
+          }
+        } else {
+          console.warn('⚠️ No points could be decoded - check geometry format')
         }
         
         // Renderizar zones se existirem
@@ -988,11 +1006,6 @@ function MapComponent({ data, mapRef: externalMapRef, isDrawingMode = false, dra
         // Renderizar dados de solo se existirem
         if (data.soilData && data.soilData.length > 0) {
           renderSoilData(data.soilData, bounds)
-        }
-        
-        // Ajustar zoom para mostrar tudo
-        if (!bounds.isEmpty()) {
-          mapInstance.current.fitBounds(bounds.pad(0.05))
         }
       }
       // Verificar se há apenas zones (sem boundary e sem points)

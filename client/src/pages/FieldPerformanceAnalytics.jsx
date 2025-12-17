@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import axios from 'axios'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import MapComponent from '../components/MapComponent'
+import { getAnalyticsApiUrl, getLeafApiBaseUrl, getPointlakeApiUrl } from '../config/api'
 import { useAuth } from '../context/AuthContext'
 import { useLeafUser } from '../context/LeafUserContext'
-import MapComponent from '../components/MapComponent'
-import axios from 'axios'
-import { getLeafApiBaseUrl, getPointlakeApiUrl, getAnalyticsApiUrl } from '../config/api'
 
 function FieldPerformanceAnalytics() {
   const { token, logout, isAuthenticated, loading: authLoading, getEnvironment } = useAuth()
@@ -780,49 +780,28 @@ function FieldPerformanceAnalytics() {
 
       // Uma única query que retorna todos os polígonos de solo que intersectam o field
       const sqlQuery = `SELECT 
-
-    mukey, 
-
-    county,
-
-    muaggatt_col_16 as drainage_class,
-
-    ROUND(ST_Area(ST_Intersection(geometry, ST_GeomFromText('${fieldWkt}'))) * 247.105, 2) as acres,
-
-    ST_Intersection(geometry, ST_GeomFromText('${fieldWkt}')) as geometry
-
-FROM ssurgo_illinois 
-
-WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
+      mukey, county, muaggatt_col_16 as drainage_class,
+      ROUND(ST_Area(ST_Intersection(geometry, ST_GeomFromText('${fieldWkt}'))) * 247.105, 2) as acres,
+      ST_Intersection(geometry, ST_GeomFromText('${fieldWkt}')) as geometry
+      FROM ssurgo_illinois 
+      WHERE ST_Intersects(geometry, ST_GeomFromText('${fieldWkt}'))`
 
       console.log('🌱 Executing single soil query:', {
         query: sqlQuery,
         url: `${pointlakeBaseUrl}/v2/query`
       })
 
-      const response = await axios.get(
-          `${pointlakeBaseUrl}/v2/query`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'accept': 'application/json'
-            },
-            params: {
-              sql: sqlQuery
-            }
+      const response = await axios.post(
+        `${pointlakeBaseUrl}/v2/query`,
+        sqlQuery,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'accept': 'application/json',
+            'Content-Type': 'text/plain'
           }
-        )
-
-        console.log('✅ Single soil query response:', {
-          status: response.status,
-          resultsCount: response.data?.length || 0,
-          sampleResult: response.data?.[0] ? {
-            mukey: response.data[0].mukey,
-            drainage_class: response.data[0].drainage_class,
-            county: response.data[0].county,
-            acres: response.data[0].acres
-          } : 'none'
-        })
+        }
+      )
 
         const soilArray = response.data || []
         soilArray.forEach(soil => {

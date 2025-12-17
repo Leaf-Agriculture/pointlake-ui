@@ -459,7 +459,7 @@ ORDER BY y, m, operationType`)
                 <option value="">Select a user...</option>
                 {leafUsers.map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.username || user.email || user.id}
+                    {user.name || user.displayName || user.email || user.id}
                   </option>
                 ))}
               </select>

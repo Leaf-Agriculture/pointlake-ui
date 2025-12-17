@@ -117,8 +117,31 @@ ORDER BY y, m, operationType`)
       const executionTime = Date.now() - startTime
       setQueryExecutionTime(executionTime)
 
-      const responseData = response.data
-      console.log('✅ SQL Analytics response:', responseData)
+      const rawResponse = response.data
+      console.log('✅ SQL Analytics raw response:', rawResponse)
+
+      // Normalizar formato da resposta para { data: [...], metadata: {...} }
+      let responseData
+      if (Array.isArray(rawResponse)) {
+        // Resposta é um array direto
+        console.log('📦 Response is array, normalizing...')
+        responseData = { data: rawResponse, metadata: {} }
+      } else if (rawResponse.results && Array.isArray(rawResponse.results)) {
+        // Resposta tem formato { results: [...] }
+        console.log('📦 Response has results array, normalizing...')
+        responseData = { data: rawResponse.results, metadata: rawResponse.metadata || {} }
+      } else if (rawResponse.data && Array.isArray(rawResponse.data)) {
+        // Resposta já está no formato esperado
+        console.log('📦 Response already in expected format')
+        responseData = rawResponse
+      } else {
+        // Formato desconhecido, tentar usar como está
+        console.warn('⚠️ Unknown response format, using as-is:', rawResponse)
+        responseData = { data: rawResponse.data || [], metadata: rawResponse.metadata || {} }
+      }
+
+      console.log('✅ Normalized response data:', responseData)
+      console.log('📊 Data length:', responseData.data?.length || 0)
 
       // Verificar se há erros no metadata
       const hasErrors = responseData.metadata?.errors && responseData.metadata.errors.length > 0

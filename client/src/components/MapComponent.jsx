@@ -100,251 +100,111 @@ const parsePolygonWKT = (wktString) => {
   }
 }
 
-// Função para criar heatmap com interpolação avançada
+// Função para criar heatmap - otimizada para grandes datasets
 const createAdvancedHeatmap = (data, mapInstance, heatmapField = 'default') => {
   if (!data || !Array.isArray(data) || data.length === 0) return null
   
-  console.log(`🔥 Creating advanced heatmap with ${data.length} points, field: ${heatmapField}`)
+  const pointCount = data.length
+  console.log(`🔥 Creating heatmap with ${pointCount} points, field: ${heatmapField}`)
   
-  // Log primeiro ponto para debug
-  if (data[0]) {
-    console.log('🔍 First point sample:', {
-      hasGeometry: !!data[0].geometry,
-      geometryType: typeof data[0].geometry,
-      geometryLength: data[0].geometry?.length,
-      hasLatitude: !!data[0].latitude,
-      hasLat: !!data[0].lat,
-      heatmapField: heatmapField,
-      heatmapValue: data[0][heatmapField],
-      point: JSON.stringify(data[0]).substring(0, 200)
-    })
-  }
-  
-  // Primeiro passo: extrair coordenadas e valores brutos
+  // FAST PATH: Para datasets grandes, usar processamento otimizado com for loops
+  // Isso evita stack overflow causado por .map(), .reduce(), Math.min(...array) etc.
+  const heatmapData = []
   let decodedCount = 0
-  let failedCount = 0
+  let minVal = Infinity, maxVal = -Infinity
   
-  const rawPoints = data.map((item, index) => {
+  // Extrair coordenadas e valores usando for loop (não causa stack overflow)
+  for (let i = 0; i < pointCount; i++) {
+    const item = data[i]
     let coords = null
     
-    // Verificar se tem geometria binária
+    // Decodificar geometria
     if (item.geometry && typeof item.geometry === 'string' && item.geometry.length > 20) {
       coords = decodeBinaryGeometry(item.geometry)
-      if (coords) {
-        decodedCount++
-        if (index < 3) {
-          console.log(`📍 Point ${index} decoded: [${coords[0]}, ${coords[1]}]`)
-        }
-      } else {
-        failedCount++
-        if (failedCount <= 3) {
-          console.log(`❌ Failed to decode point ${index}, geometry: ${item.geometry?.substring(0, 50)}...`)
-        }
-      }
-    }
-    // Verificar coordenadas tradicionais
-    else if (item.latitude && item.longitude) {
+    } else if (item.latitude && item.longitude) {
       coords = [parseFloat(item.latitude), parseFloat(item.longitude)]
-      decodedCount++
     } else if (item.lat && item.lng) {
       coords = [parseFloat(item.lat), parseFloat(item.lng)]
-      decodedCount++
     }
     
-    if (!coords) return null
+    if (!coords) continue
     
-    // Extrair valor bruto para normalização posterior
-    let rawValue = 0.5 // valor padrão
+    decodedCount++
+    if (i < 3) console.log(`📍 Point ${i} decoded: [${coords[0]}, ${coords[1]}]`)
     
+    // Extrair valor
+    let rawValue = 0.5
     if (heatmapField !== 'default' && item[heatmapField] != null) {
       rawValue = parseFloat(item[heatmapField])
-    } else {
-      // Default: usar appliedRate ou elevation ou speed como valor
-      if (item.appliedRate != null) {
-        rawValue = parseFloat(item.appliedRate)
-      } else if (item.elevation != null) {
-        rawValue = parseFloat(item.elevation)
-      } else if (item.speed != null) {
-        rawValue = parseFloat(item.speed)
-      } else if (item.yieldVolume != null) {
-        rawValue = parseFloat(item.yieldVolume)
-      } else {
-        // Baseado no tipo de operação
-        if (item.operationType === 'CropProtection') rawValue = 0.3
-        else if (item.operationType === 'Planting') rawValue = 0.5
-        else if (item.operationType === 'Harvesting') rawValue = 0.7
-        else rawValue = 0.5
-      }
+    } else if (item.elevation != null) {
+      rawValue = parseFloat(item.elevation)
+    } else if (item.appliedRate != null) {
+      rawValue = parseFloat(item.appliedRate)
+    } else if (item.yieldVolume != null) {
+      rawValue = parseFloat(item.yieldVolume)
+    } else if (item.speed != null) {
+      rawValue = parseFloat(item.speed)
     }
     
-    return { coords, rawValue: isNaN(rawValue) ? 0.5 : rawValue }
-  }).filter(Boolean)
+    if (isNaN(rawValue)) rawValue = 0.5
+    if (rawValue < minVal) minVal = rawValue
+    if (rawValue > maxVal) maxVal = rawValue
+    
+    heatmapData.push([coords[0], coords[1], rawValue])
+  }
   
-  console.log(`📊 Heatmap stats: ${decodedCount} decoded, ${failedCount} failed, ${rawPoints.length} valid points`)
-  
-  if (rawPoints.length === 0) {
-    console.log('❌ No valid heatmap data - returning null')
-    return null
-      }
-      
-  // Segundo passo: calcular média e desvio padrão para remover outliers
-  const values = rawPoints.map(p => p.rawValue)
-  const n = values.length
-  
-  // Calcular média
-  const mean = values.reduce((sum, v) => sum + v, 0) / n
-  
-  // Calcular desvio padrão
-  const squaredDiffs = values.map(v => Math.pow(v - mean, 2))
-  const variance = squaredDiffs.reduce((sum, v) => sum + v, 0) / n
-  const stdDev = Math.sqrt(variance)
-  
-  // Definir limites: mean ± 1 desvio padrão
-  const lowerBound = mean - stdDev
-  const upperBound = mean + stdDev
-  
-  // Filtrar valores dentro do range (remover outliers)
-  const filteredValues = values.filter(v => v >= lowerBound && v <= upperBound)
-  
-  // Usar min/max dos valores filtrados para a rampa
-  const minValue = filteredValues.length > 0 ? Math.min(...filteredValues) : mean - stdDev
-  const maxValue = filteredValues.length > 0 ? Math.max(...filteredValues) : mean + stdDev
-  const range = maxValue - minValue
-  
-  // Stats completos para debug
-  const absMin = Math.min(...values)
-  const absMax = Math.max(...values)
-  const outlierCount = n - filteredValues.length
-  const outlierPct = ((outlierCount / n) * 100).toFixed(1)
-  
-  console.log(`📊 Raw data stats for "${heatmapField}":`)
-  console.log(`   Absolute: min=${absMin?.toFixed(4)}, max=${absMax?.toFixed(4)}`)
-  console.log(`   Mean: ${mean?.toFixed(4)}, StdDev: ${stdDev?.toFixed(4)}`)
-  console.log(`   Bounds (±1σ): [${lowerBound?.toFixed(4)}, ${upperBound?.toFixed(4)}]`)
-  console.log(`   After outlier removal: min=${minValue?.toFixed(4)}, max=${maxValue?.toFixed(4)}, range=${range?.toFixed(4)}`)
-  console.log(`   Outliers removed: ${outlierCount} (${outlierPct}%)`)
-  
-  // Terceiro passo: normalizar valores para 0.0-1.0 range usando mean ± 1σ
-  const heatmapData = rawPoints.map(point => {
-    let normalizedIntensity
-    if (range > 0.0001) { // Precisa ter alguma variação significativa
-      // Normalizar usando os bounds - valores fora são clampados para 0 ou 1
-      normalizedIntensity = (point.rawValue - minValue) / range
-    } else {
-      // Sem variação significativa - usar índice baseado na posição
-      const idx = rawPoints.indexOf(point)
-      normalizedIntensity = idx / rawPoints.length
-    }
-    // Clampar para [0, 1] - outliers ficam nas extremidades
-    normalizedIntensity = Math.max(0, Math.min(1, normalizedIntensity))
-    return [point.coords[0], point.coords[1], normalizedIntensity]
-  })
-  
-  // Log distribuição final de intensidades
-  const intensities = heatmapData.map(p => p[2])
-  const sortedIntensities = [...intensities].sort((a, b) => a - b)
-  const ip10 = sortedIntensities[Math.floor(sortedIntensities.length * 0.1)]
-  const ip50 = sortedIntensities[Math.floor(sortedIntensities.length * 0.5)]
-  const ip90 = sortedIntensities[Math.floor(sortedIntensities.length * 0.9)]
-  const atMin = intensities.filter(i => i === 0).length
-  const atMax = intensities.filter(i => i === 1).length
-  console.log(`🎨 Final intensity distribution: p10=${ip10?.toFixed(3)}, p50=${ip50?.toFixed(3)}, p90=${ip90?.toFixed(3)}`)
-  console.log(`🎨 Clamped to extremes: ${atMin} at 0 (${((atMin/n)*100).toFixed(1)}%), ${atMax} at 1 (${((atMax/n)*100).toFixed(1)}%)`)
+  console.log(`📊 Heatmap stats: ${decodedCount} decoded, ${heatmapData.length} valid points`)
+  console.log(`📊 Value range: ${minVal?.toFixed(2)} - ${maxVal?.toFixed(2)}`)
   
   if (heatmapData.length === 0) {
-    console.log('❌ No valid heatmap data - returning null')
+    console.log('❌ No valid heatmap data')
     return null
+  }
+  
+  // Normalizar valores para 0-1 usando for loop
+  const range = maxVal - minVal
+  if (range > 0.0001) {
+    for (let i = 0; i < heatmapData.length; i++) {
+      heatmapData[i][2] = Math.max(0, Math.min(1, (heatmapData[i][2] - minVal) / range))
+    }
+  } else {
+    for (let i = 0; i < heatmapData.length; i++) {
+      heatmapData[i][2] = 0.5
+    }
   }
   
   console.log(`✅ Heatmap data prepared: ${heatmapData.length} valid points`)
   
-  // Configurações do heatmap - NÃO usar heatLayer, usar circleMarkers direto para controle total
-  const pointCount = rawPoints.length
+  // Usar SEMPRE o heatmap nativo do Leaflet - muito mais eficiente
+  // Evita criar milhares de elementos DOM que podem causar problemas de performance
+  const radius = pointCount > 50000 ? 8 : pointCount > 20000 ? 10 : pointCount > 5000 ? 12 : 15
+  const blur = pointCount > 50000 ? 12 : pointCount > 20000 ? 15 : 18
   
-  // Usar CircleMarkers diretamente para ter controle total sobre as cores
-  console.log(`🎨 Creating visualization with ${pointCount} points, using direct CircleMarkers for maximum contrast`)
+  console.log(`🔥 Creating native Leaflet.heat layer with ${heatmapData.length} points, radius=${radius}`)
   
-  const layerGroup = L.layerGroup()
-  
-  // Função para obter cor baseada na intensidade (0-1) com 20 níveis distintos
-  const getColorForIntensity = (intensity) => {
-    // 20 cores distintas de azul escuro a vermelho escuro
-    const colors = [
-      '#08306b', // 0.00-0.05 Azul muito escuro
-      '#08519c', // 0.05-0.10 Azul escuro
-      '#2171b5', // 0.10-0.15 Azul
-      '#4292c6', // 0.15-0.20 Azul médio
-      '#6baed6', // 0.20-0.25 Azul claro
-      '#9ecae1', // 0.25-0.30 Azul bem claro
-      '#c6dbef', // 0.30-0.35 Azul quase branco
-      '#e0f3db', // 0.35-0.40 Verde claro
-      '#a8ddb5', // 0.40-0.45 Verde
-      '#7bccc4', // 0.45-0.50 Verde água
-      '#4eb3d3', // 0.50-0.55 Ciano
-      '#fee090', // 0.55-0.60 Amarelo claro
-      '#fdae6b', // 0.60-0.65 Laranja claro
-      '#fd8d3c', // 0.65-0.70 Laranja
-      '#f16913', // 0.70-0.75 Laranja escuro
-      '#d94801', // 0.75-0.80 Laranja avermelhado
-      '#bd0026', // 0.80-0.85 Vermelho
-      '#a50f15', // 0.85-0.90 Vermelho médio
-      '#800026', // 0.90-0.95 Vermelho escuro
-      '#67000d'  // 0.95-1.00 Vermelho muito escuro
-    ]
-    const index = Math.min(Math.floor(intensity * 20), 19)
-    return colors[index]
-  }
-  
-  // Tamanho do marcador baseado na quantidade de pontos - maior para efeito mais suave
-  const markerRadius = pointCount > 5000 ? 8 : pointCount > 1000 ? 12 : pointCount > 100 ? 16 : 20
-  
-  heatmapData.forEach(([lat, lng, intensity]) => {
-    const color = getColorForIntensity(intensity)
-    
-    // Criar círculo com gradiente suave (usando múltiplas camadas com opacidade)
-    // Camada externa mais suave
-    const outerCircle = L.circleMarker([lat, lng], {
-      radius: markerRadius * 1.5,
-      fillColor: color,
-      color: 'transparent',
-      weight: 0,
-      opacity: 0,
-      fillOpacity: 0.15
-    })
-    layerGroup.addLayer(outerCircle)
-    
-    // Camada média
-    const midCircle = L.circleMarker([lat, lng], {
-      radius: markerRadius,
-      fillColor: color,
-      color: 'transparent',
-      weight: 0,
-      opacity: 0,
-      fillOpacity: 0.35
-    })
-    layerGroup.addLayer(midCircle)
-    
-    // Camada interna mais intensa
-    const circle = L.circleMarker([lat, lng], {
-      radius: markerRadius * 0.5,
-      fillColor: color,
-      color: 'transparent',
-      weight: 0,
-      opacity: 0,
-      fillOpacity: 0.7
-    })
-    
-    // Popup com valor
-    const originalPoint = rawPoints.find(p => p.coords[0] === lat && p.coords[1] === lng)
-    if (originalPoint) {
-      circle.bindPopup(`Value: ${originalPoint.rawValue.toFixed(2)}<br>Intensity: ${(intensity * 100).toFixed(0)}%`)
+  const heatLayer = L.heatLayer(heatmapData, {
+    radius: radius,
+    blur: blur,
+    maxZoom: 18,
+    max: 1.0,
+    minOpacity: 0.4,
+    gradient: {
+      0.0: '#08306b',
+      0.1: '#2171b5',
+      0.2: '#6baed6',
+      0.3: '#c6dbef',
+      0.4: '#a8ddb5',
+      0.5: '#7bccc4',
+      0.6: '#fee090',
+      0.7: '#fd8d3c',
+      0.8: '#d94801',
+      0.9: '#bd0026',
+      1.0: '#67000d'
     }
-    
-    layerGroup.addLayer(circle)
   })
   
-  console.log(`✅ CircleMarker layer created with ${heatmapData.length} markers, radius=${markerRadius}`)
-  return layerGroup
+  console.log(`✅ Heat layer created successfully`)
+  return heatLayer
 }
 
 // Função para decodificar geometria binária (base64)
